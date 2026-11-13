@@ -1,0 +1,7 @@
+{
+  "brandKey": "acme",
+  "features": {
+    "product_analytics": false,
+    "server_exports": true
+  }
+}

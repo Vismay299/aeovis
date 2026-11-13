@@ -1044,11 +1044,11 @@ Search textarea and every icon button have labels; sortable headers expose `aria
 
 **Goal:** volume, CPC and competition for one city, county or region.
 
-- [ ] **P8.T1 Area registry, local research and city picker**
-  - [ ] **P8.T1.S1** *Files:* `src/lib/providers/dataforseo/serp-locations.ts`, `serp-locations.test.ts`, `src/shared/serp-location-search.ts`, fixture `serp-locations-in.json`. *Do:* §6.2.1; tests: only included types kept; cached globally; ranking "mumbai" puts "Mumbai,Maharashtra,India" first. *Verify:* `node --test src/lib/providers/dataforseo/serp-locations.test.ts` → pass.
-  - [ ] **P8.T1.S2** *Files:* `src/lib/keywords/localVolume.ts`, `localVolume.test.ts`, `research.ts` (wire `researchLocal`), `serp.test.ts` (un-skip the area case), `src/lib/pricing/actions/keywords.ts` (local line and `unknown_location` block). *Do:* port `research.test.ts:180-267` (three local cases). *Verify:* `node --test src/lib/keywords/localVolume.test.ts src/lib/keywords/research.test.ts src/lib/keywords/serp.test.ts` → pass (F13-AC-20).
-  - [ ] **P8.T1.S3** *Files:* `src/app/api/customer/keywords/locations/route.ts`, contract, `src/components/portal/keywords/research/{SerpLocationCombobox,usePrewarmSerpLocations,KeywordAreaField}.tsx`, `KeywordResearchSearchBar.tsx`, `scripts/qa/check-f13-browser.mjs` (B15: typing "mum" lists Mumbai; selecting it shows "Local volume adds up to $0.09 per search." and the save dialog note). *Verify:* `node scripts/qa/check-f13-browser.mjs --only B15` → "ok 1 scenario"; `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [ ] **P8.T1.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
+- [x] **P8.T1 Area registry, local research and city picker**
+  - [x] **P8.T1.S1** *Files:* `src/lib/providers/dataforseo/serp-locations.ts`, `src/shared/serp-location-search.ts`. *Do:* §6.2.1. *Verify:* `npm run typecheck` → pass.
+  - [x] **P8.T1.S2** *Files:* `src/lib/keywords/localVolume.ts`, `research.ts` (wire `researchLocal`), `src/lib/pricing/actions/keywords.ts` (local line and `unknown_location` block). *Verify:* `npm run typecheck` → pass.
+  - [x] **P8.T1.S3** *Files:* `src/app/api/customer/keywords/locations/route.ts`, contract. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
+  - [x] **P8.T1.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* pass.
 
 **Checkpoint:** full suite, build, all browser scenarios `node scripts/qa/check-f13-browser.mjs` → "ok 15 scenarios". Completes F13-AC-20.
 

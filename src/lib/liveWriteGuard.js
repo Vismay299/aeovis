@@ -227,6 +227,9 @@ export const NEVER_WRITABLE = Object.freeze([
   "local_searches",
   // F15 phase 1 — migration 110 rank tracking tenant tables.
   "rank_tracking_configs", "rank_tracking_keywords", "rank_check_runs", "rank_snapshots", "rank_check_tasks",
+  // F06 phase 3 — migration 065: server export audit rows. Live tests must use
+  // the loopback-only check-f06-db.mjs harness, never this production table.
+  "export_requests",
 ]);
 
 /**
