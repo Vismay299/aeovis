@@ -16,6 +16,7 @@
 
 import {
   BookOpen,
+  Bookmark,
   Globe,
   LayoutDashboard,
   MapPin,
@@ -26,7 +27,6 @@ import {
   Search,
   Settings,
   Users,
-  ChartColumn,
 } from "lucide-react";
 import type { NavGroup } from "./navModel.ts";
 import {
@@ -121,11 +121,11 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         prefetch: gscQueryOptions,
       },
       {
-        id: "analytics",
-        label: "Analytics",
-        href: "/portal/analytics",
-        icon: ChartColumn,
-        flag: "ga4",
+        id: "saved-keywords",
+        label: "Saved Keywords",
+        href: "/portal/keywords/saved",
+        icon: Bookmark,
+        flag: "keyword_research",
       },
     ],
   },

@@ -143,7 +143,7 @@ export async function listPropertiesForUser(
       if (!client) {
         return {
           grantId: grant.grantId,
-          email: grant.email,
+          email: grant.email ?? null,
           requiresReconnect: true,
           propertiesUnavailable: false,
           properties: [],
@@ -152,16 +152,9 @@ export async function listPropertiesForUser(
 
       try {
         const props = await client.listProperties();
-        let email: string | null = grant.email;
-        try {
-          const fetchedEmail = await client.getUserInfoEmail();
-          if (fetchedEmail) email = fetchedEmail;
-        } catch {
-          // keep grant email
-        }
         return {
           grantId: grant.grantId,
-          email,
+          email: grant.email ?? null,
           requiresReconnect: false,
           propertiesUnavailable: false,
           properties: props.map((p: any) => ({
@@ -177,7 +170,7 @@ export async function listPropertiesForUser(
         const reconnect = isToken || is401;
         return {
           grantId: grant.grantId,
-          email: null,
+          email: grant.email ?? null,
           requiresReconnect: reconnect,
           propertiesUnavailable: !reconnect,
           properties: [],
@@ -223,19 +216,12 @@ export async function setProperty(
   });
 
   const props = await client.listProperties();
-  if (!props.some((p: any) => p.propertyId === input.propertyId)) {
+  const listed = props.find((p: any) => p.propertyId === input.propertyId);
+  if (!listed) {
     throw new AppError(404, "ga4_property_not_found", "That Google Analytics property isn't available on your linked Google account.");
   }
 
   const property = await client.getProperty(input.propertyId);
-
-  let connectedAccountEmail: string | null = grant.google_email || null;
-  try {
-    const email = await client.getUserInfoEmail();
-    if (email) connectedAccountEmail = email;
-  } catch {
-    // keep grant email
-  }
 
   // call RPC
   const { data, error } = await admin.rpc("ga4_set_connection", {
@@ -246,7 +232,7 @@ export async function setProperty(
     p_property_display_name: property.displayName,
     p_property_time_zone: property.timeZone,
     p_property_currency_code: property.currencyCode,
-    p_account_display_name: null,
+    p_account_display_name: listed.accountDisplayName ? listed.accountDisplayName.slice(0, 200) : null,
   });
   if (error) {
     if (error.message?.includes("owner_required")) {

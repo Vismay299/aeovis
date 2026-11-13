@@ -5,7 +5,7 @@ import { isFeatureEnabled } from "../../../../lib/features/flags.ts";
 import { isGa4Configured } from "../../../../lib/ga4/config.ts";
 import { listGrantsForUser } from "../../../../lib/ga4/grants.ts";
 import { disconnect } from "../../../../lib/ga4/connection.ts";
-import { ga4StatusQuery } from "../../../../lib/ga4/ga4.contract.ts";
+import { ga4DisconnectRequest, ga4StatusQuery } from "../../../../lib/ga4/ga4.contract.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -93,12 +93,12 @@ export async function GET(
 
     // Verify connector membership
     let connectorIsMember = false;
-    if (connection.connected_by_user_id) {
+    if (connection.connected_by) {
       const { data: member } = await workspace.admin
         .from("customer_brand_memberships")
         .select("role")
         .eq("brand_key", workspace.brandKey)
-        .eq("user_id", connection.connected_by_user_id)
+        .eq("user_id", connection.connected_by)
         .maybeSingle();
       connectorIsMember = Boolean(member);
     }
@@ -150,7 +150,11 @@ export async function DELETE(
     } catch {
       rawBody = {};
     }
-    const brandKey = (rawBody && typeof rawBody === "object" ? (rawBody as any).brand_key : undefined) as string | undefined;
+    const parsed = ga4DisconnectRequest.safeParse(rawBody);
+    if (!parsed.success) {
+      throw new AppError(400, "invalid_request", "Check the request parameters and try again.");
+    }
+    const brandKey = parsed.data.brand_key;
 
     const workspace = await requireWorkspace(
       request,

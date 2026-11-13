@@ -251,16 +251,28 @@ async function acquireDataSem(key: string) {
     sem.active += 1;
     return;
   }
+  // The releasing request hands its slot straight to this waiter, so `active`
+  // never drops below the limit while someone is queued and a newcomer cannot
+  // slip in ahead (F20-AC-20: at most 4 concurrent requests per property).
   await new Promise<void>((resolve) => {
     sem.queue.push(resolve);
   });
-  sem.active += 1;
 }
 function releaseDataSem(key: string) {
   const sem = getDataSem(key);
-  sem.active = Math.max(0, sem.active - 1);
   const next = sem.queue.shift();
-  if (next) next();
+  if (next) {
+    next();
+    return;
+  }
+  sem.active = Math.max(0, sem.active - 1);
+}
+
+/** A successful Admin response that does not match its schema is a typed upstream error. */
+function parseAdmin<T>(schema: z.ZodType<T>, value: unknown): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw new Ga4MalformedResponseError();
+  return parsed.data;
 }
 
 async function sleep(ms: number): Promise<void> {
@@ -341,10 +353,6 @@ export function createGa4AdminClient(deps: Ga4AdminClientDeps) {
     }
   }
 
-  // The above request() is messy with double retry. Rewrite cleanly:
-  // We'll replace request() below by redefining. But function already declared. Instead, let's just keep a cleaner version by overriding.
-  // (placeholder removed)
-
   function propertyUrl(base: string, propertyId: string, child: string): URL {
     const canonicalId = propertyIdSchema.parse(propertyId);
     return new URL(`${base}/${canonicalId}/${child}`);
@@ -352,7 +360,7 @@ export function createGa4AdminClient(deps: Ga4AdminClientDeps) {
 
   return {
     async getUserInfoEmail(): Promise<string | null> {
-      const data = z.object({ email: z.string().email().optional() }).parse(await request(GOOGLE_USERINFO_URL));
+      const data = parseAdmin(z.object({ email: z.string().email().optional() }), await request(GOOGLE_USERINFO_URL));
       return data.email ?? null;
     },
     async listProperties(): Promise<Ga4PropertySummary[]> {
@@ -362,7 +370,7 @@ export function createGa4AdminClient(deps: Ga4AdminClientDeps) {
         const url = new URL(`${GA4_ADMIN_API_BASE}/accountSummaries`);
         url.searchParams.set("pageSize", "200");
         if (pageToken) url.searchParams.set("pageToken", pageToken);
-        const response = accountSummariesResponseSchema.parse(await request(url.toString()));
+        const response = parseAdmin(accountSummariesResponseSchema, await request(url.toString()));
         for (const account of response.accountSummaries ?? []) {
           for (const property of account.propertySummaries ?? []) {
             properties.push({
@@ -379,36 +387,35 @@ export function createGa4AdminClient(deps: Ga4AdminClientDeps) {
     },
     async getProperty(propertyId: string): Promise<Ga4Property> {
       const canonicalId = propertyIdSchema.parse(propertyId);
-      return propertySchema.parse(await request(`${GA4_ADMIN_API_BASE}/${canonicalId}`));
+      return parseAdmin(propertySchema, await request(`${GA4_ADMIN_API_BASE}/${canonicalId}`));
     },
     async listDataStreams(propertyId: string) {
       const url = propertyUrl(GA4_ADMIN_ALPHA_API_BASE, propertyId, "dataStreams");
       url.searchParams.set("pageSize", "200");
-      const response = dataStreamsResponseSchema.parse(await request(url.toString()));
+      const response = parseAdmin(dataStreamsResponseSchema, await request(url.toString()));
       return response.dataStreams ?? [];
     },
     async getEnhancedMeasurementSettings(streamName: string) {
       const canonicalName = dataStreamNameSchema.parse(streamName);
-      return enhancedMeasurementSettingsSchema.parse(
-        await request(`${GA4_ADMIN_ALPHA_API_BASE}/${canonicalName}/enhancedMeasurementSettings`),
+      return parseAdmin(enhancedMeasurementSettingsSchema, await request(`${GA4_ADMIN_ALPHA_API_BASE}/${canonicalName}/enhancedMeasurementSettings`),
       );
     },
     async listKeyEvents(propertyId: string) {
       const url = propertyUrl(GA4_ADMIN_API_BASE, propertyId, "keyEvents");
       url.searchParams.set("pageSize", "200");
-      const response = keyEventsResponseSchema.parse(await request(url.toString()));
+      const response = parseAdmin(keyEventsResponseSchema, await request(url.toString()));
       return response.keyEvents ?? [];
     },
     async listCustomDimensions(propertyId: string) {
       const url = propertyUrl(GA4_ADMIN_API_BASE, propertyId, "customDimensions");
       url.searchParams.set("pageSize", "200");
-      const response = customDimensionsResponseSchema.parse(await request(url.toString()));
+      const response = parseAdmin(customDimensionsResponseSchema, await request(url.toString()));
       return response.customDimensions ?? [];
     },
     async listCustomMetrics(propertyId: string) {
       const url = propertyUrl(GA4_ADMIN_API_BASE, propertyId, "customMetrics");
       url.searchParams.set("pageSize", "200");
-      const response = customMetricsResponseSchema.parse(await request(url.toString()));
+      const response = parseAdmin(customMetricsResponseSchema, await request(url.toString()));
       return response.customMetrics ?? [];
     },
   };

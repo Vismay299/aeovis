@@ -1,3 +1,7 @@
+"use client";
+
+import { IntegrationsSettings } from "@/components/portal/settings/integrations/IntegrationsSettings";
+
 export default function IntegrationsSettingsPage() {
-  return null;
+  return <IntegrationsSettings key="integrations" />;
 }

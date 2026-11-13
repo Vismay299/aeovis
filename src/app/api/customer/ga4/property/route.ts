@@ -2,8 +2,7 @@ import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../lib/
 import { AppError } from "../../../../../lib/http/appError.ts";
 import { toErrorResponse } from "../../../../../lib/http/errors.ts";
 import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { setProperty } from "../../../../../lib/ga4/connection.ts";
-import { getConnection } from "../../../../../lib/ga4/connection.ts";
+import { getGa4ConnectionState, setProperty } from "../../../../../lib/ga4/connection.ts";
 import { ga4PropertyRequest } from "../../../../../lib/ga4/ga4.contract.ts";
 
 export const dynamic = "force-dynamic";
@@ -12,7 +11,7 @@ export const maxDuration = 60;
 export type Ga4PropertyRouteDeps = RequireWorkspaceDeps & {
   isFeatureEnabled?: typeof isFeatureEnabled;
   setProperty?: typeof setProperty;
-  getConnection?: typeof getConnection;
+  getGa4ConnectionState?: typeof getGa4ConnectionState;
 };
 
 function json(data: unknown, status = 200): Response {
@@ -53,31 +52,15 @@ export async function POST(request: Request, _ctx?: unknown, deps?: Ga4PropertyR
       { grantId: parsed.data.grantId, propertyId: parsed.data.propertyId },
     );
 
-    const connGetter = deps?.getConnection ?? getConnection;
-    const conn = await connGetter(workspace.admin, workspace.brandKey);
-
-    return json(
-      {
-        connected: true,
-        configured: true,
-        canManage: true,
-        currentUserHasGrant: true,
-        connectorIsMember: true,
-        grantStatus: "active",
-        property: conn
-          ? {
-              id: conn.property_id,
-              displayName: conn.property_display_name,
-              timeZone: conn.property_time_zone,
-              currencyCode: conn.property_currency_code,
-              accountDisplayName: conn.account_display_name,
-            }
-          : null,
-        connectedByEmail: conn?.connected_account_email || null,
-        connectedAt: conn?.connected_at || conn?.created_at || null,
-      },
-      201,
-    );
+    // 201 carries the same shape as GET /api/customer/ga4, read back from the
+    // database rather than assumed, so the UI shows what was actually saved.
+    const stateGetter = deps?.getGa4ConnectionState ?? getGa4ConnectionState;
+    const state = await stateGetter(workspace.admin, {
+      brandKey: workspace.brandKey,
+      user: workspace.user,
+      role: workspace.role,
+    });
+    return json(state, 201);
   } catch (err) {
     return toErrorResponse(err);
   }

@@ -1,0 +1,10 @@
+{
+  "accountSummaries": [
+    {
+      "account": "accounts/1",
+      "displayName": "Agency",
+      "propertySummaries": [{ "property": "properties/11", "displayName": "Site A" }]
+    }
+  ],
+  "nextPageToken": "page-2"
+}

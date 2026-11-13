@@ -91,6 +91,10 @@ export const ga4PropertyRequest = z.strictObject({
   propertyId: z.string().regex(/^properties\/\d{1,20}$/),
 });
 
+export const ga4DisconnectRequest = z.strictObject({
+  brand_key: z.string().optional(),
+});
+
 export const ga4DisconnectResponse = z.looseObject({
   connected: z.boolean(),
 });
