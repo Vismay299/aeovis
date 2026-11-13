@@ -50,6 +50,7 @@ export function SubmitIndexNowDialog({
   async function handleSubmit() {
     if (eligible.length === 0) return;
     if (needsConfirm && !confirmed) return;
+    if (result) return;
     try {
       const res = await submit.mutateAsync({
         urls,
@@ -78,7 +79,7 @@ export function SubmitIndexNowDialog({
             onClick={onClose}
             disabled={submit.isPending}
           >
-            Cancel
+            {result ? "Close" : "Cancel"}
           </Button>
           <Button
             type="button"
@@ -86,6 +87,7 @@ export function SubmitIndexNowDialog({
             disabled={
               !ready ||
               submit.isPending ||
+              result !== null ||
               eligible.length === 0 ||
               (needsConfirm && !confirmed)
             }

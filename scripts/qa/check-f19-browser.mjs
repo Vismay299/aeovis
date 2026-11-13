@@ -585,10 +585,15 @@ if (requestedScenarios.includes("B5")) {
     await page.getByRole("tab", { name: /Pages/ }).click();
     await page.getByText("Boots that last the winter").first().waitFor({ timeout: 15000 });
 
-    // select first 3 rows
-    const rows = page.getByRole("row");
+    // Nothing is pre-selected.
+    assert.equal(
+      await page.getByRole("button", { name: "Submit to IndexNow" }).count(),
+      0,
+      "B5: no bulk action before a selection",
+    );
+
+    // Select the three fixture pages (two 200s, one 404).
     const checkboxes = page.getByRole("checkbox");
-    // select 3 page checkboxes (skip header)
     for (let i = 1; i <= 3 && i < (await checkboxes.count()); i++) {
       await checkboxes.nth(i).click();
     }
@@ -597,15 +602,74 @@ if (requestedScenarios.includes("B5")) {
     await submitBtn.waitFor({ state: "visible", timeout: 15000 });
     await submitBtn.click();
 
-    // left-out note
-    await page.getByText(/left out because they didn't load or are marked noindex/i).waitFor({
-      timeout: 15000,
+    const dialog = page.getByRole("dialog");
+    await dialog.getByText("Submit 2 pages to IndexNow").waitFor({ timeout: 15000 });
+    await dialog
+      .getByText(/1 pages were left out because they didn't load or are marked noindex/i)
+      .waitFor({ timeout: 15000 });
+    assert.equal(await dialog.locator("ul li").count(), 2, "B5: dialog lists the 2 eligible pages");
+
+    let submitBody = null;
+    await page.route((url) => url.pathname === "/api/customer/indexnow/submit", async (route) => {
+      submitBody = JSON.parse(route.request().postData() || "{}");
+      return route.fulfill({
+        status: 200,
+        headers: { "Cache-Control": "no-store" },
+        contentType: "application/json",
+        body: JSON.stringify(readFixture("b3-submit-result.json")),
+      });
     });
+    const confirm = dialog.getByRole("button", { name: "Submit", exact: true });
+    await confirm.click();
+    await dialog.getByText(/^(Submitted|Failed):/).first().waitFor({ timeout: 15000 });
+    assert.equal(submitBody?.urls?.length, 2, "B5: only eligible URLs are sent");
+    assert.equal(submitBody?.source, "audit", "B5: source is audit");
+    assert.ok(await confirm.isDisabled(), "B5: submit cannot be repeated after a result");
+  } finally {
+    await context.close();
+  }
+
+  // More than 100 eligible pages: the confirmation checkbox gates Submit.
+  const big = await openPortal(browser, origin, {
+    viewport: { width: 1440, height: 900 },
+    fixtures: { memberships: offcultMembership },
+  });
+  try {
+    const base = siteAuditFixture("audit-pages.json").rows[0];
+    const rows = Array.from({ length: 150 }, (_, i) => ({
+      ...base,
+      id: `00000000-0000-4000-8000-${String(i).padStart(12, "0")}`,
+      url: `https://acme.example/page-${i}`,
+      title: `Page ${i}`,
+      statusCode: i === 0 ? 404 : 200,
+      isIndexable: i !== 0 && i !== 1,
+    }));
+    await installAuditApi(big.page, { pages: { total: 150, rows } });
+    await big.page.route((url) => url.pathname === "/api/customer/indexnow", (route) =>
+      jsonResponse(route, readFixture("b2-setup-found-moved.json")),
+    );
+    await big.page.route((url) => url.pathname === "/api/customer/indexnow/submissions", (route) =>
+      jsonResponse(route, { submissions: [] }),
+    );
+    await big.page.goto(new URL("/portal/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e", origin).href, {
+      waitUntil: "networkidle",
+    });
+    await big.page.getByRole("tab", { name: /Pages/ }).click();
+    await big.page.getByText("Page 149").first().waitFor({ timeout: 15000 });
+    await big.page.getByRole("checkbox").first().click();
+    await big.page.getByRole("button", { name: "Submit to IndexNow" }).click();
+    const dialog = big.page.getByRole("dialog");
+    const gate = dialog.getByText("I changed all 148 of these pages.");
+    await gate.waitFor({ timeout: 15000 });
+    const confirm = dialog.getByRole("button", { name: "Submit", exact: true });
+    assert.ok(await confirm.isDisabled(), "B5: Submit disabled until the checkbox is ticked");
+    await dialog.getByRole("checkbox").click();
+    assert.ok(await confirm.isEnabled(), "B5: Submit enabled after the checkbox");
 
     passedCount++;
     console.log("  ✓ Scenario B5 passed");
   } finally {
-    await context.close();
+    await big.context.close();
   }
 }
 
