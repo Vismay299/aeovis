@@ -1,7 +1,7 @@
 "use client";
 
 // Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
-//   src/client/features/domain/components/DomainCompetitorsTable.tsx
+//   src/client/features/domain/components/DomainPagesTable.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useMemo } from "react";

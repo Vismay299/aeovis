@@ -1,9 +1,5 @@
 "use client";
 
-// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
-//   src/client/features/domain/components/AddCompetitorButton.tsx
-// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
-
 import { useState, type ComponentProps } from "react";
 import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";

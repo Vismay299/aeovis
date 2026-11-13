@@ -1,7 +1,7 @@
 "use client";
 
 // Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
-//   src/client/features/domain/components/SaveDomainKeywordsDialog.tsx
+//   src/client/features/domain/domainActions.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useId, useState } from "react";

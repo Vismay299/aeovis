@@ -12,7 +12,7 @@
  *   B6: Competitors: CostReviewDialog → results → sort by average position (cache-only re-read)
  *   B7: Add as competitor → toast; absent when project_memory is off; a quick pick fills the input
  *       without a request
- *   B8: 375 px viewport: document.documentElement.scrollWidth <= 375 (no horizontal scroll)
+ *   B8: 375 px: no page overflow, and with one row selected every bulk-bar control is inside the viewport
  *   B9: Export CSV filename and headers
  *
  * Output: "ok 9 scenarios" on pass.
@@ -856,7 +856,75 @@ try {
         await second.context.close();
       }
 
-      return "Saved 2 keywords without metrics, toasted with the saved-keywords action, disabled after a location change and hidden with keyword_research off";
+      // Third pass: an overview with no data disables saving (O2). `loc=2356`
+      // keeps the form on the shown market, so `hasData` is the only reason.
+      const third = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+      });
+      try {
+        await third.page.route("**/api/customer/features*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              brandKey: "acme",
+              features: { domain_research: true, keyword_research: true, project_memory: true },
+            }),
+          });
+        });
+
+        await third.page.route("**/api/customer/domain/overview*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(
+              makeOverviewBody({ organicTraffic: 0, organicKeywords: 0, hasData: false }),
+            ),
+          });
+        });
+
+        await third.page.route("**/api/customer/domain/keywords*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeKeywordsBody()),
+          });
+        });
+
+        await third.page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ available: true, competitors: [], ownHost: "offcult.in" }),
+          });
+        });
+
+        await third.page.goto(
+          new URL("/portal/domain?domain=offcult.in&loc=2356", origin).href,
+          { waitUntil: "networkidle" },
+        );
+        await third.page.getByText("oversized t shirt").waitFor({ state: "visible", timeout: 15000 });
+        await third.page.getByRole("checkbox", { name: "Select row" }).nth(0).click();
+
+        const noDataSave = third.page.getByRole("button", { name: "Save keywords" });
+        await noDataSave.waitFor({ state: "visible", timeout: 10000 });
+        assert.equal(
+          await noDataSave.isDisabled(),
+          true,
+          "Save keywords is disabled when the overview has no data",
+        );
+        const noDataTitle = await noDataSave.evaluate(
+          (element) => element.closest("[title]")?.getAttribute("title") ?? null,
+        );
+        assert.ok(
+          noDataTitle?.startsWith("Change the location back to India"),
+          `the no-data disabled state keeps the §6.6 title: ${noDataTitle}`,
+        );
+      } finally {
+        await third.context.close();
+      }
+
+      return "Saved 2 keywords without metrics, toasted with the saved-keywords action, disabled after a location change, disabled when the overview has no data, and hidden with keyword_research off";
     } finally {
       await context.close();
     }
@@ -1039,7 +1107,78 @@ try {
         .innerText();
       assert.equal(firstDomain, "competitor-three.example", "the server order is kept");
 
-      return "Idle copy priced, CostReviewDialog approved $0.018, three domains rendered, and the average-position sort re-read the cache";
+      // Second pass: with no loaded Top Keywords page the action is disabled.
+      const second = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+      });
+      try {
+        await second.page.route("**/api/customer/features*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              brandKey: "acme",
+              features: { domain_research: true, keyword_research: true, project_memory: true },
+            }),
+          });
+        });
+
+        await second.page.route("**/api/customer/domain/overview*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeOverviewBody({ organicTraffic: 0, organicKeywords: 0, hasData: false })),
+          });
+        });
+
+        // A cache-only miss: the Top Keywords page was never loaded.
+        await second.page.route("**/api/customer/domain/keywords*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              status: "not_cached",
+              domain: "offcult.in",
+              page: 1,
+              pageSize: 50,
+              market: { locationCode: 2356, languageCode: "en", country: "India" },
+            }),
+          });
+        });
+
+        await second.page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ available: true, competitors: [], ownHost: "offcult.in" }),
+          });
+        });
+
+        await second.page.goto(
+          new URL("/portal/domain?domain=offcult.in&tab=competitors", origin).href,
+          { waitUntil: "networkidle" },
+        );
+
+        const idleFind = second.page.getByRole("button", { name: "Find competitors" });
+        await idleFind.waitFor({ state: "visible", timeout: 15000 });
+        assert.equal(
+          await idleFind.isDisabled(),
+          true,
+          "Find competitors is disabled without a loaded Top Keywords page",
+        );
+        const idleTitle = await idleFind.evaluate(
+          (element) => element.closest("[title]")?.getAttribute("title") ?? null,
+        );
+        assert.equal(
+          idleTitle,
+          "Load the Top Keywords tab first.",
+          "the disabled state explains which tab to load first",
+        );
+      } finally {
+        await second.context.close();
+      }
+
+      return "Idle copy priced, CostReviewDialog approved $0.018, three domains rendered, the average-position sort re-read the cache, and no keywords disables Find competitors";
     } finally {
       await context.close();
     }
@@ -1114,6 +1253,7 @@ try {
 
       const addButton = page.getByRole("button", { name: "Add as competitor" });
       assert.equal(await addButton.count(), 1, "one add action on the keywords tab");
+      const overviewCallsBeforeAdd = overviewCalls.length;
       await addButton.click();
 
       await page.getByText("Added offcult.in to your competitors.", { exact: true }).waitFor({
@@ -1126,6 +1266,12 @@ try {
       });
       assert.ok(addedBody, "the add posted to /api/customer/domain/competitors/add");
       assert.equal(addedBody.domain, "offcult.in");
+      await page.waitForTimeout(400);
+      assert.equal(
+        overviewCalls.length,
+        overviewCallsBeforeAdd,
+        "adding a competitor made no overview request",
+      );
 
       // A quick pick fills the input and scope only: no request follows.
       const overviewCallsBeforePick = overviewCalls.length;
@@ -1197,7 +1343,68 @@ try {
         await second.context.close();
       }
 
-      return "Added offcult.in with the toast and action, the quick pick filled the input with no request, and project_memory off hid both";
+      // Third pass: a domain already declared is shown as a competitor, not added again.
+      const third = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+      });
+      try {
+        await third.page.route("**/api/customer/features*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              brandKey: "acme",
+              features: { domain_research: true, keyword_research: true, project_memory: true },
+            }),
+          });
+        });
+
+        await third.page.route("**/api/customer/domain/overview*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeOverviewBody({ isDeclaredCompetitor: true })),
+          });
+        });
+
+        await third.page.route("**/api/customer/domain/keywords*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeKeywordsBody()),
+          });
+        });
+
+        await third.page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              available: true,
+              competitors: [{ domain: "offcult.in", name: null }],
+              ownHost: "offcult.in",
+            }),
+          });
+        });
+
+        await third.page.goto(new URL("/portal/domain?domain=offcult.in", origin).href, {
+          waitUntil: "networkidle",
+        });
+        await third.page.getByText("Competitor", { exact: true }).first().waitFor({
+          state: "visible",
+          timeout: 15000,
+        });
+
+        assert.equal(
+          await third.page.getByRole("button", { name: "Add as competitor" }).count(),
+          0,
+          "Add as competitor is absent for an already declared domain",
+        );
+      } finally {
+        await third.context.close();
+      }
+
+      return "Added offcult.in with the toast and action, the quick pick filled the input with no request, project_memory off hid both, and a declared domain showed the badge instead of the action";
     } finally {
       await context.close();
     }
@@ -1490,7 +1697,7 @@ try {
   });
 
   // Scenario B8: 375 px no horizontal scroll
-  await record("B8", "375 px: document.documentElement.scrollWidth <= 375", async () => {
+  await record("B8", "375 px: no page scroll and the selected-row bulk bar fits the viewport", async () => {
     const { context, page } = await openPortal(browser, origin, {
       viewport: { width: 375, height: 812 },
     });
@@ -1565,12 +1772,38 @@ try {
 
       await page.waitForTimeout(500);
 
+      // Select one row so the bulk action bar is on screen: it is the phone-width
+      // control set that used to overflow.
+      await page.getByRole("checkbox", { name: "Select row" }).first().click();
+      const bulkBar = page.getByRole("toolbar", { name: "Bulk actions" });
+      await bulkBar.waitFor({ state: "visible", timeout: 10000 });
+
       const metrics = await page.evaluate(() => {
         const root = document.documentElement;
+        const toolbar = document.querySelector('[role="toolbar"][aria-label="Bulk actions"]');
+        const barRect = toolbar.getBoundingClientRect();
+        const round = (value) => Math.round(value * 10) / 10;
+        const controls = [...toolbar.querySelectorAll("button")].map((button) => {
+          const rect = button.getBoundingClientRect();
+          return {
+            name: button.getAttribute("aria-label") || (button.textContent || "").trim(),
+            left: round(rect.left),
+            right: round(rect.right),
+          };
+        });
         return {
           scrollWidth: root.scrollWidth,
           clientWidth: root.clientWidth,
           innerWidth: window.innerWidth,
+          bar: {
+            left: round(barRect.left),
+            right: round(barRect.right),
+            width: round(barRect.width),
+            height: round(barRect.height),
+            scrollWidth: toolbar.scrollWidth,
+            clientWidth: toolbar.clientWidth,
+          },
+          controls,
         };
       });
 
@@ -1578,8 +1811,38 @@ try {
         metrics.scrollWidth <= metrics.clientWidth + 1,
         `Page overflowed horizontally: scrollWidth ${metrics.scrollWidth} > clientWidth ${metrics.clientWidth}`,
       );
+      assert.ok(
+        metrics.bar.left >= 0,
+        `the bulk bar starts inside the viewport: left ${metrics.bar.left}`,
+      );
+      assert.ok(
+        metrics.bar.right <= metrics.innerWidth,
+        `the bulk bar ends inside the viewport: right ${metrics.bar.right} > ${metrics.innerWidth}`,
+      );
+      assert.ok(
+        metrics.bar.scrollWidth <= metrics.bar.clientWidth + 1,
+        `the bulk bar needs no internal scroll: ${metrics.bar.scrollWidth} > ${metrics.bar.clientWidth}`,
+      );
+      assert.ok(
+        metrics.controls.length >= 4,
+        `the bulk bar renders its controls: ${metrics.controls.length}`,
+      );
+      for (const control of metrics.controls) {
+        assert.ok(
+          control.left >= 0 && control.right <= metrics.innerWidth,
+          `bulk control "${control.name}" is inside the viewport: ${control.left}..${control.right}`,
+        );
+      }
+      assert.ok(
+        metrics.controls.some((control) => control.name === "Clear selection"),
+        "the clear affordance is on screen",
+      );
+      assert.ok(
+        metrics.controls.some((control) => control.name === "Export"),
+        "the export trigger is on screen",
+      );
 
-      return `375px viewport has no horizontal overflow: scrollWidth=${metrics.scrollWidth}, clientWidth=${metrics.clientWidth}`;
+      return `375px: no page scroll (scrollWidth=${metrics.scrollWidth}); bulk bar ${metrics.bar.width}x${metrics.bar.height}px at ${metrics.bar.left}..${metrics.bar.right}, internal ${metrics.bar.scrollWidth}/${metrics.bar.clientWidth}, ${metrics.controls.length} controls all inside 0..${metrics.innerWidth}`;
     } finally {
       await context.close();
     }

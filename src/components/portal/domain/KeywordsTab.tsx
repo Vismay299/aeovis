@@ -338,9 +338,12 @@ export function KeywordsTab({
       selectedLabel="selected"
       onClear={() => setSelectedKeywords(new Set())}
       actions={
-        <>
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
           {canSaveKeywords ? (
-            <span title={saveDisabled ? saveDisabledTitle : undefined}>
+            <span
+              className="inline-flex shrink-0"
+              title={saveDisabled ? saveDisabledTitle : undefined}
+            >
               <TableBulkActionButton
                 icon={<Save data-icon="inline-start" />}
                 onClick={() => setSaveDialogOpen(true)}
@@ -370,7 +373,7 @@ export function KeywordsTab({
               },
             ]}
           />
-        </>
+        </div>
       }
     />
   );

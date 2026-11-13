@@ -1,7 +1,7 @@
 "use client";
 
 // Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
-//   src/client/features/domain/components/CompetitorsTab.tsx
+//   src/client/features/domain/components/KeywordsTab.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import {
@@ -117,7 +117,6 @@ export function CompetitorsTab({
     keywordsQuery.data?.status === "ok"
       ? keywordsQuery.data.keywords
       : NO_KEYWORDS;
-  const keywordCount = keywordRows.length;
   const requestKeywords = useMemo(
     () =>
       keywordRows
@@ -125,10 +124,10 @@ export function CompetitorsTab({
         .map((row) => row.keyword),
     [keywordRows],
   );
-  const priceKeywordCount = Math.min(
-    Math.max(requestKeywords.length, 1),
-    MAX_COMPETITOR_KEYWORDS,
-  );
+  // The idle copy names the keywords this tab actually sends (at most 100),
+  // so the sentence matches the price input and the request body.
+  const sentKeywordCount = requestKeywords.length;
+  const priceKeywordCount = Math.max(sentKeywordCount, 1);
 
   const competitorsQuery = useDomainCompetitorsQuery({
     brandKey,
@@ -140,7 +139,7 @@ export function CompetitorsTab({
     limit: COMPETITOR_LIMIT,
     cacheOnly: liveMaxUsd == null,
     maxUsd: liveMaxUsd,
-    enabled: keywordCount > 0,
+    enabled: sentKeywordCount > 0,
   });
 
   const response = competitorsQuery.data;
@@ -160,10 +159,10 @@ export function CompetitorsTab({
     if (lastTracked.current === identity) return;
     lastTracked.current = identity;
     trackDomainEvent("domain_overview:competitors", {
-      keyword_count: keywordCount,
+      keyword_count: sentKeywordCount,
       result_count: rows.length,
     });
-  }, [fetchedAt, isOk, keywordCount, liveMaxUsd, rows.length, sortBy]);
+  }, [fetchedAt, isOk, liveMaxUsd, rows.length, sentKeywordCount, sortBy]);
 
   const handleRun = useCallback(
     (maxUsd: number) => {
@@ -241,12 +240,12 @@ export function CompetitorsTab({
           {displayTarget}.
         </p>
         <p className="text-sm text-muted-foreground">
-          Uses the {keywordCount} keywords on the current Top Keywords page.
+          Uses the {sentKeywordCount} keywords on the current Top Keywords page.
         </p>
       </div>
       <div
         title={
-          keywordCount === 0 ? "Load the Top Keywords tab first." : undefined
+          sentKeywordCount === 0 ? "Load the Top Keywords tab first." : undefined
         }
       >
         <PricedActionButton
@@ -261,7 +260,7 @@ export function CompetitorsTab({
             keywordCount: priceKeywordCount,
             limit: COMPETITOR_LIMIT,
           }}
-          enabled={keywordCount > 0}
+          enabled={sentKeywordCount > 0}
           pending={liveMaxUsd != null && competitorsQuery.isFetching}
           onRun={handleRun}
           alwaysConfirm
@@ -304,7 +303,7 @@ export function CompetitorsTab({
       <DomainCompetitorsTable
         brandKey={brandKey}
         rows={rows}
-        keywordCount={response?.keywordCount ?? keywordCount}
+        keywordCount={response?.keywordCount ?? sentKeywordCount}
         hasProjectMemory={hasProjectMemory}
         onCompetitorAdded={onCompetitorAdded}
       />
