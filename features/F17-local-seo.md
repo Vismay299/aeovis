@@ -684,10 +684,10 @@ Form: "Search term", "Near" (default the business coordinates; Maps link or coor
 
 ### Phase 4 — Page: map rankings and local results
 
-- [ ] **P4.T1 Components**
-  - [ ] **P4.T1.S1** *Files:* `src/components/portal/local/{GridTab,RankGridSvg,GridPointTable,GridHistory,LocalResultsTab}.tsx`, `hooks/{useLocalGrid,useLocalSerp}.ts`. *Do:* §6.6.5–6.6.6. *Verify:* `npm run build` → exit 0.
-  - [ ] **P4.T1.S2** *Files:* `scripts/qa/check-f17-browser.mjs` (B6–B8). *Do:* B6 "Run grid" opens the cost dialog with "9 Google Maps searches" and the centre warning; after confirm the SVG fills from "3 of 9" to complete; the summary reads "Ranked at 7 of 9 points"; the failed point shows "×"; arrow keys move focus between points; no request leaves `localhost` (Playwright request log has no third-party host); B7 local results "You rank #4 of 20" with the "You" badge; B8 phone width 390 px: no horizontal page scroll, SVG fits. *Verify:* `node scripts/qa/check-f17-browser.mjs --only B6,B7,B8` → "ok 3 scenarios" (F17-AC-13).
-  - [ ] **P4.T1.S3** *Files:* `src/components/portal/local/telemetry.test.mjs`. *Do:* payloads contain only the listed keys; none contains a fixture name, text, coordinate or keyword. *Verify:* `node --test src/components/portal/local/telemetry.test.mjs` → pass (F17-AC-16).
+- [x] **P4.T1 Components**
+  - [x] **P4.T1.S1** *Files:* `src/components/portal/local/{GridTab,RankGridSvg,GridPointTable,GridHistory,LocalResultsTab}.tsx`, `hooks/{useLocalGrid,useLocalSerp}.ts`. *Do:* §6.6.5–6.6.6. *Verify:* `npm run build` → exit 0.
+  - [x] **P4.T1.S2** *Files:* `scripts/qa/check-f17-browser.mjs` (B6–B8). *Do:* B6 "Run grid" opens the cost dialog with "9 Google Maps searches" and the centre warning; after confirm the SVG fills from "3 of 9" to complete; the summary reads "Ranked at 7 of 9 points"; the failed point shows "×"; arrow keys move focus between points; no request leaves `localhost` (Playwright request log has no third-party host); B7 local results "You rank #4 of 20" with the "You" badge; B8 phone width 390 px: no horizontal page scroll, SVG fits. *Verify:* `node scripts/qa/check-f17-browser.mjs --only B6,B7,B8` → "ok 3 scenarios" (F17-AC-13).
+  - [x] **P4.T1.S3** *Files:* `src/components/portal/local/telemetry.test.mjs`. *Do:* payloads contain only the listed keys; none contains a fixture name, text, coordinate or keyword. *Verify:* `node --test src/components/portal/local/telemetry.test.mjs` → pass (F17-AC-16).
 
 **Checkpoint:** full suite, build, `node scripts/qa/check-f17-browser.mjs` → "ok 8 scenarios". Completes F17-AC-13, 16.
 

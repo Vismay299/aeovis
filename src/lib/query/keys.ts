@@ -57,6 +57,9 @@ export const keys = {
   localGrids: (brandKey: string) => ["localGrids", brandKey] as const,
   localCategories: (query?: string) =>
     ["localCategories", query ?? ""] as const,
+  // F17 phase 4 — local result searches are workspace-scoped, keyed by input.
+  localSerp: (brandKey: string, inputKey: string) =>
+    ["localSerp", brandKey, inputKey] as const,
   // F13 — all keyword data is scoped to its workspace.
   keywordResearch: (brandKey: string, inputKey: string) =>
     ["keywordResearch", brandKey, inputKey] as const,
@@ -90,6 +93,35 @@ export const keys = {
     ["backlinkSnapshotTargets", brandKey] as const,
   backlinkSnapshots: (brandKey: string, target: string, scope: string) =>
     ["backlinkSnapshots", brandKey, target, scope] as const,
+  // F20
+  ga4Connection: (brandKey: string) => ["ga4Connection", brandKey] as const,
+  ga4Properties: (brandKey: string) => ["ga4Properties", brandKey] as const,
+  ga4Accounts: (brandKey: string) => ["ga4Accounts", brandKey] as const,
+  ga4Overview: (brandKey: string, range: string) => ["ga4Overview", brandKey, range] as const,
+  ga4Report: (brandKey: string, kind: string, paramsHash: string) =>
+    ["ga4Report", brandKey, kind, paramsHash] as const,
+  ga4Health: (brandKey: string) => ["ga4Health", brandKey] as const,
+  ga4Opportunities: (brandKey: string, range: string) => ["ga4Opportunities", brandKey, range] as const,
+  // F18 — site audits. The workspace list and its capabilities are scoped to
+  // the brand; an audit and its reads are addressed by the id the route
+  // authorises.
+  siteAudits: (brandKey: string) => ["siteAudits", brandKey] as const,
+  siteAuditCapabilities: (brandKey: string) =>
+    ["siteAuditCapabilities", brandKey] as const,
+  siteAudit: (auditId: string) => ["siteAudit", auditId] as const,
+  siteAuditFeed: (auditId: string) => ["siteAuditFeed", auditId] as const,
+  siteAuditSummary: (auditId: string) => ["siteAuditSummary", auditId] as const,
+  siteAuditIssues: (auditId: string, type: string, offset: number) =>
+    ["siteAuditIssues", auditId, type, offset] as const,
+  siteAuditPages: (auditId: string, filtersHash: string) =>
+    ["siteAuditPages", auditId, filtersHash] as const,
+  siteAuditPerformance: (auditId: string) =>
+    ["siteAuditPerformance", auditId] as const,
+  // Registered for F18 phase 5 (Lighthouse detail) and phase 8 (compare).
+  siteAuditLighthouse: (resultId: string) =>
+    ["siteAuditLighthouse", resultId] as const,
+  siteAuditCompare: (base: string, head: string) =>
+    ["siteAuditCompare", base, head] as const,
 } as const;
 
 export const privacyKeys = {
@@ -113,10 +145,16 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "localFetches",
   "localGrid",
   "localGrids",
+  "localSerp",
   "keywordResearch",
   "keywordSerp",
   "savedKeywords",
   "keywordLocations",
+  "domainOverview",
+  "domainKeywords",
+  "domainPages",
+  "domainCompetitors",
+  "declaredCompetitors",
   "schedule",
   "backlinksOverview",
   "backlinksTab",
@@ -124,6 +162,15 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "ahrefsRatings",
   "backlinkSnapshotTargets",
   "backlinkSnapshots",
+  "ga4Connection",
+  "ga4Properties",
+  "ga4Accounts",
+  "ga4Overview",
+  "ga4Report",
+  "ga4Health",
+  "ga4Opportunities",
+  "siteAudits",
+  "siteAuditCapabilities",
 ]);
 
 export function isWorkspaceKey(

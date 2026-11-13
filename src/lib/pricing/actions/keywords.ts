@@ -8,7 +8,10 @@ import { dataforseoPricing } from "../dataforseo.ts";
 import {
   getKeywordDataProvider,
   LOCATION_OPTIONS,
+  getIsoCountryCode,
+  formatLocationLabel,
 } from "../../../shared/keyword-locations.ts";
+import { fetchSerpLocationsForCountry } from "../../providers/dataforseo/serp-locations.ts";
 import { normalizeKeyword } from "../../keywords/helpers.ts";
 import { researchKey, resolveResearchMarket } from "../../keywords/market.ts";
 import { findRecentResearch } from "../../projectContext/service.ts";
@@ -39,6 +42,7 @@ export const serpRunActionInput = z.strictObject({
 export type KeywordQuoteDeps = {
   brandHost?: (brandKey: string) => Promise<string>;
   findRecentResearch?: typeof findRecentResearch;
+  fetchSerpLocations?: typeof fetchSerpLocationsForCountry;
 };
 
 async function loadBrandHost(
@@ -74,6 +78,33 @@ export async function estimateKeywordResearch(
     { locationCode: input.locationCode, languageCode: input.languageCode },
     { website_host: host },
   );
+
+  if (input.locationName) {
+    try {
+      const locations = await (
+        deps?.fetchSerpLocations ?? fetchSerpLocationsForCountry
+      )(getIsoCountryCode(market.locationCode));
+      if (!locations.some((loc) => loc.locationName === input.locationName)) {
+        const country =
+          LOCATION_OPTIONS.find((opt) => opt.code === market.locationCode)
+            ?.label ?? "this country";
+        return {
+          totalUsd: 0,
+          expectedUsd: 0,
+          units: [{ key: "results", label: "keyword ideas", count: input.resultLimit }],
+          lines: [],
+          monthly: null,
+          warnings: [],
+          blocked: {
+            code: "unknown_location",
+            message: `"${formatLocationLabel(input.locationName)}" is not a city, county, or region we can find in ${country}.`,
+          },
+        };
+      }
+    } catch {
+      // If the registry cannot be loaded, don't block pricing; runtime handles it.
+    }
+  }
 
   const provider = getKeywordDataProvider(market.locationCode);
   const L = input.resultLimit;

@@ -140,7 +140,7 @@ test("GET /api/customer/ga4: connected returns 200 with connection and property 
     property_time_zone: "UTC",
     property_currency_code: "USD",
     account_display_name: "Test Account",
-    connected_by_user_id: OWNER_USER.id,
+    connected_by: OWNER_USER.id,
     connected_account_email: "owner@example.com",
     connected_at: "2026-10-22T09:00:00.000Z",
   };

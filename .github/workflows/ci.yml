@@ -72,6 +72,7 @@ jobs:
           node scripts/qa/check-f13-db.mjs
           node scripts/qa/check-f15-db.mjs
           node scripts/qa/check-f17-db.mjs
+          node scripts/qa/check-f06-db.mjs
   test:
     name: tests
     runs-on: ubuntu-latest
@@ -204,6 +205,7 @@ jobs:
           node scripts/qa/check-f17-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f14-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f16-browser.mjs http://127.0.0.1:3328
+          node scripts/qa/check-f18-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f03-browser.mjs http://127.0.0.1:3328
           npx playwright install --with-deps chromium
           npm run qa:public-browser -- http://127.0.0.1:3328 test_reports/public-browser

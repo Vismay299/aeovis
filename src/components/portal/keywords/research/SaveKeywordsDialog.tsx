@@ -10,8 +10,9 @@ import { fetchJson } from "@/lib/query/fetchJson";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { formatLocationLabel } from "@/shared/keyword-locations";
 
-export function SaveKeywordsDialog({ open, onOpenChange, brandKey, keywords, locationCode, languageCode, onSaved }: { open: boolean; onOpenChange: (open: boolean) => void; brandKey: string; keywords: string[]; locationCode: number; languageCode: string; onSaved?: () => void }) {
+export function SaveKeywordsDialog({ open, onOpenChange, brandKey, keywords, locationCode, languageCode, areaName, onSaved }: { open: boolean; onOpenChange: (open: boolean) => void; brandKey: string; keywords: string[]; locationCode: number; languageCode: string; areaName?: string; onSaved?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [tags, setTags] = useState("");
   const save = async () => {
@@ -25,7 +26,7 @@ export function SaveKeywordsDialog({ open, onOpenChange, brandKey, keywords, loc
     } finally { setBusy(false); }
   };
   return <Dialog open={open} onOpenChange={(next) => { if (!busy) onOpenChange(next); }}><DialogContent fullScreenOnMobile>
-    <DialogHeader><DialogTitle>Save {keywords.length} keywords</DialogTitle><p className="text-sm text-muted-foreground">These keywords will be saved to this workspace.</p></DialogHeader>
+    <DialogHeader><DialogTitle>Save {keywords.length} keywords</DialogTitle><p className="text-sm text-muted-foreground">These keywords will be saved to this workspace.</p>{areaName ? <p className="text-sm text-muted-foreground">Saved keywords show national metrics. The local volume for {formatLocationLabel(areaName)} is not saved.</p> : null}</DialogHeader>
     <label className="grid gap-1 text-sm">Tags (optional)<Input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="e.g. priority, blog" /></label>
     <DialogFooter><Button variant="ghost" disabled={busy} onClick={() => onOpenChange(false)}>Cancel</Button><Button pending={busy} onClick={() => void save()}>Save</Button></DialogFooter>
   </DialogContent></Dialog>;

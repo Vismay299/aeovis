@@ -16,6 +16,7 @@
 
 import {
   BookOpen,
+  Bookmark,
   Gauge,
   Globe,
   LayoutDashboard,
@@ -24,6 +25,7 @@ import {
   MessageSquareText,
   PenLine,
   Radar,
+  ScanSearch,
   Search,
   Settings,
   Users,
@@ -119,6 +121,20 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: Search,
         badge: "gsc",
         prefetch: gscQueryOptions,
+      },
+      {
+        id: "saved-keywords",
+        label: "Saved Keywords",
+        href: "/portal/keywords/saved",
+        icon: Bookmark,
+        flag: "keyword_research",
+      },
+      {
+        id: "site-audit",
+        label: "Site Audit",
+        href: "/portal/audit",
+        icon: ScanSearch,
+        flag: "site_audit",
       },
     ],
   },

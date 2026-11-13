@@ -16,6 +16,7 @@ import { MAX_KEYWORDS_PER_SUBMIT } from "@/shared/keywords";
 import { stableStringify } from "@/lib/query/keys";
 import type { PriceQuote } from "@/shared/pricing";
 import { KeywordSearchOptions, type SearchOptions } from "./KeywordSearchOptions";
+import { KeywordAreaField, LocalVolumeCostNote } from "./KeywordAreaField";
 
 /** Show the approved ceiling to cents while preserving its exact numeric value. */
 export function KeywordPricedButton({ label, pendingLabel, brandKey, action, input, pending, enabled = true, onRun, dialogTitle, confirmLabel, priceChanged = null, onClose, buttonId }: {
@@ -50,20 +51,22 @@ export function KeywordPricedButton({ label, pendingLabel, brandKey, action, inp
   </div>;
 }
 
-export function KeywordResearchSearchBar({ brandKey, draft, onDraftChange, locationCode, onLocationChange, locationName, options, onOptionsChange, onRun, pending, warnings = [], priceChanged, onClosePriceReview }: {
-  brandKey: string; draft: string; onDraftChange: (value: string) => void; locationCode: number; onLocationChange: (code: number) => void; locationName?: string | null; options: SearchOptions; onOptionsChange: (options: SearchOptions) => void; onRun: (maxUsd: number) => void; pending: boolean; warnings?: Array<{code: string; message: string}>; priceChanged?: { approvedMaxUsd: number; quote: any } | null; onClosePriceReview?: () => void;
+export function KeywordResearchSearchBar({ brandKey, draft, onDraftChange, locationCode, onLocationChange, locationName, onLocationNameChange, localVolumeUsd, options, onOptionsChange, onRun, pending, warnings = [], priceChanged, onClosePriceReview }: {
+  brandKey: string; draft: string; onDraftChange: (value: string) => void; locationCode: number; onLocationChange: (code: number) => void; locationName?: string | null; onLocationNameChange?: (locationName: string | undefined) => void; localVolumeUsd?: number; options: SearchOptions; onOptionsChange: (options: SearchOptions) => void; onRun: (maxUsd: number) => void; pending: boolean; warnings?: Array<{code: string; message: string}>; priceChanged?: { approvedMaxUsd: number; quote: any } | null; onClosePriceReview?: () => void;
 }) {
   const [searchError, setSearchError] = useState("");
   const adsOnly = getKeywordDataProvider(locationCode) === "google_ads";
   const submittedKeywords = draft.split("\n").map((line) => line.trim()).filter(Boolean).slice(0, MAX_KEYWORDS_PER_SUBMIT);
   const firstKeyword = submittedKeywords[0] ?? "";
   return <div className="space-y-3 rounded-xl border border-border bg-card p-4 shadow-sm">
-    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_15rem]">
+    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_15rem] lg:grid-cols-[minmax(0,1fr)_15rem_15rem]">
       <div className="space-y-1"><label htmlFor="keyword-search" className="text-sm font-medium">Keywords</label><Textarea id="keyword-search" aria-label="Keywords" placeholder="Enter a keyword" rows={Math.min(MAX_KEYWORDS_PER_SUBMIT, Math.max(2, draft.split("\n").length))} value={draft} onChange={(e) => onDraftChange(e.target.value.split("\n").slice(0, MAX_KEYWORDS_PER_SUBMIT).join("\n"))} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); if (!firstKeyword) setSearchError("Enter a keyword to get started"); else { document.getElementById("keyword-research-submit")?.click(); } } }} /></div>
       <div className="space-y-1"><label className="text-sm font-medium">Country</label><LocationSelect value={locationCode} onChange={onLocationChange} options={LOCATION_OPTIONS} /></div>
+      {onLocationNameChange ? <div className="space-y-1"><label htmlFor="keyword-area" className="text-sm font-medium">City</label><KeywordAreaField brandKey={brandKey} locationCode={locationCode} value={locationName ?? undefined} onChange={onLocationNameChange} /></div> : null}
     </div>
     {searchError ? <p role="alert" className="text-sm text-destructive">{searchError}</p> : null}
     {adsOnly ? <Alert variant="info"><AlertDescription>Keyword data for this country comes from Google Ads — search volume, CPC, and trends are available, but difficulty and intent are not.</AlertDescription></Alert> : null}
+    {locationName && localVolumeUsd !== undefined ? <LocalVolumeCostNote usd={localVolumeUsd} /> : null}
     {warnings.filter((w) => w.code === "recent_research" || w.code === "cache_note").map((w) => <p key={w.code} className="text-xs text-muted-foreground">{w.message}</p>)}
     <div className="flex flex-wrap items-center justify-between gap-2">
       <KeywordSearchOptions value={options} onChange={onOptionsChange} adsOnly={adsOnly} />

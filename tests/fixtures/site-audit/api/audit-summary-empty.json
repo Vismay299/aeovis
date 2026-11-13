@@ -1,0 +1,46 @@
+{
+  "audit": {
+    "id": "6f1d2c3b-0a4e-4b8f-9c1d-2e3f4a5b6c7d",
+    "startUrl": "https://offcult.in/",
+    "status": "cancelled",
+    "pagesCrawled": 0,
+    "pagesSeen": 0,
+    "maxPages": 50,
+    "crawlCompleted": false,
+    "lighthouse": false,
+    "renderJavaScript": false,
+    "sitePlatform": null,
+    "createdAt": "2026-11-13T09:00:00.000Z",
+    "completedAt": "2026-11-13T09:00:20.000Z"
+  },
+  "stats": {
+    "averageResponseMs": null,
+    "pagesBlocked": 0,
+    "pagesRateLimited": 0,
+    "pagesAbandoned": 0,
+    "pagesUnread": 0,
+    "lighthouse": {
+      "tests": 0,
+      "failed": 0,
+      "avgPerformance": null,
+      "avgSeo": null,
+      "avgAccessibility": null
+    }
+  },
+  "issueGroups": [],
+  "aiAccess": { "robotsStatus": "unreachable", "rows": [] },
+  "llmsTxt": {
+    "status": "unreachable",
+    "httpStatus": null,
+    "contentType": null,
+    "firstLine": null
+  },
+  "flags": {
+    "siteBlocked": false,
+    "crawlStopped": false,
+    "hasShells": false,
+    "unreadRendered": false,
+    "linkGraphComplete": true,
+    "discoveryTruncated": false
+  }
+}

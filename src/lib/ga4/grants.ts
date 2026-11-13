@@ -89,9 +89,12 @@ export async function listGrantsForUser(
     return [];
   }
 
+  // Only this user's grants: an unfiltered read scans every workspace's
+  // connection and is cut at PostgREST max_rows, undercounting usage.
   const { data: connections } = await admin
     .from("ga4_connections")
-    .select("grant_id");
+    .select("grant_id")
+    .in("grant_id", grants.map((g: any) => g.id));
 
   const usageCounts = new Map<string, number>();
   if (connections) {

@@ -1,0 +1,154 @@
+{
+  "quoteGrid": {
+    "action": "local.grid.run",
+    "currency": "USD",
+    "totalUsd": 0.0108,
+    "units": [{ "key": "points", "label": "Grid points", "count": 9 }],
+    "lines": [
+      {
+        "label": "9 Google Maps searches (3×3 grid, 2 km apart)",
+        "quantity": 1,
+        "unitUsd": 0.0108,
+        "totalUsd": 0.0108
+      }
+    ],
+    "warnings": [
+      {
+        "code": "center_note",
+        "message": "Check that the centre is your storefront before running. A grid centred in the wrong place is worse than no grid."
+      }
+    ],
+    "blocked": null
+  },
+  "processing": {
+    "id": "66666666-6666-6666-6666-666666666666",
+    "status": "processing",
+    "keyword": "coffee shop",
+    "center": { "latitude": 39.7817, "longitude": -89.6501 },
+    "gridSize": 3,
+    "spacingKm": 2,
+    "zoom": 13,
+    "device": "mobile",
+    "pointsReady": 3,
+    "pointsTotal": 9,
+    "points": null,
+    "summary": null,
+    "matched": null,
+    "reused": false,
+    "error": null,
+    "createdAt": "2026-10-22T08:10:00.000Z",
+    "pollAfterSeconds": 5
+  },
+  "completed": {
+    "id": "66666666-6666-6666-6666-666666666666",
+    "status": "completed",
+    "keyword": "coffee shop",
+    "center": { "latitude": 39.7817, "longitude": -89.6501 },
+    "gridSize": 3,
+    "spacingKm": 2,
+    "zoom": 13,
+    "device": "mobile",
+    "pointsReady": 9,
+    "pointsTotal": 9,
+    "points": [
+      {
+        "row": 0,
+        "col": 0,
+        "latitude": 39.7997874,
+        "longitude": -89.6734852,
+        "rank": 3,
+        "resultsCount": 20,
+        "topResult": { "title": "Rival Roasters", "cid": "9870000000000000001" }
+      },
+      {
+        "row": 0,
+        "col": 1,
+        "latitude": 39.7997874,
+        "longitude": -89.6501,
+        "rank": 6,
+        "resultsCount": 20,
+        "topResult": { "title": "Rival Roasters", "cid": "9870000000000000001" }
+      },
+      {
+        "row": 0,
+        "col": 2,
+        "latitude": 39.7997874,
+        "longitude": -89.6267148,
+        "rank": 9,
+        "resultsCount": 20,
+        "topResult": { "title": "Corner Grind", "cid": "9870000000000000002" }
+      },
+      {
+        "row": 1,
+        "col": 0,
+        "latitude": 39.7817,
+        "longitude": -89.6734852,
+        "rank": 2,
+        "resultsCount": 20,
+        "topResult": { "title": "Rival Roasters", "cid": "9870000000000000001" }
+      },
+      {
+        "row": 1,
+        "col": 1,
+        "latitude": 39.7817,
+        "longitude": -89.6501,
+        "rank": 1,
+        "resultsCount": 20,
+        "topResult": { "title": "Acme Coffee", "cid": "1234567890123456789" }
+      },
+      {
+        "row": 1,
+        "col": 2,
+        "latitude": 39.7817,
+        "longitude": -89.6267148,
+        "rank": 5,
+        "resultsCount": 20,
+        "topResult": { "title": "Corner Grind", "cid": "9870000000000000002" }
+      },
+      {
+        "row": 2,
+        "col": 0,
+        "latitude": 39.7636126,
+        "longitude": -89.6734852,
+        "rank": 4,
+        "resultsCount": 20,
+        "topResult": { "title": "Rival Roasters", "cid": "9870000000000000001" }
+      },
+      {
+        "row": 2,
+        "col": 1,
+        "latitude": 39.7636126,
+        "longitude": -89.6501,
+        "rank": null,
+        "resultsCount": 4,
+        "topResult": { "title": "Corner Grind", "cid": "9870000000000000002" }
+      },
+      {
+        "row": 2,
+        "col": 2,
+        "latitude": 39.7636126,
+        "longitude": -89.6267148,
+        "rank": null,
+        "error": true
+      }
+    ],
+    "summary": {
+      "pointsSearched": 9,
+      "pointsFound": 7,
+      "failed": 1,
+      "averageRank": 4.29,
+      "top3Count": 3,
+      "top10Count": 7
+    },
+    "matched": {
+      "title": "Acme Coffee",
+      "cid": "1234567890123456789",
+      "placeId": "ChIJAcme123"
+    },
+    "reused": false,
+    "error": null,
+    "createdAt": "2026-10-22T08:10:00.000Z",
+    "pollAfterSeconds": null
+  },
+  "emptyGridHistory": { "grids": [] }
+}

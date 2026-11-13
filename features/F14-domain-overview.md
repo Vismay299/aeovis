@@ -302,9 +302,9 @@ Accessibility and phone: inputs labelled; tables keep `aria-sort`; tabs are `rol
 
 **Goal:** the hand-offs to F13, F06 and F07.
 
-- [ ] **P4.T1 Hand-off components and checks**
-  - [ ] **P4.T1.S1** *Files:* `src/components/portal/domain/{SaveDomainKeywordsDialog,CompetitorsTab,DomainCompetitorsTable,AddCompetitorButton}.tsx`, `hooks/{useDomainCompetitors,useDeclaredCompetitors}.ts`, `KeywordsTab.tsx`, `PagesTab.tsx` (export menus via `useExportRows`). *Do:* §6.6 remaining rows. *Verify:* `npm run build` → exit 0.
-  - [ ] **P4.T1.S2** *Files:* `scripts/qa/check-f14-browser.mjs` (B5 save with tags → POST `/api/customer/keywords/saved` body has no `metrics`, toast; disabled after changing the location; hidden when `keyword_research` off; B6 competitors: `CostReviewDialog` → results → sort by average position; B7 add competitor → toast; button absent when `project_memory` off; quick pick fills input without a request; B9 export CSV filename and headers). *Verify:* `node scripts/qa/check-f14-browser.mjs` → "ok 9 scenarios" (F14-AC-09, 10, 14).
+- [x] **P4.T1 Hand-off components and checks**
+  - [x] **P4.T1.S1** *Files:* `src/components/portal/domain/{SaveDomainKeywordsDialog,CompetitorsTab,DomainCompetitorsTable,AddCompetitorButton}.tsx`, `hooks/{useDomainCompetitors,useDeclaredCompetitors}.ts`, `KeywordsTab.tsx`, `PagesTab.tsx` (export menus via `useExportRows`). *Do:* §6.6 remaining rows. *Verify:* `npm run build` → exit 0.
+  - [x] **P4.T1.S2** *Files:* `scripts/qa/check-f14-browser.mjs` (B5 save with tags → POST `/api/customer/keywords/saved` body has no `metrics`, toast; disabled after changing the location; hidden when `keyword_research` off; B6 competitors: `CostReviewDialog` → results → sort by average position; B7 add competitor → toast; button absent when `project_memory` off; quick pick fills input without a request; B9 export CSV filename and headers). *Verify:* `node scripts/qa/check-f14-browser.mjs` → "ok 9 scenarios" (F14-AC-09, 10, 14).
 
 **Checkpoint:** full suite, build, all browser scenarios. Completes F14-AC-09, 10, 14.
 
