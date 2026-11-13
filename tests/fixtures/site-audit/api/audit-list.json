@@ -1,0 +1,40 @@
+{
+  "audits": [
+    {
+      "id": "6f1d2c3b-0a4e-4b8f-9c1d-2e3f4a5b6c7d",
+      "startUrl": "https://offcult.in/",
+      "status": "running",
+      "pagesCrawled": 23,
+      "pagesTotal": 50,
+      "maxPages": 50,
+      "lighthouse": false,
+      "renderJavaScript": false,
+      "createdAt": "2026-11-13T09:00:00.000Z",
+      "completedAt": null,
+      "issueCounts": null
+    },
+    {
+      "id": "7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e",
+      "startUrl": "https://offcult.in/",
+      "status": "completed",
+      "pagesCrawled": 48,
+      "pagesTotal": 48,
+      "maxPages": 50,
+      "lighthouse": false,
+      "renderJavaScript": false,
+      "createdAt": "2026-11-12T09:00:00.000Z",
+      "completedAt": "2026-11-12T09:01:12.000Z",
+      "issueCounts": { "critical": 3, "warning": 3, "info": 1 }
+    }
+  ],
+  "capabilities": {
+    "lighthouse": true,
+    "render": true,
+    "renderReason": null,
+    "maxPages": 10000,
+    "renderedMaxPages": 1000,
+    "monthlyPagesUsed": 48,
+    "monthlyPagesCap": 50000,
+    "defaultUrl": "https://offcult.in/"
+  }
+}

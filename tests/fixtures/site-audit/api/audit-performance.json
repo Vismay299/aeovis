@@ -1,0 +1,38 @@
+{
+  "rows": [
+    {
+      "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+      "pageId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "pageUrl": "https://offcult.in/",
+      "pagePath": "/",
+      "strategy": "mobile",
+      "performanceScore": 62,
+      "accessibilityScore": 88,
+      "bestPracticesScore": 96,
+      "seoScore": 92,
+      "lcpMs": 3120.5,
+      "cls": 0.04,
+      "inpMs": 180,
+      "ttfbMs": 410,
+      "errorMessage": null,
+      "hasDetails": true
+    },
+    {
+      "id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      "pageId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      "pageUrl": "https://offcult.in/",
+      "pagePath": "/",
+      "strategy": "desktop",
+      "performanceScore": 91,
+      "accessibilityScore": 94,
+      "bestPracticesScore": 96,
+      "seoScore": 100,
+      "lcpMs": 1120,
+      "cls": 0.01,
+      "inpMs": 90,
+      "ttfbMs": 210,
+      "errorMessage": null,
+      "hasDetails": true
+    }
+  ]
+}

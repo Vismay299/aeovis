@@ -1,0 +1,39 @@
+{
+  "action": "site_audit.run",
+  "currency": "USD",
+  "totalUsd": 0.1,
+  "expectedUsd": null,
+  "units": [
+    { "key": "pages", "label": "pages", "count": 50 },
+    { "key": "lighthouse_checks", "label": "Lighthouse checks", "count": 20 }
+  ],
+  "lines": [
+    {
+      "label": "Crawl up to 50 pages",
+      "quantity": 50,
+      "unitUsd": 0,
+      "totalUsd": 0
+    },
+    {
+      "label": "Lighthouse checks (up to 10 pages, mobile and desktop)",
+      "quantity": 20,
+      "unitUsd": 0.005,
+      "totalUsd": 0.1
+    }
+  ],
+  "monthly": null,
+  "warnings": [
+    {
+      "code": "free_crawl",
+      "message": "Crawling is free. Only Lighthouse checks and JavaScript rendering cost money."
+    },
+    {
+      "code": "lighthouse_sample",
+      "message": "Lighthouse runs on up to 10 pages, one per page template, so you may pay for fewer than 20 checks."
+    }
+  ],
+  "blocked": null,
+  "priceVersion": "v1",
+  "quotedAt": "2026-11-13T09:00:00.000Z",
+  "inputsHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}

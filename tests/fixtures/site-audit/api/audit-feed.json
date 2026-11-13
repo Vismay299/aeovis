@@ -1,0 +1,23 @@
+{
+  "entries": [
+    {
+      "url": "https://offcult.in/blog/boots",
+      "statusCode": 200,
+      "title": "Boots that last the winter",
+      "crawledAt": "2026-11-13T09:00:41.120Z"
+    },
+    {
+      "url": "https://offcult.in/about",
+      "statusCode": 200,
+      "title": "About Offcult",
+      "crawledAt": "2026-11-13T09:00:40.100Z"
+    },
+    {
+      "url": "https://offcult.in/old",
+      "statusCode": 404,
+      "title": null,
+      "crawledAt": "2026-11-13T09:00:39.000Z"
+    }
+  ],
+  "pollAfterSeconds": 1.5
+}

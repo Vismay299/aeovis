@@ -1,0 +1,20 @@
+{
+  "id": "7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e",
+  "startUrl": "https://offcult.in/",
+  "status": "completed",
+  "currentPhase": "completed",
+  "pagesCrawled": 48,
+  "pagesTotal": 48,
+  "lighthouseTotal": 0,
+  "lighthouseCompleted": 0,
+  "lighthouseFailed": 0,
+  "renderJavaScript": false,
+  "lighthouse": false,
+  "cancelRequested": false,
+  "errorCode": null,
+  "failedPhase": null,
+  "createdAt": "2026-11-12T09:00:00.000Z",
+  "startedAt": "2026-11-12T09:00:02.000Z",
+  "completedAt": "2026-11-12T09:01:12.000Z",
+  "pollAfterSeconds": null
+}
