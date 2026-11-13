@@ -1,19 +1,26 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-// no lucide-react import (types unavailable in this toolchain)
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { fetchJson, isApiError, withBrand } from "@/lib/query/fetchJson";
+import { describeError } from "@/lib/query/errors";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
 import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
 import { useJobStatus } from "@/components/app/hooks/useJobStatus";
+import type { PriceQuote } from "@/shared/pricing";
 import type { SavedKeywordRow } from "@/shared/keywords";
 
 type ProposalCluster = {
@@ -24,6 +31,16 @@ type ProposalCluster = {
   rationale: string;
   savedKeywordIds: string[];
 };
+
+type ProposalResult = {
+  clusters: ProposalCluster[];
+  unsorted: string[];
+  model: string;
+  usd: number | null;
+};
+
+const DETAIL =
+  "One AI call groups the selected keywords into page-level topics. Nothing is tagged until you apply it.";
 
 export function GroupTopicsDialog({
   open,
@@ -40,60 +57,63 @@ export function GroupTopicsDialog({
 }) {
   const queryClient = useQueryClient();
   const ids = selectedRows.map((r) => r.id);
+  const keywordsById = new Map(selectedRows.map((r) => [r.id, r.keyword]));
   const quote = usePriceQuote(
     { brandKey, action: "keywords.clustering.run", input: { savedKeywordIds: ids } },
     { enabled: open && ids.length >= 10 },
   );
 
-  const [costOpen, setCostOpen] = useState(false);
+  const [costOpen, setCostOpen] = useState(true);
   const [jobId, setJobId] = useState<string | null>(null);
   const [priceChanged, setPriceChanged] = useState<{
     approvedMaxUsd: number;
-    quote: any;
+    quote: PriceQuote;
   } | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [clusters, setClusters] = useState<ProposalCluster[]>([]);
+  const [proposal, setProposal] = useState<ProposalResult | null>(null);
   const [checked, setChecked] = useState<Record<number, boolean>>({});
   const [names, setNames] = useState<Record<number, string>>({});
-  const [unsorted, setUnsorted] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [applying, setApplying] = useState(false);
 
   const job = useJobStatus(brandKey, jobId);
 
   useEffect(() => {
     if (!open) {
+      setCostOpen(true);
       setJobId(null);
-      setClusters([]);
+      setPriceChanged(null);
+      setPending(false);
+      setError(null);
+      setProposal(null);
       setChecked({});
       setNames({});
-      setUnsorted([]);
-      setError(null);
-      setPending(false);
+      setExpanded({});
       setApplying(false);
-      setPriceChanged(null);
     }
-  }, [open]);
+  }, [open ]);
 
   useEffect(() => {
-    if (job.data?.status === "completed" && clusters.length === 0) {
-      const res = job.data.result as { clusters?: ProposalCluster[]; unsorted?: string[] };
-      const c = res?.clusters ?? [];
-      setClusters(c);
+    if (job.data?.status === "completed" && !proposal) {
+      const res = (job.data.result ?? {}) as ProposalResult;
+      const clusters = res.clusters ?? [];
+      setProposal({ ...res, clusters, unsorted: res.unsorted ?? [] });
       const initChecked: Record<number, boolean> = {};
       const initNames: Record<number, string> = {};
-      c.forEach((cl, i) => {
+      clusters.forEach((c, i) => {
         initChecked[i] = true;
-        initNames[i] = cl.name;
+        initNames[i] = c.name;
       });
       setChecked(initChecked);
       setNames(initNames);
-      setUnsorted(res?.unsorted ?? []);
     }
-    if (job.data?.status === "failed") {
-      setError(job.data.error?.message ?? "Grouping failed.");
+    if (job.data?.status === "failed" && !proposal) {
+      setError(job.data.error?.message ?? "Something went wrong. Please try again.");
     }
-  }, [job.data, clusters.length]);
+  }, [job.data, proposal]);
+
+  const closeAll = () => onOpenChange(false);
 
   const runCluster = async (maxUsd: number) => {
     setPending(true);
@@ -105,158 +125,180 @@ export function GroupTopicsDialog({
       );
       setJobId(res.jobId);
       setCostOpen(false);
-    } catch (e: any) {
-      if (e?.code === "price_changed") {
-        setPriceChanged({ approvedMaxUsd: maxUsd, quote: quote.data });
-        setCostOpen(true);
+    } catch (caught) {
+      if (isApiError(caught) && caught.code === "price_changed") {
+        const details = caught.details as
+          | { approvedMaxUsd?: number; quote?: PriceQuote }
+          | undefined;
+        if (details?.quote) {
+          setPriceChanged({ approvedMaxUsd: Number(details.approvedMaxUsd ?? maxUsd), quote: details.quote });
+        }
+      } else if (isApiError(caught) && caught.code === "job_already_running") {
+        setError(caught.message);
       } else {
-        setError(e?.message ?? "Failed to start grouping.");
+        setError(caught instanceof Error ? describeError(caught) : "Something went wrong. Please try again.");
       }
     } finally {
       setPending(false);
     }
   };
 
+  const selectedCount = proposal?.clusters.filter((_, i) => checked[i]).length ?? 0;
+  const taggedKeywordCount =
+    proposal?.clusters
+      .filter((_, i) => checked[i])
+      .reduce((sum, c) => sum + c.savedKeywordIds.length, 0) ?? 0;
+
   const apply = async () => {
-    if (!jobId) return;
-    const appliedClusters = clusters
-      .map((c, i) => (checked[i] ? { name: names[i] || c.name, savedKeywordIds: c.savedKeywordIds } : null))
-      .filter(Boolean) as { name: string; savedKeywordIds: string[] }[];
+    if (!jobId || !proposal) return;
+    const appliedClusters = proposal.clusters
+      .map((c, i) =>
+        checked[i]
+          ? { name: (names[i] ?? c.name).trim() || c.name, savedKeywordIds: c.savedKeywordIds }
+          : null,
+      )
+      .filter((c) => c !== null);
     if (appliedClusters.length === 0) {
-      onOpenChange(false);
+      closeAll();
       return;
     }
     setApplying(true);
+    setError(null);
     try {
-      const res = await fetchJson<{ taggedCount: number; tags: any[] }>(
+      const res = await fetchJson<{ taggedCount: number; tags: unknown[] }>(
         withBrand("/api/customer/keywords/cluster/apply", brandKey),
         { method: "POST", body: { jobId, clusters: appliedClusters } },
       );
-      const topicCount = appliedClusters.length;
-      toast.success(`Tagged ${res.taggedCount} keywords in ${topicCount} topics`);
-      onOpenChange(false);
+      toast.success(`Tagged ${res.taggedCount} keywords in ${appliedClusters.length} topics`);
+      closeAll();
       onApplied?.();
       void queryClient.invalidateQueries({ queryKey: ["savedKeywords", brandKey] });
-    } catch (e: any) {
-      setError(e?.message ?? "Apply failed.");
+    } catch (caught) {
+      setError(caught instanceof Error ? describeError(caught) : "Something went wrong. Please try again.");
     } finally {
       setApplying(false);
     }
   };
 
-  const isRunning = jobId !== null && (job.data?.status === "queued" || job.data?.status === "running" || !job.data);
-  const isCompleted = jobId !== null && job.data?.status === "completed" && clusters.length > 0;
-  const isFailed = jobId !== null && job.data?.status === "failed";
+  const running =
+    jobId !== null && (!job.data || job.data.status === "queued" || job.data.status === "running");
+  const failed = jobId !== null && job.data?.status === "failed" && !proposal;
+  const done = proposal !== null;
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-2xl">
+      <CostReviewDialog
+        open={open && costOpen && !jobId}
+        title="Group into topics"
+        confirmLabel="Group keywords"
+        pendingLabel="Starting…"
+        quote={quote}
+        pending={pending}
+        priceChanged={priceChanged}
+        error={error}
+        onConfirm={(maxUsd) => void runCluster(maxUsd)}
+        onClose={closeAll}
+        detail={() => <span>{DETAIL}</span>}
+      />
+
+      <Dialog open={open && (running || failed || done)} onOpenChange={(v) => { if (!v) closeAll(); }}>
+        <DialogContent fullScreenOnMobile className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Group into topics</DialogTitle>
           </DialogHeader>
 
-          {!jobId && !costOpen ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                One AI call groups the selected keywords into page-level topics. Nothing is tagged until you apply it.
-              </p>
-              <Button onClick={() => setCostOpen(true)} disabled={pending || ids.length < 10}>
-                {pending ? "Starting…" : "Group keywords"}
-              </Button>
-            </div>
-          ) : null}
-
-          {costOpen ? (
-            <CostReviewDialog
-              open={costOpen}
-              title="Group into topics"
-              confirmLabel="Group keywords"
-              pendingLabel="Starting…"
-              quote={quote}
-              pending={pending}
-              priceChanged={priceChanged}
-              error={error}
-              onConfirm={(maxUsd) => void runCluster(maxUsd)}
-              onClose={() => setCostOpen(false)}
-              detail={() => (
-                <span>One AI call groups the selected keywords into page-level topics. Nothing is tagged until you apply it.</span>
-              )}
-            />
-          ) : null}
-
-          {isRunning ? (
-            <div className="flex items-center gap-2 py-6">
-              <span className="h-4 w-4 inline-block animate-spin border-2 border-current border-t-transparent rounded-full" />
+          {running ? (
+            <div className="flex items-center gap-2 py-6" aria-live="polite">
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
               <span>Grouping {ids.length} keywords into topics…</span>
             </div>
           ) : null}
 
-          {isFailed ? (
-            <Alert variant="destructive">
-              <AlertDescription>
-                Grouping failed. You were charged only for the AI call that ran.
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {isCompleted ? (
-            <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-              {clusters.map((c, i) => (
-                <div key={i} className="border rounded p-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      checked={checked[i] ?? true}
-                      onCheckedChange={(v: boolean | "indeterminate") =>
-                        setChecked((prev) => ({ ...prev, [i]: Boolean(v) }))
-                      }
-                    />
-                    <Input
-                      value={names[i] ?? c.name}
-                      onChange={(e) =>
-                        setNames((prev) => ({ ...prev, [i]: e.target.value }))
-                      }
-                      aria-label="Topic name"
-                      className="max-w-xs"
-                    />
-                    <Badge variant="secondary">{c.intent}</Badge>
-                    <Badge variant="outline">{c.priority}</Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {c.savedKeywordIds.length} keywords
-                    </span>
-                  </div>
-                  {c.targetPage ? (
-                    <a href={c.targetPage} className="text-xs text-blue-600" target="_blank" rel="noreferrer">
-                      {c.targetPage}
-                    </a>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">New page</span>
-                  )}
-                </div>
-              ))}
-              {unsorted.length > 0 ? (
-                <div className="text-xs text-muted-foreground">
-                  Unsorted ({unsorted.length})
-                </div>
-              ) : null}
-              {error ? <Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert> : null}
+          {failed ? (
+            <div className="space-y-4">
+              <Alert variant="destructive">
+                <AlertDescription>
+                  Grouping failed. You were charged only for the AI call that ran.
+                </AlertDescription>
+              </Alert>
               <DialogFooter>
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
-                  Cancel
-                </Button>
-                <Button onClick={() => void apply()} disabled={applying}>
-                  {applying ? "Applying…" : `Apply tags to ${clusters.filter((_, i) => checked[i]).length} topics`}
+                <Button variant="outline" onClick={closeAll}>
+                  Close
                 </Button>
               </DialogFooter>
             </div>
           ) : null}
 
-          {!isCompleted && !isRunning && !costOpen && !jobId ? (
-            <DialogFooter>
-              <Button variant="outline" onClick={() => onOpenChange(false)}>
-                Cancel
-              </Button>
-            </DialogFooter>
+          {done && proposal ? (
+            <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+              {proposal.clusters.map((c, i) => {
+                const count = c.savedKeywordIds.length;
+                const isOpen = expanded[i] ?? false;
+                return (
+                  <div key={i} className="space-y-2 rounded border p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Checkbox
+                        checked={checked[i] ?? true}
+                        onCheckedChange={(v: boolean | "indeterminate") =>
+                          setChecked((prev) => ({ ...prev, [i]: v === true }))
+                        }
+                        aria-label={`Include ${c.name}`}
+                      />
+                      <Input
+                        value={names[i] ?? c.name}
+                        onChange={(e) => setNames((prev) => ({ ...prev, [i]: e.target.value }))}
+                        aria-label="Topic name"
+                        className="max-w-xs"
+                      />
+                      <Badge variant="secondary">{c.intent}</Badge>
+                      <Badge variant="outline">{c.priority}</Badge>
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground underline hover:no-underline"
+                        onClick={() => setExpanded((prev) => ({ ...prev, [i]: !isOpen }))}
+                        aria-expanded={isOpen}
+                      >
+                        {count} keywords
+                      </button>
+                    </div>
+                    {isOpen ? (
+                      <ul className="list-disc space-y-1 pl-6 text-sm">
+                        {c.savedKeywordIds.map((id) => (
+                          <li key={id}>{keywordsById.get(id) ?? id}</li>
+                        ))}
+                      </ul>
+                    ) : null}
+                    {c.targetPage ? (
+                      <a href={c.targetPage} className="block truncate text-xs text-blue-600" target="_blank" rel="noreferrer">
+                        {c.targetPage}
+                      </a>
+                    ) : (
+                      <span className="block text-xs text-muted-foreground">New page</span>
+                    )}
+                  </div>
+                );
+              })}
+              {proposal.unsorted.length > 0 ? (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Checkbox checked={false} disabled aria-label="Include Unsorted" />
+                  <span>Unsorted ({proposal.unsorted.length})</span>
+                </div>
+              ) : null}
+              <p className="text-xs text-muted-foreground">Tags are added. Existing tags stay.</p>
+              {error ? (
+                <Alert variant="destructive">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              ) : null}
+              <DialogFooter>
+                <Button variant="outline" onClick={closeAll}>
+                  Cancel
+                </Button>
+                <Button onClick={() => void apply()} disabled={applying || selectedCount === 0}>
+                  {applying ? "Applying…" : `Apply tags to ${selectedCount} topics`}
+                </Button>
+              </DialogFooter>
+            </div>
           ) : null}
         </DialogContent>
       </Dialog>

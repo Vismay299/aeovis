@@ -146,6 +146,64 @@ const refreshBlockedQuote = (code) => ({
   },
 });
 
+// Phase 6: twelve selectable keywords and the clustering quote/proposal.
+const clusterRowsFixture = Array.from({ length: 12 }, (_, index) => ({
+  id: `c${String(index).padStart(7, "0")}-0000-4000-8000-${String(index).padStart(12, "0")}`,
+  keyword: `cluster keyword ${index + 1}`,
+  locationCode: 2356,
+  languageCode: "en",
+  createdAt: "2026-11-01T10:00:00.000Z",
+  searchVolume: 5000 + index * 100,
+  cpc: 0.42,
+  competition: 0.6,
+  keywordDifficulty: 30,
+  intent: index < 8 ? "commercial" : "informational",
+  monthlySearches: [],
+  fetchedAt: "2026-11-10T09:59:00.000Z",
+  tags: [],
+}));
+const clusterQuote = {
+  ...quote,
+  action: "keywords.clustering.run",
+  totalUsd: 0.05,
+  expectedUsd: 0.05,
+  units: [{ key: "keywords", label: "keywords", count: 12 }],
+  lines: [{ label: "AI topic grouping for 12 keywords", quantity: 1, unitUsd: 0.05, totalUsd: 0.05 }],
+  warnings: [],
+  blocked: null,
+};
+const clusterProposal = {
+  clusters: [
+    {
+      name: "Cluster topic one",
+      intent: "commercial",
+      priority: "high",
+      targetPage: "https://example.test/ones",
+      rationale: "One page could satisfy all of these buyers.",
+      savedKeywordIds: clusterRowsFixture.slice(0, 5).map((row) => row.id),
+    },
+    {
+      name: "Cluster topic two",
+      intent: "commercial",
+      priority: "medium",
+      targetPage: null,
+      rationale: "A second page for the next buyer stage.",
+      savedKeywordIds: clusterRowsFixture.slice(5, 9).map((row) => row.id),
+    },
+    {
+      name: "Cluster topic three",
+      intent: "informational",
+      priority: "low",
+      targetPage: null,
+      rationale: "Guides for early researchers.",
+      savedKeywordIds: clusterRowsFixture.slice(9, 12).map((row) => row.id),
+    },
+  ],
+  unsorted: [],
+  model: "google/gemma-4-31b-it:free",
+  usd: 0.000234,
+};
+
 const browser = await chromium.launch({ headless: true });
 let failures = 0;
 let passed = 0;
@@ -181,6 +239,8 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
   const savedBulkTagRequests = [];
   const savedRefreshRequests = [];
   const savedTagRequests = [];
+  const clusterRequests = [];
+  const clusterApplyRequests = [];
   let jobPolls = 0;
   let firstJobPollAt = 0;
   await page.route("**/api/customer/features*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ brandKey: "acme", features: { keyword_research: flag, price_review: true } }) }));
@@ -193,6 +253,9 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
     }
     if (body.action === "keywords.metrics_refresh.run") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(refreshBlocked ? refreshBlockedQuote(refreshBlocked) : refreshQuote) });
+    }
+    if (body.action === "keywords.clustering.run") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(clusterQuote) });
     }
     if (body.input?.locationName) {
       const local = { label: `Local volume for ${body.input.locationName}`, quantity: 1, unitUsd: 0.09, totalUsd: 0.09 };
@@ -237,16 +300,17 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
     const url = new URL(request.url());
     savedListRequests.push(url.search);
     const empty = savedList === "empty" || savedList === "filteredEmpty";
+    const fixture = savedList === "cluster" ? clusterRowsFixture : savedRowsFixture;
     const pageNumber = Number(url.searchParams.get("page") ?? 1);
     const pageSize = Number(url.searchParams.get("size") ?? 50);
-    const totalCount = empty ? 0 : savedRowsFixture.length;
+    const totalCount = empty ? 0 : fixture.length;
     const lastPage = Math.max(1, Math.ceil(totalCount / pageSize));
     const outOfRange = pageNumber > lastPage;
     return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        rows: empty || outOfRange ? [] : savedRowsFixture,
+        rows: empty || outOfRange ? [] : fixture,
         totalCount,
         page: pageNumber,
         pageSize,
@@ -297,12 +361,40 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
     const body = request.postDataJSON();
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ tag: { id: "tag-1", name: body.name ?? "Tees", normalizedName: (body.name ?? "Tees").toLowerCase(), color: body.color ?? "sky" } }) });
   });
+  await page.route(/\/api\/customer\/keywords\/cluster\/apply(\?.*)?$/, (route) => {
+    const body = route.request().postDataJSON();
+    clusterApplyRequests.push(body);
+    const taggedCount = body.clusters.reduce((sum, c) => sum + c.savedKeywordIds.length, 0);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        taggedCount,
+        tags: body.clusters.map((c, i) => ({ id: `cluster-tag-${i}`, name: c.name })),
+      }),
+    });
+  });
+  await page.route(/\/api\/customer\/keywords\/cluster(\?.*)?$/, (route) => {
+    const body = route.request().postDataJSON();
+    clusterRequests.push(body);
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ jobId: "job-cluster-1", status: "queued", pollAfterSeconds: 1 }) });
+  });
   await page.route(/\/api\/customer\/jobs\/[^/?]+(\?.*)?$/, (route) => {
     jobPolls += 1;
     if (!firstJobPollAt) firstJobPollAt = Date.now();
+    const isCluster = route.request().url().includes("job-cluster-1");
     // The first poll(s) report progress; the next paced poll finishes, so the
     // running line is always observable even under React's dev double-mount.
     const running = Date.now() - firstJobPollAt < 1500;
+    if (isCluster) {
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(running
+          ? { jobId: "job-cluster-1", kind: "keywords.cluster", trigger: "manual", status: "running", progress: null, pollAfterSeconds: 1, result: null, error: null }
+          : { jobId: "job-cluster-1", kind: "keywords.cluster", trigger: "manual", status: "completed", progress: null, pollAfterSeconds: null, result: clusterProposal, error: null }),
+      });
+    }
     return route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -311,7 +403,7 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
         : { jobId: "job-refresh-1", kind: "keywords.refresh_metrics", trigger: "manual", status: "completed", progress: { done: 2, total: 2, label: "Updating keyword stats" }, pollAfterSeconds: null, result: { updated: 12, requested: 15, skippedFresh: 3, failedBatches: 0, totalBatches: 2 }, error: null }),
     });
   });
-  return { context, page, researchRequests, serpRequests, savedListRequests, savedExportRequests, savedRemoveRequests, savedBulkTagRequests, savedRefreshRequests, savedTagRequests, locationRequests };
+  return { context, page, researchRequests, serpRequests, savedListRequests, savedExportRequests, savedRemoveRequests, savedBulkTagRequests, savedRefreshRequests, savedTagRequests, locationRequests, clusterRequests, clusterApplyRequests };
 }
 
 async function openResearch(options, url = "/portal/keywords") {
@@ -767,6 +859,52 @@ try {
     } finally { await phoneState.context.close(); }
 
     return "the tag-delete fallback, both empty states, and the 375px fixed bulk bar render";
+  });
+
+  await record("B23", "group into topics: gated bulk action, priced run, proposal edit, add-only apply", async () => {
+    const { context, page, clusterRequests, clusterApplyRequests } = await openSaved({ savedList: "cluster" });
+    try {
+      // Fewer than 10 selected: the action is disabled with its tooltip.
+      await page.getByRole("checkbox", { name: "Select cluster keyword 1", exact: true }).check();
+      await page.getByRole("checkbox", { name: "Select cluster keyword 2", exact: true }).check();
+      const bulkButton = page.getByRole("button", { name: "Group into topics" });
+      await bulkButton.waitFor();
+      assert.equal(await bulkButton.isDisabled(), true);
+      const tooltip = await bulkButton.evaluate((el) => el.closest("span")?.getAttribute("title"));
+      assert.equal(tooltip, "Select at least 10 keywords.");
+
+      // Twelve selected: the priced dialog runs the job and shows the proposal.
+      for (let i = 3; i <= 12; i += 1) {
+        await page.getByRole("checkbox", { name: `Select cluster keyword ${i}`, exact: true }).check();
+      }
+      assert.equal(await bulkButton.isDisabled(), false);
+      await bulkButton.click();
+      const costDialog = page.getByRole("dialog").filter({ hasText: "Nothing is tagged until you apply it" });
+      await costDialog.waitFor();
+      await costDialog.getByRole("button", { name: "Group keywords" }).click();
+      await page.getByText("Grouping 12 keywords into topics…").waitFor({ timeout: 15000 });
+      await until(() => clusterRequests.length === 1, "the cluster request did not arrive");
+      assert.equal(clusterRequests[0].maxUsd, 0.05);
+      assert.equal(clusterRequests[0].savedKeywordIds.length, 12);
+
+      // Proposal: rename one topic, uncheck one, apply the other two.
+      await page.getByLabel("Topic name").first().fill("Beach staples");
+      await page.getByText("5 keywords").click();
+      await page.getByText("cluster keyword 1").first().waitFor();
+      await page.getByRole("checkbox", { name: "Include Cluster topic three" }).uncheck();
+      await page.getByRole("button", { name: "Apply tags to 2 topics" }).click();
+      await page.getByText("Tagged 9 keywords in 2 topics").waitFor({ timeout: 15000 });
+      await until(() => clusterApplyRequests.length === 1, "the apply request did not arrive");
+      assert.deepEqual(
+        clusterApplyRequests[0].clusters.map((c) => c.name),
+        ["Beach staples", "Cluster topic two"],
+      );
+      assert.ok(
+        clusterApplyRequests[0].clusters.every((c) => Array.isArray(c.savedKeywordIds) && !("removeTagIds" in c)),
+        "apply sends added tags only",
+      );
+      return "the disabled tooltip, priced run, proposal edit, and add-only apply each behaved";
+    } finally { await context.close(); }
   });
 } finally {
   await browser.close();

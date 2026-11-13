@@ -60,13 +60,15 @@ export function SavedKeywordsBulkActionBar({
             ]}
           />
           {onGroupTopics ? (
-            <TableBulkActionButton
-              icon={<Sparkles />}
-              onClick={onGroupTopics}
-              disabled={selectedCount < 10}
-            >
-              Group into topics
-            </TableBulkActionButton>
+            <span title={selectedCount < 10 ? "Select at least 10 keywords." : undefined}>
+              <TableBulkActionButton
+                icon={<Sparkles />}
+                onClick={onGroupTopics}
+                disabled={selectedCount < 10}
+              >
+                Group into topics
+              </TableBulkActionButton>
+            </span>
           ) : null}
           <TableBulkActionButton
             icon={<Trash2 />}
