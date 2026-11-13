@@ -62,15 +62,7 @@ export function toErrorResponse(err: unknown): Response {
     const body: Record<string, unknown> = { error: err.message, code: err.code };
     if (err.recovery !== undefined) body.recovery = err.recovery;
     if (err.details !== undefined) body.details = err.details;
-    const headers: HeadersInit = { ...NO_STORE_HEADERS, "Content-Type": "application/json" };
-    const retryAfter =
-      err.details && typeof err.details === "object" && err.details !== null
-        ? (err.details as Record<string, unknown>).retryAfterSeconds
-        : undefined;
-    if (typeof retryAfter === "number" && Number.isFinite(retryAfter)) {
-      (headers as Record<string, string>)["Retry-After"] = String(Math.ceil(retryAfter));
-    }
-    return new Response(JSON.stringify(body), { status: err.status, headers });
+    return json(body, err.status);
   }
 
   if (

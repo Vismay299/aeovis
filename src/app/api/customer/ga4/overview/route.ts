@@ -28,6 +28,24 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
+function toGa4ErrorResponse(err: unknown): Response {
+  const res = toErrorResponse(err);
+  const retryAfter =
+    err instanceof AppError &&
+    err.details &&
+    typeof err.details === "object" &&
+    typeof (err.details as Record<string, unknown>).retryAfterSeconds === "number"
+      ? (err.details as Record<string, unknown>).retryAfterSeconds as number
+      : null;
+  if (res.status === 429 && typeof retryAfter === "number" && Number.isFinite(retryAfter)) {
+    const capped = Math.min(Math.max(Math.ceil(retryAfter), 0), 86400);
+    const headers = new Headers(res.headers);
+    headers.set("Retry-After", String(capped));
+    return new Response(res.body, { status: res.status, headers });
+  }
+  return res;
+}
+
 export async function GET(request: Request, _ctx?: unknown, deps?: Ga4OverviewRouteDeps): Promise<Response> {
   try {
     const url = new URL(request.url);
@@ -52,6 +70,6 @@ export async function GET(request: Request, _ctx?: unknown, deps?: Ga4OverviewRo
     });
     return json(result);
   } catch (err) {
-    return toErrorResponse(err);
+    return toGa4ErrorResponse(err);
   }
 }

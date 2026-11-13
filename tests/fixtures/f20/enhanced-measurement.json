@@ -1,0 +1,12 @@
+{
+  "streamEnabled": true,
+  "scrollsEnabled": true,
+  "outboundClicksEnabled": true,
+  "siteSearchEnabled": false,
+  "videoEngagementEnabled": true,
+  "fileDownloadsEnabled": true,
+  "pageChangesEnabled": true,
+  "formInteractionsEnabled": false,
+  "searchQueryParameter": "q",
+  "uriQueryParameter": ""
+}

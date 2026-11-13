@@ -1,0 +1,10 @@
+{
+  "dataStreams": [
+    {
+      "name": "properties/22/dataStreams/456",
+      "type": "WEB_DATA_STREAM",
+      "displayName": "Website",
+      "webStreamData": { "measurementId": "G-ABC123", "defaultUri": "https://example.com" }
+    }
+  ]
+}

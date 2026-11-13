@@ -1,0 +1,26 @@
+{
+  "metricHeaders": [
+    { "name": "sessions" },
+    { "name": "activeUsers" },
+    { "name": "engagedSessions" },
+    { "name": "engagementRate" },
+    { "name": "keyEvents" },
+    { "name": "transactions" },
+    { "name": "purchaseRevenue" }
+  ],
+  "rows": [
+    {
+      "dimensionValues": [],
+      "metricValues": [
+        { "value": "80" },
+        { "value": "70" },
+        { "value": "50" },
+        { "value": "0.625" },
+        { "value": "5" },
+        { "value": "2" },
+        { "value": "250" }
+      ]
+    }
+  ],
+  "rowCount": 1
+}

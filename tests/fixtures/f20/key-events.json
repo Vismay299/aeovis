@@ -1,0 +1,3 @@
+{
+  "keyEvents": [{ "eventName": "purchase", "countingMethod": "ONCE_PER_EVENT", "custom": false }]
+}

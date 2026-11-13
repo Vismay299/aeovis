@@ -1,0 +1,9 @@
+{
+  "error": {
+    "code": 429,
+    "message": "Quota exceeded for property.",
+    "details": [
+      { "reason": "RATE_LIMIT_EXCEEDED", "metadata": { "service": "analyticsdata.googleapis.com" } }
+    ]
+  }
+}

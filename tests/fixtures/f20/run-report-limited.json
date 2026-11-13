@@ -1,0 +1,30 @@
+{
+  "dimensionHeaders": [{ "name": "hostName" }, { "name": "landingPage" }],
+  "metricHeaders": [
+    { "name": "sessions" },
+    { "name": "activeUsers" },
+    { "name": "engagedSessions" },
+    { "name": "engagementRate" },
+    { "name": "keyEvents" },
+    { "name": "sessionKeyEventRate" },
+    { "name": "transactions" },
+    { "name": "purchaseRevenue" }
+  ],
+  "rows": [
+    {
+      "dimensionValues": [{ "value": "example.com" }, { "value": "/" }],
+      "metricValues": [
+        { "value": "5" },
+        { "value": "4" },
+        { "value": "3" },
+        { "value": "0.6" },
+        { "value": "0" },
+        { "value": "0" },
+        { "value": "0" },
+        { "value": "0" }
+      ]
+    }
+  ],
+  "rowCount": 1,
+  "metadata": { "subjectToThresholding": true }
+}
