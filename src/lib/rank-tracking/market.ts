@@ -4,6 +4,7 @@
 
 import { AppError } from "../http/appError.ts";
 import { isSupportedLocationCode, resolveMarket, workspaceMarket } from "../../shared/keyword-locations.ts";
+import { assertLocalResearchLocation } from "../keywords/localVolume.ts";
 
 export function normalizeTrackedDomain(input: string): string {
   let domain = input.trim().toLowerCase();
@@ -25,4 +26,13 @@ export function resolveTrackerMarket(
     throw new AppError(400, "invalid_location", "This country is not supported.");
   }
   return resolveMarket(body, workspaceMarket(brand));
+}
+
+export async function assertTrackedLocation(
+  locationCode: number,
+  locationName: string | null | undefined,
+  deps?: { fetchSerpLocationsForCountry?: (iso: string) => Promise<unknown> },
+): Promise<void> {
+  if (!locationName) return;
+  await assertLocalResearchLocation(locationCode, locationName, deps as any);
 }

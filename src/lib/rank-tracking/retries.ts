@@ -3,6 +3,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { RETRY_DROP_POSITIONS } from "../../shared/rank-tracking.ts";
+import { runQueuedRound } from "./checkPaths.ts";
 import type { Devices } from "../../shared/rank-tracking.ts";
 
 export type RankCheckDevice = "desktop" | "mobile";
@@ -90,3 +91,86 @@ export function unconfirmedMisses(pairs: RetryPair[]): Array<{ trackingKeywordId
     .filter((pair) => pair.position === null && pair.knownPosition !== null)
     .map(({ trackingKeywordId, device }) => ({ trackingKeywordId, device }));
 }
+
+export async function retryRankChecks(ctx: any, run: any, deps: { repo: any; client: any; fetchTaskResult?: any; logger?: any }): Promise<void> {
+  const repo = deps.repo;
+  const keywords = await repo.listKeywords(ctx.brandKey, run.config_id);
+  const byId = new Map(keywords.map((k: any) => [k.id, k]));
+  const frozen = (run.keyword_ids ?? []).map((id: string) => byId.get(id)).filter(Boolean);
+  const snaps = await repo.snapshotsForRun(ctx.brandKey, run.id);
+  const current = snaps.map((s: any) => ({ trackingKeywordId: s.tracking_keyword_id, device: s.device, position: s.position }));
+  const best = await repo.bestPositions(ctx.brandKey, run.config_id);
+  const previous = (best ?? []).map((b: any) => ({ trackingKeywordId: b.tracking_keyword_id, position: b.position }));
+  const hadPreviousCheck = new Set(previous.map((p: any) => p.trackingKeywordId));
+
+  const devices = run.devices;
+  for (let round = 1; round <= 2; round++) {
+    const pairsAll = buildRetryPairs({
+      keywords: frozen.map((k: any) => ({ trackingKeywordId: k.id, keyword: k.keyword })),
+      devices,
+      current,
+      previous,
+    });
+    const toRetry = pairsAll.filter((p) => needsRetry(p));
+    if (toRetry.length === 0) break;
+    // plan
+    await ctx.step.do("plan-" + round, { timeoutMs: 60000, retries: 3 } as any, async () => {
+      await repo.insertTasks(toRetry.map((p) => ({
+        brand_key: ctx.brandKey,
+        run_id: run.id,
+        round,
+        tracking_keyword_id: p.trackingKeywordId,
+        keyword: p.keyword,
+        device: p.device,
+        state: "planned",
+      })));
+      return { planned: toRetry.length };
+    });
+    // run queued round for retries
+    await runQueuedRound(ctx, run, round as any, deps as any, async (rows: any[]) => {
+      const pairs = buildRetryPairs({
+        keywords: frozen.map((k: any) => ({ trackingKeywordId: k.id, keyword: k.keyword })),
+        devices,
+        current,
+        previous,
+      });
+      const sel = selectRetryResults(pairs, rows.map((r: any) => ({ trackingKeywordId: r.keywordId, device: r.device, position: r.position })));
+      await repo.upsertSnapshots(sel.snapshotsToSave.map((s: any) => ({
+        brand_key: ctx.brandKey,
+        run_id: run.id,
+        tracking_keyword_id: s.trackingKeywordId,
+        keyword: s.keyword,
+        device: s.device,
+        position: s.position,
+        url: null,
+        serp_features: [],
+      })));
+    });
+    // save upserts handled in onCompleted
+    await ctx.step.do("save-" + round, { timeoutMs: 60000, retries: 3 } as any, async () => {
+      // re-derive and drop unconfirmed misses handled after loop
+    });
+  }
+
+  await ctx.step.do("drop-unconfirmed-misses", { timeoutMs: 60000, retries: 3 } as any, async () => {
+    const pairsAll = buildRetryPairs({
+      keywords: frozen.map((k: any) => ({ trackingKeywordId: k.id, keyword: k.keyword })),
+      devices,
+      current,
+      previous,
+    });
+    const misses = unconfirmedMisses(pairsAll);
+    for (const m of misses) {
+      // delete null-position snapshots for these
+      try {
+        await repo.deleteNotFoundSnapshots([{ keywordId: m.trackingKeywordId, device: m.device }]);
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  await repo.updateRun(ctx.brandKey, run.id, { phase: "rechecking" } as any);
+  ctx.progress?.(run.keywords_checked ?? 0, run.keywords_total ?? 0, "Re-checking results that look wrong");
+}
+
