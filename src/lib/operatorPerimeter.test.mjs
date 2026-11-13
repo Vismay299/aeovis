@@ -348,6 +348,19 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       // R1.2.23 — the scan_runs retention cron. Carries its own cronAuth gate,
       // exactly like the four above.
       "/api/scan-runs/retention",
+      "/api/customer/rank-tracking/configs",
+      "/api/customer/rank-tracking/configs/[configId]",
+      "/api/customer/rank-tracking/configs/[configId]/check",
+      "/api/customer/rank-tracking/configs/[configId]/keywords",
+      "/api/customer/rank-tracking/configs/[configId]/keywords/remove",
+      "/api/customer/rank-tracking/configs/[configId]/keywords/pin",
+      "/api/customer/rank-tracking/configs/[configId]/keywords/[keywordId]/history",
+      "/api/customer/rank-tracking/configs/[configId]/metrics/refresh",
+      "/api/customer/rank-tracking/configs/[configId]/runs/latest",
+      "/api/customer/rank-tracking/configs/[configId]/results",
+      "/api/customer/rank-tracking/configs/[configId]/trend",
+      "/api/customer/rank-tracking/configs/[configId]/matrix",
+      "/api/customer/rank-tracking/suggestions",
     ].sort(),
     "only cron workers and customer-authenticated routes may bypass the operator token gate"
   );

@@ -56,6 +56,10 @@ export const FEATURES = {
   // F06 phase 3: gates the server-side export route and the Scans "All answers"
   // export scope. Storage only; no paid provider calls.
   server_exports: { spend: [] as const },
+  // F15: rank tracking page, routes, sidebar item, scheduled checks.
+  rank_tracking: { spend: ["rank_tracking.check", "rank_tracking.suggestions", "rank_tracking.metrics"] as const },
+  // F15: "Track as AI question" action and the AI-visibility column.
+  rank_tracking_ai_questions: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

@@ -1,0 +1,18 @@
+{
+  "status_code": 20000,
+  "tasks": [
+    {
+      "status_code": 20000,
+      "cost": 0,
+      "result": [
+        {
+          "items": [
+            { "type": "ai_overview", "text": "x" },
+            { "type": "organic", "rank_group": 2, "rank_absolute": 2, "domain": "example.com", "url": "https://example.com/aio" },
+            { "type": "people_also_ask", "text": "x" }
+          ]
+        }
+      ]
+    }
+  ]
+}

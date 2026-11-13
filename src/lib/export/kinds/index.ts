@@ -1,6 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ZodType } from "zod";
 import { workspaceAnswersKind } from "./workspaceAnswers.ts";
+import {
+  siteAuditIssuesKind,
+  siteAuditPagesKind,
+  siteAuditPerformanceKind,
+} from "./siteAudit.ts";
 
 /**
  * One server-side export kind (F06 §6.2).
@@ -36,6 +41,9 @@ export type ExportKind<P> = {
  */
 export const EXPORT_KINDS: Record<string, ExportKind<unknown>> = {
   workspace_answers: workspaceAnswersKind as ExportKind<unknown>,
+  site_audit_issues: siteAuditIssuesKind as ExportKind<unknown>,
+  site_audit_pages: siteAuditPagesKind as ExportKind<unknown>,
+  site_audit_performance: siteAuditPerformanceKind as ExportKind<unknown>,
 };
 
 export function registerExportKind<P>(kind: ExportKind<P>): void {

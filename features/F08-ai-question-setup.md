@@ -953,15 +953,15 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 ### Phase 4 — Questions workspace UI (requires F04, F05, F06, F09 phase 3 and `fix/run-scan-unapproved-panel` merged)
 **Goal:** customers set up, curate and approve in `/portal/measurement`.
 
-- [ ] **P4.T1 Hooks and keys**
-  - [ ] **P4.T1.S1** *Files:* `src/lib/query/keys.ts` (+ test), `src/components/portal/questions/hooks/{useQuestions,useQuestionMutations,useSetupJob}.ts`, `src/lib/features/clientFeatures.ts` (three names). *Verify:* `node --test src/lib/query/keys.test.ts` → pass.
-- [ ] **P4.T2 Components**
-  - [ ] **P4.T2.S1** *Files:* setup components (§6.6). *Verify:* `npm run build` → exit 0.
-  - [ ] **P4.T2.S2** *Files:* editor components, `QuestionRow.tsx`, `history/QuestionHistoryLink.tsx`, `history/historyAvailability.ts`, `src/components/portal/questions/questionRow.test.ts` (render harness: link shown only when the constant is true). *Verify:* `node --test src/components/portal/questions/questionRow.test.ts` → pass (F08-AC-24).
-  - [ ] **P4.T2.S3** *Files:* research components. *Verify:* `npm run build` → exit 0.
-  - [ ] **P4.T2.S4** *Files:* `src/app/portal/measurement/page.jsx` (flagged swap), `src/components/portal/portalRegressions.test.mjs` (add `QuestionsWorkspace` as `autoStub`; new case: with `question_curation` true the panel card is replaced; with it false the existing "panel renders first and posts the same request" case passes unchanged). *Verify:* `node --test src/components/portal/portalRegressions.test.mjs src/components/portal/portalProgress.test.mjs` → pass.
-- [ ] **P4.T3 Browser**
-  - [ ] **P4.T3.S1** *Files:* `scripts/qa/check-f08-browser.mjs` (fixture APIs; no provider calls). Scenarios: B1 gate → cost dialog → progress labels from fixture job; B2 review: edit a competitor, deselect a topic, "Save and approve"; B3 unreadable site → overview field → retry quote without site lines; B4 editor: add 2 questions (one generated), edit wording → old archived with "Archived" tab entry, revive; B5 baseline dialog: cancel starts nothing, confirm calls `/api/customer/scan` with `maxUsd`, `collection_paused` warning visible; B6 near-duplicate "Keep both" with reason then approve; B7 revision conflict alert; B8 research: search, expand sources, add selected; B9 375 px no horizontal scroll and keyboard path through add dialog. *Verify:* `node scripts/qa/check-f08-browser.mjs` → "ok 9 scenarios" (F08-AC-15, 22, 23, 26).
+- [x] **P4.T1 Hooks and keys**
+  - [x] **P4.T1.S1** *Files:* `src/lib/query/keys.ts` (+ test), `src/components/portal/questions/hooks/{useQuestions,useQuestionMutations,useSetupJob}.ts`, `src/lib/features/clientFeatures.ts` (three names). *Verify:* `node --test src/lib/query/keys.test.ts` → pass.
+- [x] **P4.T2 Components**
+  - [x] **P4.T2.S1** *Files:* setup components (§6.6). *Verify:* `npm run build` → exit 0.
+  - [x] **P4.T2.S2** *Files:* editor components, `QuestionRow.tsx`, `history/QuestionHistoryLink.tsx`, `history/historyAvailability.ts`, `src/components/portal/questions/questionRow.test.ts` (render harness: link shown only when the constant is true). *Verify:* `node --test src/components/portal/questions/questionRow.test.ts` → pass (F08-AC-24).
+  - [x] **P4.T2.S3** *Files:* research components. *Verify:* `npm run build` → exit 0.
+  - [x] **P4.T2.S4** *Files:* `src/app/portal/measurement/page.jsx` (flagged swap), `src/components/portal/portalRegressions.test.mjs` (add `QuestionsWorkspace` as `autoStub`; new case: with `question_curation` true the panel card is replaced; with it false the existing "panel renders first and posts the same request" case passes unchanged). *Verify:* `node --test src/components/portal/portalRegressions.test.mjs src/components/portal/portalProgress.test.mjs` → pass.
+- [x] **P4.T3 Browser**
+  - [x] **P4.T3.S1** *Files:* `scripts/qa/check-f08-browser.mjs` (fixture APIs; no provider calls). Scenarios: B1 gate → cost dialog → progress labels from fixture job; B2 review: edit a competitor, deselect a topic, "Save and approve"; B3 unreadable site → overview field → retry quote without site lines; B4 editor: add 2 questions (one generated), edit wording → old archived with "Archived" tab entry, revive; B5 baseline dialog: cancel starts nothing, confirm calls `/api/customer/scan` with `maxUsd`, `collection_paused` warning visible; B6 near-duplicate "Keep both" with reason then approve; B7 revision conflict alert; B8 research: search, expand sources, add selected; B9 375 px no horizontal scroll and keyboard path through add dialog. *Verify:* `node scripts/qa/check-f08-browser.mjs` → "ok 9 scenarios" (F08-AC-15, 22, 23, 26).
 
 **Checkpoint:** build, suite, browser script. ACs 15, 22–24, 26.
 

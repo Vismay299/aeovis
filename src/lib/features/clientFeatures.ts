@@ -39,6 +39,11 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "site_audit_crawler_access",
   "server_exports",
   "usage_page",
+  "rank_tracking",
+  "rank_tracking_ai_questions",
+  "question_curation",
+  "question_setup",
+  "prompt_research",
 ];
 
 export type ClientFeatureName = FeatureName;
