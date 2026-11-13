@@ -17,6 +17,9 @@ export const keys = {
   jobStatus: (brandKey: string, jobId: string) =>
     ["jobStatus", brandKey, jobId] as const,
   scanReport: (scanId: string) => ["scanReport", scanId] as const,
+  // F06 phase 5 — server-side Scans history. Workspace-scoped like every list.
+  scanHistory: (brandKey: string, inputKey: string) =>
+    ["scanHistory", brandKey, inputKey] as const,
   // F03
   usage: (brandKey: string, range: string, tz: string) =>
     ["usage", brandKey, range, tz] as const,
@@ -177,6 +180,7 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "ga4Opportunities",
   "siteAudits",
   "siteAuditCapabilities",
+  "scanHistory",
 ]);
 
 export function isWorkspaceKey(

@@ -1808,3 +1808,13 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - **Applied-check:** `select to_regclass('public.export_requests');` returns `export_requests`; `select public, file_size_limit from storage.buckets where id = 'exports';` returns one row with `f` and `26214400`; `select count(*) from pg_constraint where conname like 'export_requests%';` returns 5.
 - **Rollback:** leaving 065 in place after reverting the phase-3 code is harmless (unused table and empty bucket). Objects are removed within two hours by `exports.retention` once the job runs; otherwise delete the bucket contents through the dashboard.
 - **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f06-db.mjs`. Never run that harness against production.
+
+## `066_f06_scan_history_columns.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply before deploying F06 phase 5.
+- **Additive only.** Adds derived columns to `scans` (`engines` text[], `collection_partial` boolean, `started_by` text with check constraint `scans_started_by_ck`, and the stored generated `listed_at` = coalesce(scanned_at, created_at)), the trigger `scans_derive_history_columns` (before insert or update of `raw_results`, `platform`, `origin_job_id`), the functions `scan_engines` and `scan_collection_partial`, and three indexes. Existing rows are backfilled in batches; `raw_results` is never rewritten.
+- **Caveat:** adding the stored generated column rewrites the `scans` table; schedule the apply in a maintenance window for large workspaces.
+- **Pre-check:** `select to_regclass('public.scans_derive_history_columns'::regproc);` returns null (or `select column_name from information_schema.columns where table_name='scans' and column_name='listed_at';` returns no row).
+- **Applied-check:** `select to_regclass('public.scans_derive_history_columns'::regproc);` returns a row; `select count(*) from public.scans where listed_at is null;` returns 0.
+- **Rollback:** leaving 066 in place after reverting the phase-5 code is harmless (unused derived columns). The trigger keeps the columns populated for any future use.
+- **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f06-db.mjs`. Never run that harness against production.
