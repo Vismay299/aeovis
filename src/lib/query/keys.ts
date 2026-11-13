@@ -57,6 +57,9 @@ export const keys = {
   localGrids: (brandKey: string) => ["localGrids", brandKey] as const,
   localCategories: (query?: string) =>
     ["localCategories", query ?? ""] as const,
+  // F17 phase 4 — local result searches are workspace-scoped, keyed by input.
+  localSerp: (brandKey: string, inputKey: string) =>
+    ["localSerp", brandKey, inputKey] as const,
   // F13 — all keyword data is scoped to its workspace.
   keywordResearch: (brandKey: string, inputKey: string) =>
     ["keywordResearch", brandKey, inputKey] as const,
@@ -122,6 +125,7 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "localFetches",
   "localGrid",
   "localGrids",
+  "localSerp",
   "keywordResearch",
   "keywordSerp",
   "savedKeywords",
