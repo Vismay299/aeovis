@@ -492,7 +492,7 @@ export async function estimateClustering(
     };
   }
 
-  const model = getLlmModel(ctx.env);
+  const model = ctx.env.LLM_HELPER_MODEL ?? getLlmModel(ctx.env as unknown as NodeJS.ProcessEnv);
   const chars = estimateClusterPromptChars(rows.map((r) => ({ keyword: r.keyword })));
   const cost = estimateLlmUsd(model, chars + 4000, 8000, ctx.env);
 
