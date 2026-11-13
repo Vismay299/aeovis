@@ -1,0 +1,119 @@
+{
+  "audit": {
+    "id": "7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e",
+    "startUrl": "https://offcult.in/",
+    "status": "completed",
+    "pagesCrawled": 48,
+    "pagesSeen": 61,
+    "maxPages": 50,
+    "crawlCompleted": false,
+    "lighthouse": false,
+    "renderJavaScript": false,
+    "sitePlatform": null,
+    "createdAt": "2026-11-12T09:00:00.000Z",
+    "completedAt": "2026-11-12T09:01:12.000Z"
+  },
+  "stats": {
+    "averageResponseMs": 412,
+    "pagesBlocked": 0,
+    "pagesRateLimited": 0,
+    "pagesAbandoned": 0,
+    "pagesUnread": 0,
+    "lighthouse": {
+      "tests": 0,
+      "failed": 0,
+      "avgPerformance": null,
+      "avgSeo": null,
+      "avgAccessibility": null
+    }
+  },
+  "issueGroups": [
+    {
+      "issueType": "missing-title",
+      "severity": "critical",
+      "category": "content",
+      "scope": "page",
+      "pages": 3,
+      "rows": 3
+    },
+    {
+      "issueType": "broken-page",
+      "severity": "warning",
+      "category": "links",
+      "scope": "page",
+      "pages": 2,
+      "rows": 2
+    },
+    {
+      "issueType": "duplicate-title",
+      "severity": "warning",
+      "category": "content",
+      "scope": "page",
+      "pages": 1,
+      "rows": 1
+    },
+    {
+      "issueType": "title-too-long",
+      "severity": "info",
+      "category": "content",
+      "scope": "page",
+      "pages": 1,
+      "rows": 1
+    }
+  ],
+  "aiAccess": {
+    "robotsStatus": "found",
+    "rows": [
+      {
+        "name": "OAI-SearchBot",
+        "operator": "OpenAI",
+        "platform": "ChatGPT Search",
+        "purpose": "search",
+        "status": "blocked",
+        "matchedGroup": "*",
+        "reason": "The wildcard (*) group disallows / (Disallow: /)."
+      },
+      {
+        "name": "GPTBot",
+        "operator": "OpenAI",
+        "platform": "ChatGPT",
+        "purpose": "training",
+        "status": "blocked",
+        "matchedGroup": "GPTBot",
+        "reason": "A GPTBot group disallows / (Disallow: /)."
+      },
+      {
+        "name": "ChatGPT-User",
+        "operator": "OpenAI",
+        "platform": "ChatGPT",
+        "purpose": "agent",
+        "status": "open",
+        "matchedGroup": null,
+        "reason": null
+      },
+      {
+        "name": "PerplexityBot",
+        "operator": "Perplexity",
+        "platform": "Perplexity",
+        "purpose": "search",
+        "status": "open",
+        "matchedGroup": null,
+        "reason": null
+      }
+    ]
+  },
+  "llmsTxt": {
+    "status": "missing",
+    "httpStatus": 404,
+    "contentType": null,
+    "firstLine": null
+  },
+  "flags": {
+    "siteBlocked": false,
+    "crawlStopped": false,
+    "hasShells": false,
+    "unreadRendered": false,
+    "linkGraphComplete": true,
+    "discoveryTruncated": false
+  }
+}

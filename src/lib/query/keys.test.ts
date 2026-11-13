@@ -78,6 +78,8 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.ga4Report("acme", "landing_pages", "hash"),
     keys.ga4Health("acme"),
     keys.ga4Opportunities("acme", "last_28_days"),
+    keys.siteAudits("acme"),
+    keys.siteAuditCapabilities("acme"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
@@ -202,4 +204,41 @@ test("stableStringify gives the same string whatever the key insertion order", (
     stableStringify({ a: 1, b: { c: 1, d: 2 } }),
     stableStringify({ b: { d: 2, c: 1 }, a: 1 }),
   );
+});
+
+test("F18 site-audit keys: workspace list is scoped, audit reads are id-addressed", () => {
+  assert.deepEqual(keys.siteAudits("a"), ["siteAudits", "a"]);
+  assert.deepEqual(keys.siteAuditCapabilities("a"), [
+    "siteAuditCapabilities",
+    "a",
+  ]);
+  assert.deepEqual(keys.siteAudit("u1"), ["siteAudit", "u1"]);
+  assert.deepEqual(keys.siteAuditFeed("u1"), ["siteAuditFeed", "u1"]);
+  assert.deepEqual(keys.siteAuditSummary("u1"), ["siteAuditSummary", "u1"]);
+  assert.deepEqual(keys.siteAuditIssues("u1", "missing-h1", 100), [
+    "siteAuditIssues",
+    "u1",
+    "missing-h1",
+    100,
+  ]);
+  assert.deepEqual(keys.siteAuditPages("u1", '{"q":""}'), [
+    "siteAuditPages",
+    "u1",
+    '{"q":""}',
+  ]);
+  assert.deepEqual(keys.siteAuditPerformance("u1"), [
+    "siteAuditPerformance",
+    "u1",
+  ]);
+  assert.deepEqual(keys.siteAuditLighthouse("r1"), [
+    "siteAuditLighthouse",
+    "r1",
+  ]);
+  assert.deepEqual(keys.siteAuditCompare("a", "b"), [
+    "siteAuditCompare",
+    "a",
+    "b",
+  ]);
+  assert.equal(isWorkspaceKey(keys.siteAudit("u1"), "u1"), false);
+  assert.equal(isWorkspaceKey(keys.siteAuditIssues("u1", "t", 0), "u1"), false);
 });
