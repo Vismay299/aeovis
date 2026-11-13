@@ -94,6 +94,101 @@ async function customerApiFixture(url) {
   if (pathname === "/api/customer/scan") {
     return brandFixture("scans", brand, { scans: [], jobs: [] });
   }
+  if (pathname === "/api/customer/scans/history") {
+    const fixture = (await readFixture("scans-acme-history.json")) ?? { scans: [], jobs: [] };
+    const source = Array.isArray(fixture?.scans) ? fixture.scans : [];
+    const page = Math.max(1, Number(url.searchParams.get("page") || 1));
+    const size = Math.max(1, Number(url.searchParams.get("size") || 50));
+    const sort = url.searchParams.get("sort") || "date";
+    const order = url.searchParams.get("order") || "desc";
+    const startedBy = url.searchParams.get("startedBy") || "";
+    const engines = (url.searchParams.get("engines") || "").split(",").map((value) => value.trim()).filter(Boolean);
+    const collection = (url.searchParams.get("collection") || "").split(",").map((value) => value.trim()).filter(Boolean);
+    const visMinRaw = url.searchParams.get("visMin");
+    const visMaxRaw = url.searchParams.get("visMax");
+    const visMin = visMinRaw === null ? null : Number(visMinRaw);
+    const visMax = visMaxRaw === null ? null : Number(visMaxRaw);
+    const from = url.searchParams.get("from");
+    const to = url.searchParams.get("to");
+    const tz = url.searchParams.get("tz") || "UTC";
+
+    const listedAt = (scan) => scan.listed_at || scan.scanned_at || scan.created_at;
+    const toUtc = (dateString, endOfDay) => {
+      // Approximate UTC bound for the harness; the route test covers exact tz math.
+      const base = new Date(`${dateString}T00:00:00.000Z`).getTime();
+      return endOfDay ? base + 24 * 60 * 60 * 1000 : base;
+    };
+
+    let filtered = source.filter((scan) => {
+      if (startedBy && (scan.started_by || "manual") !== startedBy) return false;
+      if (engines.length) {
+        const scanEngines = Array.isArray(scan.engines) ? scan.engines : (Array.isArray(scan.platform) ? scan.platform : (scan.platform ? [scan.platform] : []));
+        if (!engines.some((engine) => scanEngines.includes(engine))) return false;
+      }
+      if (collection.length) {
+        const isPending = scan.visibility_pct == null;
+        const isPartial = scan.collection_partial === true;
+        const isComplete = scan.visibility_pct != null && !isPartial;
+        const matches = collection.some((entry) =>
+          entry === "pending" ? isPending : entry === "partial" ? isPartial : entry === "complete" ? isComplete : false,
+        );
+        if (!matches) return false;
+      }
+      if (visMin != null && Number.isFinite(visMin)) {
+        if (scan.visibility_pct == null || Number(scan.visibility_pct) < visMin) return false;
+      }
+      if (visMax != null && Number.isFinite(visMax)) {
+        if (scan.visibility_pct == null || Number(scan.visibility_pct) > visMax) return false;
+      }
+      if (from) {
+        if (new Date(listedAt(scan)).getTime() < toUtc(from, false)) return false;
+      }
+      if (to) {
+        if (new Date(listedAt(scan)).getTime() >= toUtc(to, true)) return false;
+      }
+      return true;
+    });
+
+    const compare = (a, b) => {
+      if (a === b) return 0;
+      if (a == null) return 1;
+      if (b == null) return -1;
+      return a < b ? -1 : 1;
+    };
+    const sortKey = (scan) => (sort === "visibility" ? finiteOrNull(scan.visibility_pct) : new Date(listedAt(scan)).getTime());
+    // finiteOrNull not imported here; inline:
+    const fin = (value) => {
+      if (value === null || value === undefined || value === "") return null;
+      const number = Number(value);
+      return Number.isFinite(number) ? number : null;
+    };
+    filtered = filtered.sort((a, b) => {
+      const left = sort === "visibility" ? fin(a.visibility_pct) : new Date(listedAt(a)).getTime();
+      const right = sort === "visibility" ? fin(b.visibility_pct) : new Date(listedAt(b)).getTime();
+      const result = compare(left, right);
+      if (result === 0) return compare(a.id, b.id);
+      if (left == null) return 1;
+      if (right == null) return -1;
+      return order === "asc" ? result : -result;
+    });
+
+    const totalCount = filtered.length;
+    const start = (page - 1) * size;
+    const pageRows = filtered.slice(start, start + size).map((scan) => ({
+      ...scan,
+      platform: Array.isArray(scan.engines) && scan.engines.length ? scan.engines : (Array.isArray(scan.platform) ? scan.platform : (scan.platform ? [scan.platform] : [])),
+      collection_partial: scan.collection_partial === true,
+      started_by: scan.started_by === "scheduled" ? "scheduled" : "manual",
+    }));
+
+    return {
+      brand_key: brand,
+      scans: pageRows,
+      totalCount,
+      page,
+      size,
+    };
+  }
   if (pathname.startsWith("/api/customer/scan/report/")) {
     const id = pathname.split("/").pop();
     return (await readFixture(`report-${id}.json`)) ?? (await readFixture("report-scan-1.json")) ?? {};
