@@ -7,7 +7,7 @@
 // F18 phase 4 — the Pages tab: a server-filtered, server-sorted table with row
 // selection, the registered page actions and export.
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { z } from "zod";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
@@ -411,12 +411,14 @@ export function PagesTable({
         (() => {
           const Dialog = actionDialog.action.Dialog;
           return (
-            <Dialog
-              brandKey={brandKey}
-              auditId={auditId}
-              pages={actionDialog.pages}
-              onClose={() => setActionDialog(null)}
-            />
+            <Suspense fallback={null}>
+              <Dialog
+                brandKey={brandKey}
+                auditId={auditId}
+                pages={actionDialog.pages}
+                onClose={() => setActionDialog(null)}
+              />
+            </Suspense>
           );
         })()
       ) : null}

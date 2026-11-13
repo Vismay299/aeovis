@@ -4,8 +4,9 @@
 
 // F18 phase 4 — the client exports for the visible results tables.
 //
-// Server-side export kinds (the "all rows" scope) are deferred with F06 phase
-// 3, so every export here covers the rows the screen has loaded.
+// Server-side export kinds (site_audit_issues, site_audit_pages,
+// site_audit_performance) are registered in src/lib/export/kinds/index.ts for
+// full-list exports; the menus here cover the rows the screen has loaded.
 
 import type { CsvValue } from "@/lib/export/csv";
 import { getIssueDescriptor } from "@/shared/audit-issues";
