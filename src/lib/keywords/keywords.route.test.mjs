@@ -276,6 +276,34 @@ test("keywords routes", async (t) => {
     assert.equal(body.code, "research_invalid");
   });
 
+  await t.test("unknown area -> 409 unknown_location before any paid call (F13-AC-20)", async () => {
+    const req = new Request("http://localhost/api/customer/keywords/research", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ keyword: "plumber", locationCode: 2840, locationName: "Atlantis,Texas,United States", maxUsd: 0.2 }),
+    });
+    let paidCalls = 0;
+    const checked = [];
+    const res = await researchPost(req, null, {
+      requireWorkspace: async () => makeWorkspace(),
+      isFeatureEnabled: async () => true,
+      requireApprovedPrice: async () => ({ approvedMaxUsd: 0.2 }),
+      assertLocalLocation: async (code, name) => {
+        checked.push([code, name]);
+        throw new AppError(409, "unknown_location", `"Atlantis, Texas, United States" is not a city, county, or region we can find in United States.`);
+      },
+      labs: { keywords: { suggestions: async () => { paidCalls++; return []; }, ideas: async () => { paidCalls++; return []; } } },
+      ads: { adsSearchVolume: async () => { paidCalls++; return []; } },
+      upsertMetrics: async () => {},
+      cacheDeps: { store: createMemoryCacheStore() },
+    });
+
+    assert.equal(res.status, 409);
+    assert.equal((await res.json()).code, "unknown_location");
+    assert.deepEqual(checked, [[2840, "Atlantis,Texas,United States"]]);
+    assert.equal(paidCalls, 0);
+  });
+
   await t.test("spend refusal passes through", async () => {
     const req = new Request("http://localhost/api/customer/keywords/research", {
       method: "POST",

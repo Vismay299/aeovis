@@ -235,7 +235,8 @@ export function createSavedKeywordsRepository(
           p_filters: i.filters ?? {},
           p_sort: i.sort ?? "fetchedAt",
           p_order: i.order ?? "desc",
-          p_limit: 5001,
+          // Migration 102 caps list_saved_keywords at 5000 rows (1..5000).
+          p_limit: 5000,
           p_offset: 0,
         });
         if (error) throw error;
@@ -243,10 +244,10 @@ export function createSavedKeywordsRepository(
           rows: SavedKeywordRow[];
           totalCount: number;
         };
-        const allRows = typed.rows ?? [];
-        const truncated = allRows.length > 5000 || typed.totalCount > 5000;
+        // Truncation comes from the filtered total, not from a 5001st row.
+        const truncated = (typed.totalCount ?? 0) > 5000;
         return {
-          rows: allRows.slice(0, 5000),
+          rows: typed.rows ?? [],
           totalCount: typed.totalCount ?? 0,
           truncated,
         };
