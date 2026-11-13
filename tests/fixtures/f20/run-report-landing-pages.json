@@ -1,0 +1,34 @@
+{
+  "dimensionHeaders": [{ "name": "hostName" }, { "name": "landingPage" }],
+  "metricHeaders": [
+    { "name": "sessions" },
+    { "name": "activeUsers" },
+    { "name": "engagedSessions" },
+    { "name": "engagementRate" },
+    { "name": "keyEvents" },
+    { "name": "sessionKeyEventRate" },
+    { "name": "transactions" },
+    { "name": "purchaseRevenue" }
+  ],
+  "rows": [
+    {
+      "dimensionValues": [{ "value": "example.com" }, { "value": "/guides/seo" }],
+      "metricValues": [
+        { "value": "20" },
+        { "value": "18" },
+        { "value": "14" },
+        { "value": "0.7" },
+        { "value": "3" },
+        { "value": "0.15" },
+        { "value": "1" },
+        { "value": "99.5" }
+      ]
+    }
+  ],
+  "rowCount": 3,
+  "metadata": {
+    "subjectToThresholding": true,
+    "samplingMetadatas": [{ "samplesReadCount": "1000", "samplingSpaceSize": "10000" }]
+  },
+  "propertyQuota": { "tokensPerDay": { "consumed": 10, "remaining": 90 } }
+}

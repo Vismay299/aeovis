@@ -627,6 +627,21 @@ SOFTWARE.
 - `src/app/portal/audit/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
 - `src/app/portal/audit/[auditId]/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
 
+### F20 Phase 3 ports
+- `src/lib/ga4/dates.ts` (from `openseo:src/server/features/ga4/services/Ga4Dates.ts`)
+- `src/lib/ga4/reportDefinitions.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportDefinitions.ts`)
+- `src/lib/ga4/normalization.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportNormalization.ts`)
+- `src/lib/ga4/enhancements.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportEnhancements.ts`)
+- `src/lib/ga4/reporting.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportingService.ts`)
+- `src/lib/ga4/overview.ts` (from `openseo:src/server/features/ga4/services/Ga4OrganicOverviewService.ts`)
+- `src/lib/ga4/measurementHealth.ts` (from `openseo:src/server/features/ga4/services/Ga4MeasurementHealthService.ts`)
+- `src/lib/ga4/reportDefinitions.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportDefinitions.ts`)
+- `src/lib/ga4/normalization.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportNormalization.ts`)
+- `src/lib/ga4/enhancements.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportEnhancements.test.ts`)
+- `src/lib/ga4/reporting.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportingService.test.ts`)
+- `src/lib/ga4/overview.test.ts` (from `openseo:src/server/features/ga4/services/Ga4OrganicOverviewService.test.ts`)
+- `src/lib/ga4/measurementHealth.test.ts` (from `openseo:src/server/features/ga4/services/Ga4MeasurementHealthService.test.ts`)
+
 ### F13 Phase 6 ports
 - `src/lib/keywords/clustering.ts` (ideas only from `openseo:.agents/skills/keyword-clustering/SKILL.md`)
 - `src/app/api/customer/keywords/cluster/route.ts` (from `openseo:src/serverFunctions/keywords.ts`)

@@ -1,0 +1,75 @@
+import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
+import { AppError } from "../../../../../lib/http/appError.ts";
+import { toErrorResponse } from "../../../../../lib/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { getOrganicOverview } from "../../../../../lib/ga4/overview.ts";
+import { z } from "zod";
+
+export const dynamic = "force-dynamic";
+export const maxDuration = 60;
+
+const overviewQuery = z.strictObject({
+  brand_key: z.string().optional(),
+  range: z.enum(["last_7_days", "last_28_days", "last_90_days"]).optional(),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  trend: z.enum(["daily", "weekly"]).optional(),
+});
+
+export type Ga4OverviewRouteDeps = RequireWorkspaceDeps & {
+  isFeatureEnabled?: typeof isFeatureEnabled;
+  getOrganicOverview?: typeof getOrganicOverview;
+};
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+  });
+}
+
+function toGa4ErrorResponse(err: unknown): Response {
+  const res = toErrorResponse(err);
+  const retryAfter =
+    err instanceof AppError &&
+    err.details &&
+    typeof err.details === "object" &&
+    typeof (err.details as Record<string, unknown>).retryAfterSeconds === "number"
+      ? (err.details as Record<string, unknown>).retryAfterSeconds as number
+      : null;
+  if (res.status === 429 && typeof retryAfter === "number" && Number.isFinite(retryAfter)) {
+    const capped = Math.min(Math.max(Math.ceil(retryAfter), 0), 86400);
+    const headers = new Headers(res.headers);
+    headers.set("Retry-After", String(capped));
+    return new Response(res.body, { status: res.status, headers });
+  }
+  return res;
+}
+
+export async function GET(request: Request, _ctx?: unknown, deps?: Ga4OverviewRouteDeps): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const raw: Record<string, string> = {};
+    for (const [k, v] of url.searchParams.entries()) raw[k] = v;
+    const parsed = overviewQuery.safeParse(raw);
+    if (!parsed.success) {
+      throw new AppError(400, "invalid_request", "Invalid query parameters.");
+    }
+    const q = parsed.data;
+    const workspace = await requireWorkspace(request, { brandKey: q.brand_key }, deps);
+    const featureCheck = deps?.isFeatureEnabled ?? isFeatureEnabled;
+    if (!(await featureCheck("ga4", workspace.brandKey))) {
+      throw new AppError(404, "feature_unavailable", "This page is not available for your workspace yet.");
+    }
+    const fn = deps?.getOrganicOverview ?? getOrganicOverview;
+    const result = await fn(workspace.admin, { brandKey: workspace.brandKey, user: workspace.user, role: workspace.role }, {
+      range: q.range,
+      startDate: q.startDate,
+      endDate: q.endDate,
+      trend: q.trend,
+    });
+    return json(result);
+  } catch (err) {
+    return toGa4ErrorResponse(err);
+  }
+}

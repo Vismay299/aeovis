@@ -285,6 +285,10 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     "/api/customer/ga4/connect",
     "/api/customer/ga4/properties",
     "/api/customer/ga4/property",
+    // F20 phase 3 — reports.
+    "/api/customer/ga4/health",
+    "/api/customer/ga4/overview",
+    "/api/customer/ga4/reports/[kind]",
     "/api/customer/gsc",
       "/api/customer/gsc/callback",
       "/api/customer/gsc/connect",
