@@ -15,6 +15,13 @@ import { AuditPhaseError } from "./errors.ts";
 import { AUDIT_ROBOTS_TOKEN } from "../../shared/audit.ts";
 import type { AuditRow, AuditStore } from "./store.ts";
 import type { DetectedIssue } from "./issues/pageReporters.ts";
+import { selectLighthouseSample, failedLighthouseFetch, fetchLighthouseResult as fetchAuditLighthouse, fetchPaidLighthouseData } from "./lighthouse.ts";
+import { DB_STEP } from "../jobs/stepConfigs.ts";
+import { jobStepKey } from "../jobs/runner.ts";
+import { metered as defaultMetered, type SpendDeps } from "../spend/index.ts";
+
+// F03 price: DataForSEO OnPage Lighthouse live = USD 0.005 per call (fixtures bill $0.00425).
+const LIGHTHOUSE_LIVE_USD = 0.005;
 
 export interface PhaseDeps {
   safeFetch?: any;
@@ -232,18 +239,220 @@ export async function runSiteChecks(
   return { siteIssues: issues.length };
 }
 
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+export type LighthousePhaseDeps = PhaseDeps & {
+  fetchLighthouse?: (page: { id: string; url: string }, strategy: "mobile" | "desktop") => Promise<{ result: any; payloadJson: string | null }>;
+  uploadPayload?: (path: string, payloadJson: string) => Promise<void>;
+  metered?: typeof defaultMetered;
+  spendDeps?: SpendDeps;
+};
+
+export const LIGHTHOUSE_WAVE_STEP = { timeoutMs: 140_000, retries: 0, billed: true } as const;
+
 /**
- * Runs the Lighthouse phase if requested (Phase 5 will populate full logic).
+ * Runs the Lighthouse phase if requested.
  */
-export async function runLighthousePhase(
-  audit: AuditRow,
-  _store: AuditStore,
-  _jobId: string,
-): Promise<{ pages: Array<{ id: string; url: string }> }> {
-  if (!audit.run_lighthouse) {
+export async function runLighthousePhase(...args: any[]): Promise<any> {
+  let ctx: any = args[0];
+  let params: any = args[1];
+  if (!ctx || typeof ctx.step?.do !== "function") {
+    const jobId = (params && (params.jobId ?? params?.audit?.id)) ?? "job";
+    ctx = {
+      jobId,
+      brandKey: params?.audit?.brand_key ?? "test",
+      step: { do: async (_n: string, _o: any, fn: any) => fn(), sleep: async () => {} },
+    };
+  }
+  const audit: any = params?.audit ?? params;
+  const store: any = params?.store ?? params?.auditStore;
+  const admin = params?.admin;
+  const deps: LighthousePhaseDeps = params?.deps ?? {};
+  const jobId = params?.jobId ?? ctx.jobId;
+  const brandKey: string = ctx.brandKey ?? audit?.brand_key ?? "test";
+  const metered = deps.metered ?? defaultMetered;
+
+  if (!audit || !store || !audit.run_lighthouse) {
     return { pages: [] };
   }
-  return { pages: [] };
+
+  const selectResult = await ctx.step.do("lighthouse-select", DB_STEP, async () => {
+    const candidates = await store.lighthouseCandidates(audit.id);
+    const sampleUrls = selectLighthouseSample(
+      candidates.map((c: any) => ({ url: c.url, statusCode: c.statusCode, fetchClass: c.fetchClass })),
+      audit.start_url,
+      "auto",
+    );
+    const samplePages = candidates.filter((c: any) => sampleUrls.includes(c.url)) as any[];
+    await store.updateAudit(audit.id, jobId, {
+      current_phase: "lighthouse",
+      lighthouse_total: 2 * samplePages.length,
+      lighthouse_completed: 0,
+      lighthouse_failed: 0,
+    });
+    return { pages: samplePages.map((p: any) => ({ id: p.id, url: p.url })) };
+  });
+
+  const samplePages: Array<{ id: string; url: string }> = selectResult.pages;
+  const idToUrl = new Map(samplePages.map((p) => [p.id, p.url]));
+  void idToUrl;
+  const fullPages = (await store.lighthouseCandidates(audit.id)).filter((c: any) =>
+    samplePages.some((p) => p.id === c.id),
+  ) as any[];
+
+  let completed = 0;
+  let failed = 0;
+  const waves = chunkArray(fullPages, 5);
+
+  const uploadFn: (path: string, payloadJson: string) => Promise<void> =
+    deps.uploadPayload ??
+    (async (path: string, payloadJson: string) => {
+      if (!admin?.storage) return;
+      const { error } = await admin.storage.from("site-audit-lighthouse").upload(path, payloadJson, {
+        contentType: "application/json",
+        upsert: true,
+      });
+      if (error) throw error;
+    });
+
+  const fetchFn =
+    deps.fetchLighthouse ??
+    (async (page: { id: string; url: string }, strategy: "mobile" | "desktop") =>
+      fetchAuditLighthouse(page.url, page.id, strategy));
+
+  for (let w = 0; w < waves.length; w++) {
+    const wavePages = waves[w] as any[];
+    const stepName = `lighthouse-wave-${w + 1}`;
+    const calls = wavePages.length * 2;
+    const approved = Number(audit.lighthouse_approved_usd ?? 0);
+
+    const waveResult = await ctx.step.do(stepName, { ...LIGHTHOUSE_WAVE_STEP }, async () => {
+      const spent = (completed + failed) * LIGHTHOUSE_LIVE_USD;
+      if (spent + calls * LIGHTHOUSE_LIVE_USD > approved + 0.000001) {
+        return {
+          skipped: true,
+          results: wavePages.flatMap((page) =>
+            (["mobile", "desktop"] as const).map((strategy) => ({
+              ...failedLighthouseFetch(page.url, page.id, strategy, "Lighthouse budget reached").result,
+            })),
+          ),
+        };
+      }
+      const settled = await Promise.all(
+        wavePages.flatMap((page) =>
+          (["mobile", "desktop"] as const).map(async (strategy) => {
+            const idempotencyKey = `${jobStepKey(ctx, stepName)}:${page.id}:${strategy}`;
+            try {
+              const fetched = await metered(
+                {
+                  brandKey,
+                  feature: "site_audit.lighthouse",
+                  estimateUsd: LIGHTHOUSE_LIVE_USD,
+                  maxUsd: approved,
+                  idempotencyKey,
+                  jobId: ctx.jobId,
+                },
+                async () => {
+                  if (deps.fetchLighthouse) {
+                    const fr = await deps.fetchLighthouse(page, strategy);
+                    return {
+                      value: { result: fr.result, payloadJson: fr.payloadJson, data: undefined as any },
+                      actualUsd: LIGHTHOUSE_LIVE_USD,
+                      provider: "dataforseo",
+                      endpoint: "/v3/on_page/lighthouse/live/json",
+                      billed: true as const,
+                    };
+                  }
+                  const paid = await fetchPaidLighthouseData({ url: page.url, strategy });
+                  return {
+                    value: { result: null as any, payloadJson: JSON.stringify(paid.data), data: paid.data as any },
+                    actualUsd: paid.actualUsd ?? LIGHTHOUSE_LIVE_USD,
+                    provider: "dataforseo",
+                    endpoint: paid.endpoint,
+                    billed: true as const,
+                  };
+                },
+                deps.spendDeps,
+              );
+              const inner = fetched as unknown as { result: any; payloadJson: string | null; data?: any };
+              const payloadJson = inner.payloadJson ?? JSON.stringify(inner.data ?? {});
+              let row: any;
+              if (inner.data) {
+                const scores = (inner.data as { scores?: Record<string, number | null> }).scores ?? {};
+                const metrics = (inner.data as { metrics?: Record<string, { numericValue?: number | null }> }).metrics ?? {};
+                const num = (key: string): number | null => {
+                  const v = metrics[key]?.numericValue;
+                  return typeof v === "number" ? v : null;
+                };
+                row = {
+                  url: page.url,
+                  pageId: page.id,
+                  strategy,
+                  performanceScore: scores.performance ?? null,
+                  accessibilityScore: scores.accessibility ?? null,
+                  bestPracticesScore: scores["best-practices"] ?? null,
+                  seoScore: scores.seo ?? null,
+                  lcpMs: num("largestContentfulPaint"),
+                  cls: num("cumulativeLayoutShift"),
+                  inpMs: num("interactionToNextPaint"),
+                  ttfbMs: num("serverResponseTime"),
+                  errorMessage: null,
+                };
+              } else {
+                row = { ...inner.result };
+              }
+              const storagePath = `${brandKey}/${audit.id}/${page.id}-${strategy}.json`;
+              let stored = false;
+              for (let attempt = 0; attempt < 2 && !stored; attempt++) {
+                try {
+                  await uploadFn(storagePath, payloadJson);
+                  stored = true;
+                } catch {
+                  if (attempt === 1) {
+                    row.errorMessage = "Report details could not be stored.";
+                    row.r2Key = null;
+                  }
+                }
+              }
+              if (stored) {
+                row.r2Key = storagePath;
+                row.payloadSizeBytes = payloadJson.length;
+              }
+              return row;
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : String(error);
+              return { ...failedLighthouseFetch(page.url, page.id, strategy, msg).result };
+            }
+          }),
+        ),
+      );
+      return { skipped: false, results: settled };
+    });
+
+    // Counters advance from the step's (memoised) output, never inside the
+    // callback: on a job replay the callback is skipped and the in-memory
+    // counters would otherwise restart at zero, under-counting both the
+    // progress columns and the budget already used by earlier waves.
+    const persisted = await ctx.step.do(`lighthouse-persist-${w + 1}`, DB_STEP, async () => {
+      const rows = waveResult?.results ?? [];
+      await store.insertLighthouse({ id: audit.id, brandKey: audit.brand_key }, rows);
+      const waveCompleted = rows.filter((r: any) => !r?.errorMessage).length;
+      const waveFailed = rows.length - waveCompleted;
+      await store.updateAudit(audit.id, jobId, {
+        lighthouse_completed: completed + waveCompleted,
+        lighthouse_failed: failed + waveFailed,
+      });
+      return { completed: waveCompleted, failed: waveFailed };
+    });
+    completed += Number(persisted?.completed ?? 0);
+    failed += Number(persisted?.failed ?? 0);
+  }
+
+  return { pages: samplePages };
 }
 
 /**

@@ -4,7 +4,7 @@
 
 "use client";
 
-import { Copy, FileDown, Sheet, Tag as TagIcon, Trash2 } from "lucide-react";
+import { Copy, FileDown, Sheet, Sparkles, Tag as TagIcon, Trash2 } from "lucide-react";
 import {
   TableBulkActionBar,
   TableBulkActionButton,
@@ -16,6 +16,7 @@ import type { SavedKeywordsExportFormat } from "./hooks/useSavedKeywordsExport";
 export function SavedKeywordsBulkActionBar({
   selectedCount,
   onTag,
+  onGroupTopics,
   onExport,
   onCopy,
   onDelete,
@@ -23,6 +24,7 @@ export function SavedKeywordsBulkActionBar({
 }: {
   selectedCount: number;
   onTag: () => void;
+  onGroupTopics?: () => void;
   onExport: (format: SavedKeywordsExportFormat) => void;
   onCopy: () => void;
   onDelete: () => void;
@@ -57,6 +59,17 @@ export function SavedKeywordsBulkActionBar({
               },
             ]}
           />
+          {onGroupTopics ? (
+            <span title={selectedCount < 10 ? "Select at least 10 keywords." : undefined}>
+              <TableBulkActionButton
+                icon={<Sparkles />}
+                onClick={onGroupTopics}
+                disabled={selectedCount < 10}
+              >
+                Group into topics
+              </TableBulkActionButton>
+            </span>
+          ) : null}
           <TableBulkActionButton
             icon={<Trash2 />}
             variant="danger"

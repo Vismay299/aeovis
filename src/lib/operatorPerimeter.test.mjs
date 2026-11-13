@@ -255,6 +255,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/audit/[auditId]/pages",
       "/api/customer/audit/[auditId]/performance",
       "/api/customer/audit/[auditId]/summary",
+      "/api/customer/audit/[auditId]/lighthouse/[resultId]",
+      "/api/customer/audit/[auditId]/lighthouse/[resultId]/export",
       "/api/customer/content",
     "/api/customer/content/[id]",
     "/api/customer/context",
@@ -310,6 +312,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/keywords/serp",
       "/api/customer/keywords/tags/[tagId]",
       "/api/customer/keywords/locations",
+      "/api/customer/keywords/cluster",
+      "/api/customer/keywords/cluster/apply",
       // F17 — local SEO routes. Self-gated via requireWorkspace and the local_seo flag.
       "/api/customer/local/businesses",
       "/api/customer/local/businesses/[businessId]",
@@ -334,6 +338,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/scan",
       "/api/customer/scan/mock",
       "/api/customer/scan/report/[scan_id]",
+      // F06 phase 5 - server-side Scans history. Self-gated via requireWorkspace.
+      "/api/customer/scans/history",
       "/api/customer/schedule",
       "/api/customer/team",
       "/api/customer/usage",

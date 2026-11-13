@@ -402,6 +402,11 @@ const FULL_CATALOG = [
   "exports", "export_requests", "export_requests_brand_created_idx", "export_requests_cleanup_idx",
   "export_requests_kind_ck", "export_requests_format_ck", "export_requests_status_ck",
   "export_requests_counts_ck", "export_requests_path_ck",
+  // F06 phase 5 migration 066 — derived history columns, their trigger function
+  // and the indexes the server-side filters/page use.
+  "scan_engines", "scan_collection_partial", "scans_derive_history_columns",
+  "scans_started_by_ck", "scans_brand_listed_idx", "scans_brand_visibility_idx",
+  "scans_engines_gin_idx",
 ];
 
 function withRegister(dir) {
