@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { usePortal } from "@/components/portal/PortalShell";
 import { Badge, Banner, Button, Card, PageHeader, Skeleton } from "@/components/portal/ui";
+import { QuestionsWorkspace } from "@/components/portal/questions/QuestionsWorkspace";
 
 export default function MeasurementPage() {
-  const { brandKey, brand, redirectToLogin, scan } = usePortal();
+  const { brandKey, brand, redirectToLogin, scan, features } = usePortal();
   const activeBrand = useRef(brandKey), generation = useRef(0);
   activeBrand.current = brandKey;
   const [loadedBrand, setLoadedBrand] = useState(null);
@@ -116,6 +117,7 @@ export default function MeasurementPage() {
   const ready = loaded && loadedBrand === brandKey;
   const notice = (value) => { if (activeBrand.current === brandKey) setMessage(value); };
   const panel = panels.find((p) => p.artifact_key === "default");
+  const questionCurationOn = Boolean(features?.question_curation);
 
   function savePanel(state) {
     return action(async () => {
@@ -183,94 +185,98 @@ export default function MeasurementPage() {
 
       {ready ? (
         <div className="space-y-6">
-          <Card
-            title="Question panel"
-            description={
-              panel
-                ? `Version ${panel.version} · Each question has equal weight; branded questions remain diagnostics.`
-                : "No reviewed panel yet. Each question has equal weight; branded questions remain diagnostics."
-            }
-            actions={
-              <div className="flex items-center gap-2">
-                {panel ? <span className="text-xs font-mono text-muted-foreground">v{panel.version}</span> : null}
-                <Badge tone={panelTone}>{panelState}</Badge>
-              </div>
-            }
-          >
-            <div className="space-y-4 p-4">
-              <label className="block space-y-1.5 text-sm font-medium text-foreground">
-                <span>Audience / persona</span>
-                <input
-                  aria-label="Audience / persona"
-                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={persona}
-                  onChange={(e) => setPersona(e.target.value)}
-                />
-              </label>
-
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {questionCurationOn ? (
+            <QuestionsWorkspace />
+          ) : (
+            <Card
+              title="Question panel"
+              description={
+                panel
+                  ? `Version ${panel.version} · Each question has equal weight; branded questions remain diagnostics.`
+                  : "No reviewed panel yet. Each question has equal weight; branded questions remain diagnostics."
+              }
+              actions={
+                <div className="flex items-center gap-2">
+                  {panel ? <span className="text-xs font-mono text-muted-foreground">v{panel.version}</span> : null}
+                  <Badge tone={panelTone}>{panelState}</Badge>
+                </div>
+              }
+            >
+              <div className="space-y-4 p-4">
                 <label className="block space-y-1.5 text-sm font-medium text-foreground">
-                  <span>Country</span>
+                  <span>Audience / persona</span>
                   <input
-                    aria-label="Country"
-                    maxLength={2}
+                    aria-label="Audience / persona"
                     className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={country}
-                    onChange={(e) => setCountry(e.target.value)}
+                    value={persona}
+                    onChange={(e) => setPersona(e.target.value)}
                   />
                 </label>
-                <label className="block space-y-1.5 text-sm font-medium text-foreground">
-                  <span>Language</span>
-                  <input
-                    aria-label="Language"
-                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={language}
-                    onChange={(e) => setLanguage(e.target.value)}
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <label className="block space-y-1.5 text-sm font-medium text-foreground">
+                    <span>Country</span>
+                    <input
+                      aria-label="Country"
+                      maxLength={2}
+                      className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={country}
+                      onChange={(e) => setCountry(e.target.value)}
+                    />
+                  </label>
+                  <label className="block space-y-1.5 text-sm font-medium text-foreground">
+                    <span>Language</span>
+                    <input
+                      aria-label="Language"
+                      className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value)}
+                    />
+                  </label>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="block text-sm font-medium text-foreground" htmlFor="measurement-questions">
+                    Questions, one per line
+                  </label>
+                  <textarea
+                    id="measurement-questions"
+                    aria-label="Questions, one per line"
+                    rows={14}
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-base md:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={questions}
+                    onChange={(e) => setQuestions(e.target.value)}
                   />
-                </label>
-              </div>
+                  <p className="text-sm text-muted-foreground">{promptCount} questions</p>
+                </div>
 
-              <div className="space-y-1.5">
-                <label className="block text-sm font-medium text-foreground" htmlFor="measurement-questions">
-                  Questions, one per line
-                </label>
-                <textarea
-                  id="measurement-questions"
-                  aria-label="Questions, one per line"
-                  rows={14}
-                  className="w-full rounded-lg border border-input bg-background px-3 py-2 text-base md:text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={questions}
-                  onChange={(e) => setQuestions(e.target.value)}
-                />
-                <p className="text-sm text-muted-foreground">{promptCount} questions</p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-3 pt-2">
-                <Button
-                  variant="secondary"
-                  disabled={busy || !questions.trim()}
-                  onClick={() => savePanel("draft")}
-                >
-                  Save for review
-                </Button>
-                <Button
-                  disabled={busy || !persona.trim() || !questions.trim()}
-                  onClick={() => savePanel("approved")}
-                >
-                  Approve this panel
-                </Button>
-                {panel?.state === "approved" && scan?.start ? (
+                <div className="flex flex-wrap items-center gap-3 pt-2">
                   <Button
-                    variant="outline"
-                    onClick={scan.start}
-                    disabled={Boolean(scan?.starting || scan?.active)}
+                    variant="secondary"
+                    disabled={busy || !questions.trim()}
+                    onClick={() => savePanel("draft")}
                   >
-                    Run scan
+                    Save for review
                   </Button>
-                ) : null}
+                  <Button
+                    disabled={busy || !persona.trim() || !questions.trim()}
+                    onClick={() => savePanel("approved")}
+                  >
+                    Approve this panel
+                  </Button>
+                  {panel?.state === "approved" && scan?.start ? (
+                    <Button
+                      variant="outline"
+                      onClick={scan.start}
+                      disabled={Boolean(scan?.starting || scan?.active)}
+                    >
+                      Run scan
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          )}
 
           <Card
             title="Website technical evidence"
