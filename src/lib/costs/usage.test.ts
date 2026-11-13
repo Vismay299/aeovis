@@ -1,10 +1,10 @@
 /**
  * F03 §6.2 — what one workspace has spent.
  *
- * The fake admin answers the two read functions migration 051 added and the
- * ledger read behind the recent-activity list, so these cases are about the
- * aggregation: gap-filled days, the known/unknown split and the honest recent
- * list.
+ * The fake admin answers the two read functions migration 051 added, the
+ * ledger reads behind the recent-activity list and the ledger count behind the
+ * unknown-call total, so these cases are about the aggregation: gap-filled
+ * days, the known/unknown split and the honest recent list.
  */
 
 import test from "node:test";
@@ -31,7 +31,8 @@ type LedgerRow = {
 };
 
 type Query = {
-  select: () => Query;
+  /** A count read (`count: "exact", head: true`) resolves `{ count }` instead of rows. */
+  select: (columns?: string, options?: { count?: string; head?: boolean }) => Query;
   eq: (column: string, value: unknown) => Query;
   neq: (column: string, value: unknown) => Query;
   gte: (column: string, value: unknown) => Query;
@@ -144,10 +145,16 @@ function fakeAdmin(days: Row[], ledger: LedgerRow[]): SupabaseClient {
     },
     from(table: string) {
       let rows: LedgerRow[] = (table === "spend_ledger" ? ledger : []).slice();
+      // A count read is answered the way PostgREST answers a `head` request:
+      // `data: null` and the number of rows the filters left behind.
+      let counted = false;
       const column = (row: LedgerRow, name: string): unknown =>
         (row as unknown as Record<string, unknown>)[name];
       const query: Query = {
-        select: () => query,
+        select: (_columns, options) => {
+          if (options?.count) counted = true;
+          return query;
+        },
         eq: (name, value) => {
           rows = rows.filter((row) => column(row, name) === value);
           return query;
@@ -172,7 +179,10 @@ function fakeAdmin(days: Row[], ledger: LedgerRow[]): SupabaseClient {
           rows = rows.slice(0, value);
           return query;
         },
-        then: (resolve) => Promise.resolve({ data: rows, error: null }).then(resolve),
+        then: (resolve) =>
+          Promise.resolve(
+            counted ? { data: null, error: null, count: rows.length } : { data: rows, error: null }
+          ).then(resolve),
       };
       return query;
     },
@@ -247,6 +257,38 @@ test("the totals are the sum of the days", async () => {
   near(result.totals.knownUsd, 0.58, "knownUsd");
   near(result.totals.unknownUsd, 0.05, "unknownUsd");
   assert.equal(result.totals.calls, 6);
+});
+
+test("the totals count the calls whose cost is still a reservation", async () => {
+  // Two rows in the window are still counted at the amount reserved before
+  // they ran; the shared fixture has none, so they are added here.
+  const ledger: LedgerRow[] = [
+    ...LEDGER_ROWS,
+    {
+      brand_key: BRAND,
+      occurred_at: "2026-10-20T10:00:00.000Z",
+      feature: "ai_visibility.scan",
+      provider: "openrouter",
+      endpoint: "probe:perplexity",
+      actual_usd: null,
+      accounted_usd: 0.02,
+      cost_source: "reservation",
+      meta: {},
+    },
+    {
+      brand_key: BRAND,
+      occurred_at: "2026-10-21T02:00:00.000Z",
+      feature: "platform.selftest",
+      provider: "openrouter",
+      endpoint: "probe:chatgpt",
+      actual_usd: null,
+      accounted_usd: 0.01,
+      cost_source: "reservation",
+      meta: {},
+    },
+  ];
+  const result = await usage(fakeAdmin(DAY_ROWS, ledger));
+  assert.equal(result.totals.unknownCalls, 2);
 });
 
 test("the features are ordered by spend, and an unknown feature is 'Other'", async () => {

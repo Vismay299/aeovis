@@ -34,7 +34,14 @@ export type WorkspaceUsage = {
   timeZone: string;
   from: string;
   to: string;
-  totals: { accountedUsd: number; knownUsd: number; unknownUsd: number; calls: number };
+  totals: {
+    accountedUsd: number;
+    knownUsd: number;
+    unknownUsd: number;
+    calls: number;
+    /** Ledger rows in the range whose cost was still unknown (`cost_source = 'reservation'`). */
+    unknownCalls: number;
+  };
   /** Every local date in the range, oldest first. */
   days: { date: string; usd: number; knownUsd: number; unknownUsd: number }[];
   /** The accounted spend per feature, `usd` descending, positive rows only. */
@@ -238,11 +245,25 @@ export async function getWorkspaceUsage(
   }
 
   const dayList = [...days.values()];
+
+  // §6.6.1's partial-state copy needs a number it can state honestly: how many
+  // calls in the window are still counted at the amount reserved before they
+  // ran. The day bins carry the unknown dollars but not the call count.
+  const { count: unknownCallCount, error: unknownCallError } = await admin
+    .from("spend_ledger")
+    .select("id", { count: "exact", head: true })
+    .eq("brand_key", brandKey)
+    .eq("cost_source", "reservation")
+    .gte("occurred_at", from.toISOString())
+    .lt("occurred_at", to.toISOString());
+  if (unknownCallError) throw unknownCallError;
+
   const totals = {
     accountedUsd: dayList.reduce((sum, day) => sum + day.usd, 0),
     knownUsd: dayList.reduce((sum, day) => sum + day.knownUsd, 0),
     unknownUsd: dayList.reduce((sum, day) => sum + day.unknownUsd, 0),
     calls: [...features.values()].reduce((sum, feature) => sum + feature.calls, 0),
+    unknownCalls: unknownCallCount ?? 0,
   };
 
   const featureList = [...features.values()]

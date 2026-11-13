@@ -564,6 +564,12 @@ SOFTWARE.
 - `src/components/portal/keywords/saved/hooks/useTagManage.ts` (from `openseo:src/client/features/saved-keywords/**`)
 - `src/components/portal/keywords/saved/hooks/useRefreshStats.ts` (from `openseo:src/client/features/saved-keywords/**`)
 
+### F03 Phase 4 ports
+- `src/components/portal/usage/hooks/useUsage.ts` (from `src/client/features/billing/useBillingUsage.ts`)
+- `src/components/portal/usage/UsageChart.tsx` (from `src/client/features/billing/BillingUsageChart.tsx`)
+- `src/components/portal/usage/UsageByFeature.tsx` (from `src/client/features/billing/BillingFeatureBreakdown.tsx`)
+- `src/components/portal/usage/UsageSection.tsx` (from `src/client/features/billing/BillingUsageSection.tsx`)
+
 ### F15 Phase 1 ports
 - src/shared/rank-tracking.ts
 - src/shared/rank-tracking-filters.ts

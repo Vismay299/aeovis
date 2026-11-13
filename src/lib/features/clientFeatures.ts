@@ -38,6 +38,7 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "site_audit_render",
   "site_audit_crawler_access",
   "server_exports",
+  "usage_page",
 ];
 
 export type ClientFeatureName = FeatureName;
