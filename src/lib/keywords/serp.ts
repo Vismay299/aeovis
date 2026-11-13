@@ -11,6 +11,7 @@ import type { SerpLiveItem } from "../providers/dataforseo/serp.ts";
 import { createDataforseoClient } from "../providers/dataforseo/client.ts";
 import { normalizeKeyword } from "./helpers.ts";
 import { resolveResearchMarket } from "./market.ts";
+import { assertLocalResearchLocation } from "./localVolume.ts";
 import {
   requireApprovedPrice,
   type PricingContext,
@@ -364,7 +365,9 @@ export async function runSerpRequest(
       requestId: input.requestId,
       maxUsd: priceApproval.approvedMaxUsd,
       cachedDeps: deps?.cachedDeps,
-      assertLocalLocation: deps?.assertLocalLocation,
+      assertLocalLocation:
+        deps?.assertLocalLocation ??
+        ((code, name) => assertLocalResearchLocation(code, name)),
     },
   );
 }

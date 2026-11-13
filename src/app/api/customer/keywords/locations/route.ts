@@ -64,6 +64,8 @@ export async function GET(
       deps,
     );
 
+    // F13 §6.4: keyword_research OR rank_tracking OR local_seo. rank_tracking
+    // joins once F15 registers that flag.
     const checkFlag = deps?.isFeatureEnabled ?? isFeatureEnabled;
     const enabled =
       (await checkFlag("keyword_research", workspace.brandKey)) ||
@@ -75,8 +77,8 @@ export async function GET(
     const fetchFn = deps?.fetchSerpLocationsForCountry ?? fetchSerpLocationsForCountry;
     let locations: Awaited<ReturnType<typeof fetchSerpLocationsForCountry>>;
     try {
-      locations = await fetchFn(country.toUpperCase().slice(0, 2).toLowerCase(), deps);
-    } catch (err) {
+      locations = await fetchFn(country.toLowerCase(), deps);
+    } catch {
       throw new AppError(503, "locations_unavailable", "Locations could not be loaded. Please retry.");
     }
 

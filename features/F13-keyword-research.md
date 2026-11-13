@@ -82,7 +82,7 @@ Customers get OpenSEO's keyword research inside Perceev: type a keyword, pick a 
 | F13-AC-18 | "Group into topics" (`keywords.clustering.run`, 10–500 selected keywords, approval required) runs job `keywords.cluster`, which makes one `llmObject` call, assigns every keyword to exactly one topic (unknown or repeated indexes dropped, leftovers in "Unsorted"), and returns a proposal; nothing is tagged until the customer applies it, and applying only adds tags. | unit `src/lib/keywords/clustering.test.ts`; route test |
 | F13-AC-19 | "Track as a question" calls F08 `addWorkspaceQuestion` with `origin: "manual"` and `sourceRef { kind: "keyword", keyword, locationCode, languageCode }`, reports created / already tracked / restored, maps `question_limit` and `topic_limit`, and never changes an approved panel. The control shows only when `question_curation` is on. | unit `src/lib/keywords/trackQuestion.test.ts`; browser B9 |
 | F13-AC-20 | Local volume: an area not in the country registry is refused (`409 unknown_location`) before any paid call; localised rows carry Ads numbers or null, never national; national rows are persisted even when they came from the cache. | unit `src/lib/keywords/localVolume.test.ts` (ported cases) |
-| F13-AC-21 | `/portal/keywords` and `/portal/keywords/saved` render every state in §6.6 with its exact copy, price every paid button before the click, and show no horizontal scroll at 375 px. | browser `scripts/qa/check-f13-browser.mjs` B1–B15 |
+| F13-AC-21 | `/portal/keywords` and `/portal/keywords/saved` render every state in §6.6 with its exact copy, price every paid button before the click, and show no horizontal scroll at 375 px. | browser `scripts/qa/check-f13-browser.mjs` B1–B22 |
 | F13-AC-22 | With `keyword_research` off, the sidebar items are hidden, the pages show "This page is not available for your workspace yet.", and every route returns `404 feature_unavailable`; a disabled spend control returns F01's `403 feature_disabled`. | route test; browser B1 |
 | F13-AC-23 | `LOCATION_OPTIONS` (143 countries, alphabetical, unique codes) and `LABS_LOCATION_OPTIONS` satisfy F04's `readonly LocationOption[]`; `defaultLocationForHost("offcult.in")` is 2356 and an unknown TLD is 2840. | unit `src/shared/keyword-locations.test.ts`; `npm run typecheck` |
 | F13-AC-24 | Workspace B cannot read, tag, export, refresh, cluster or delete workspace A's saved keywords through any F13 route. | route `keywords.route.test.mjs` "tenant isolation" |
@@ -1014,7 +1014,7 @@ Search textarea and every icon button have labels; sortable headers expose `aria
 - [ ] **P5.T1 Page**
   - [x] **P5.T1.S1** *Files:* `src/app/portal/keywords/saved/page.tsx`, `src/components/portal/keywords/saved/{SavedKeywordsPage,SavedKeywordsHeader,SavedKeywordsTable,SavedKeywordsFilters,SavedKeywordsFilterPanel,SavedKeywordsTagFilter,ManageTagRow,TagChip,SavedKeywordsBulkActionBar,SavedKeywordsBulkTagsModal,SavedKeywordsModals,RefreshStatsStatus}.tsx`, `saved/hooks/{useSavedKeywordsQuery,useSavedKeywordsExport,useTagManage,useRefreshStats}.ts`, `src/styles/app-theme.css` (eight `.tag-chip-<color>` rules from OpenSEO's stylesheet, light and dark). *Do:* §6.6.3. *Verify:* `npm run build` → exit 0.
 - [ ] **P5.T2 Browser checks**
-  - [x] **P5.T2.S1** *Files:* `scripts/qa/check-f13-browser.mjs` (B9–B12). B9 typing "tee" in Include Terms updates the URL once after 350 ms (two keystrokes inside the window → one navigation); B10 bulk tag add/remove toasts; delete confirm and toast; B11 refresh: dialog → `202` → progress text → finish toast; B12 tag delete `409` toast copy and empty/filtered-empty states. *Verify:* `node scripts/qa/check-f13-browser.mjs --only B9-B12` → "ok 4 scenarios" (F13-AC-21).
+  - [x] **P5.T2.S1** *Files:* `scripts/qa/check-f13-browser.mjs` (B19–B22; B9–B17 belong to phase 4 and B18 to phase 8). B19 typing "tee" in Include Terms updates the URL once after 350 ms (two keystrokes inside the window → one navigation); B20 bulk tag add/remove toasts; delete confirm and toast; B21 refresh: dialog → `202` → progress text → finish toast; B22 tag delete `409` toast copy and empty/filtered-empty states. *Verify:* `node scripts/qa/check-f13-browser.mjs --only B19-B22` → "ok 4 scenarios" (F13-AC-21).
 
 **Checkpoint:** full suite, build, `check-f13-browser.mjs`. Completes F13-AC-21.
 
@@ -1045,12 +1045,12 @@ Search textarea and every icon button have labels; sortable headers expose `aria
 **Goal:** volume, CPC and competition for one city, county or region.
 
 - [x] **P8.T1 Area registry, local research and city picker**
-  - [x] **P8.T1.S1** *Files:* `src/lib/providers/dataforseo/serp-locations.ts`, `src/shared/serp-location-search.ts`. *Do:* §6.2.1. *Verify:* `npm run typecheck` → pass.
-  - [x] **P8.T1.S2** *Files:* `src/lib/keywords/localVolume.ts`, `research.ts` (wire `researchLocal`), `src/lib/pricing/actions/keywords.ts` (local line and `unknown_location` block). *Verify:* `npm run typecheck` → pass.
-  - [x] **P8.T1.S3** *Files:* `src/app/api/customer/keywords/locations/route.ts`, contract. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [x] **P8.T1.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* pass.
+  - [x] **P8.T1.S1** *Files:* `src/lib/providers/dataforseo/serp-locations.ts`, `serp-locations.test.ts`, `src/shared/serp-location-search.ts`, `serp-location-search.test.ts`, fixture `tests/fixtures/f13/serp-locations-in.json`. *Do:* §6.2.1; tests: only included types kept; cached globally; ranking "mumbai" puts "Mumbai,Maharashtra,India" first. *Verify:* `node --test src/lib/providers/dataforseo/serp-locations.test.ts src/shared/serp-location-search.test.ts` → pass.
+  - [x] **P8.T1.S2** *Files:* `src/lib/keywords/localVolume.ts`, `localVolume.test.ts`, `research.ts` (local branch), research and SERP routes (default `assertLocalLocation`), `keywords.route.test.mjs` (409 before any paid call), `src/lib/pricing/actions/keywords.ts` (local line and `unknown_location` block, injectable registry) and `keywords.test.ts`. *Do:* port `research.test.ts:180-267` (three local cases) into `localVolume.test.ts`. *Verify:* `node --test src/lib/keywords/localVolume.test.ts src/lib/keywords/research.test.ts src/lib/keywords/serp.test.ts src/lib/pricing/actions/keywords.test.ts` → pass (F13-AC-20).
+  - [x] **P8.T1.S3** *Files:* `src/app/api/customer/keywords/locations/route.ts`, `src/lib/keywords/locations.route.test.mjs`, contract, `src/components/portal/keywords/research/{SerpLocationCombobox,usePrewarmSerpLocations,KeywordAreaField}.tsx`, `KeywordResearchSearchBar.tsx`, `SaveKeywordsDialog.tsx`, `hooks/useKeywordResearchController.ts`, `scripts/qa/check-f13-browser.mjs` (B18 — B15 was already taken: typing "mum" lists Mumbai; selecting it shows "Local volume adds up to $0.09 per search.", the run sends `locationName`, and the save dialog note). Gate is `keyword_research` OR `local_seo`; `rank_tracking` joins when F15 registers that flag. *Verify:* `node scripts/qa/check-f13-browser.mjs --only B18` → "ok 1 scenario"; `node --test src/lib/http/routeContract.test.ts` → pass.
+  - [x] **P8.T1.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
 
-**Checkpoint:** full suite, build, all browser scenarios `node scripts/qa/check-f13-browser.mjs` → "ok 15 scenarios". Completes F13-AC-20.
+**Checkpoint:** full suite, build, all browser scenarios `node scripts/qa/check-f13-browser.mjs` → "ok 22 scenarios" (B1–B22 once phase 5 is in). Completes F13-AC-20.
 
 ## 9. Test plan
 
@@ -1079,7 +1079,7 @@ Search textarea and every icon button have labels; sortable headers expose `aria
 | `src/lib/keywords/keywords.route.test.mjs` | flags, auth, strict bodies, approval, cacheOnly, isolation, errors | 06–09, 15, 17, 18, 19, 22, 24 |
 | `scripts/qa/check-f13-db.mjs` | nine groups | 12–16 |
 | `tests/customer-uat.sql` | tenant reads, cross-tenant FK, metrics denied | 12 |
-| `scripts/qa/check-f13-browser.mjs` | B1–B15 | 09, 19, 20, 21, 22 |
+| `scripts/qa/check-f13-browser.mjs` | B1–B22 | 09, 19, 20, 21, 22 |
 | `scripts/qa/check-f13-live.mjs` (owner-run) | one research (India, 150, auto) + one SERP; refuses without `--brand <key> --max-spend-usd 0.15` and enabled `keywords.research`/`keywords.serp` controls; prints counts and ledger rows only | — |
 
 Fixtures: `tests/fixtures/f13/` as listed in §6.4, synthetic, no live recording in CI (conventions §6.5).

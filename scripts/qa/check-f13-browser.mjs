@@ -39,7 +39,7 @@ if (!(await waitForServer(1000))) {
   }
 }
 const onlyIndex = process.argv.indexOf("--only");
-const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B21";
+const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B22";
 const selectedScenarios = new Set();
 for (const selection of requested.split(",")) {
   const range = selection.match(/^B(\d+)-B(\d+)$/);
@@ -194,7 +194,23 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
     if (body.action === "keywords.metrics_refresh.run") {
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(refreshBlocked ? refreshBlockedQuote(refreshBlocked) : refreshQuote) });
     }
+    if (body.input?.locationName) {
+      const local = { label: `Local volume for ${body.input.locationName}`, quantity: 1, unitUsd: 0.09, totalUsd: 0.09 };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action, totalUsd: quote.totalUsd + 0.09, expectedUsd: quote.expectedUsd + 0.09, lines: [...quote.lines, local] }) });
+    }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action }) });
+  });
+  const locationRequests = [];
+  await page.route("**/api/customer/keywords/locations*", (route) => {
+    const url = new URL(route.request().url());
+    locationRequests.push(Object.fromEntries(url.searchParams));
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const registry = [
+      { locationName: "Mumbai,Maharashtra,India", displayLabel: "Mumbai, Maharashtra, India", locationType: "City" },
+      { locationName: "Navi Mumbai,Maharashtra,India", displayLabel: "Navi Mumbai, Maharashtra, India", locationType: "City" },
+      { locationName: "Pune,Maharashtra,India", displayLabel: "Pune, Maharashtra, India", locationType: "City" },
+    ];
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ locations: registry.filter((row) => row.locationName.toLowerCase().includes(q)) }) });
   });
   await page.route("**/api/customer/keywords/research", (route) => {
     const body = route.request().postDataJSON();
@@ -295,7 +311,7 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
         : { jobId: "job-refresh-1", kind: "keywords.refresh_metrics", trigger: "manual", status: "completed", progress: { done: 2, total: 2, label: "Updating keyword stats" }, pollAfterSeconds: null, result: { updated: 12, requested: 15, skippedFresh: 3, failedBatches: 0, totalBatches: 2 }, error: null }),
     });
   });
-  return { context, page, researchRequests, serpRequests, savedListRequests, savedExportRequests, savedRemoveRequests, savedBulkTagRequests, savedRefreshRequests, savedTagRequests };
+  return { context, page, researchRequests, serpRequests, savedListRequests, savedExportRequests, savedRemoveRequests, savedBulkTagRequests, savedRefreshRequests, savedTagRequests, locationRequests };
 }
 
 async function openResearch(options, url = "/portal/keywords") {
@@ -576,9 +592,30 @@ try {
       return "sort/order URL state controls ordering and aria-sort";
     } finally { await context.close(); }
   });
+  await record("B18", "city picker lists Mumbai, prices local volume, sends locationName, and notes national-only saves", async () => {
+    const { context, page, researchRequests, locationRequests } = await openResearch({ cacheMiss: false }, "/portal/keywords");
+    try {
+      await page.getByLabel("Keywords").fill("plumber");
+      await page.getByRole("combobox", { name: "City (optional)" }).fill("mum");
+      const option = page.getByRole("option", { name: /^Mumbai, Maharashtra, India/ });
+      await option.waitFor();
+      assert.ok(locationRequests.some((request) => /^[a-z]{2}$/.test(request.country) && request.q === "mum"), `location lookups: ${JSON.stringify(locationRequests)}`);
+      await option.click();
+      await page.getByText("Local volume adds up to $0.09 per search.").waitFor();
+      await page.locator("#keyword-research-submit:not([disabled])").filter({ hasText: /up to \$0\.17/ }).click();
+      await page.getByRole("button", { name: "oversized shirt for men" }).waitFor();
+      const run = researchRequests.find((request) => request.cacheOnly === false);
+      assert.equal(run?.locationName, "Mumbai,Maharashtra,India");
+      assert.equal(new URL(page.url()).searchParams.get("locName"), "Mumbai,Maharashtra,India");
+      await page.getByRole("checkbox", { name: "Select oversized t shirt" }).check();
+      await page.getByRole("button", { name: "Save Keywords" }).click();
+      await page.getByRole("dialog").getByText("Saved keywords show national metrics. The local volume for Mumbai, Maharashtra, India is not saved.").waitFor();
+      return "typing \"mum\" listed Mumbai; selecting it priced and sent local volume; save dialog noted national metrics";
+    } finally { await context.close(); }
+  });
 
-  // spec P5.T2.S1 calls these B9–B12; phase 4 already uses those ids (B9–B17), so they land as B18–B21 until the owner renumbers.
-  await record("B18", "Include Terms debounces two keystrokes into one URL write and one list request", async () => {
+  // spec P5.T2.S1 calls these B9–B12; phase 4 already uses those ids (B9–B17), so they land as B19–B22 (B18 is phase 8's city picker).
+  await record("B19", "Include Terms debounces two keystrokes into one URL write and one list request", async () => {
     const { context, page, savedListRequests } = await openSaved({}, "/portal/keywords/saved", async (target) => {
       await target.addInitScript(() => {
         const writes = [];
@@ -609,7 +646,7 @@ try {
     } finally { await context.close(); }
   });
 
-  await record("B19", "bulk tag add and remove toasts, then delete confirmation and toast", async () => {
+  await record("B20", "bulk tag add and remove toasts, then delete confirmation and toast", async () => {
     const { context, page, savedBulkTagRequests, savedRemoveRequests } = await openSaved({});
     try {
       for (const keyword of ["oversized t shirt", "vintage hoodie"]) {
@@ -650,7 +687,7 @@ try {
     } finally { await context.close(); }
   });
 
-  await record("B20", "refresh dialog runs to 202, shows progress, then the finish toast", async () => {
+  await record("B21", "refresh dialog runs to 202, shows progress, then the finish toast", async () => {
     const { context, page, savedRefreshRequests } = await openSaved({});
     try {
       await page.getByRole("button", { name: /Update keyword stats · up to \$0\.42/ }).click();
@@ -666,7 +703,7 @@ try {
     } finally { await context.close(); }
   });
 
-  await record("B21", "tag delete 409 copy, then the empty and filtered-empty states", async () => {
+  await record("B22", "tag delete 409 copy, then the empty and filtered-empty states", async () => {
     const tagState = await openSaved({ tagDeleteInUse: true });
     try {
       const { page } = tagState;
