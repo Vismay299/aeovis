@@ -1,0 +1,21 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "tasks": [
+    {
+      "id": "task-1",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "path": ["v3", "on_page", "lighthouse", "live", "json"],
+      "cost": 0.00425,
+      "result": [
+        {
+          "requestedUrl": "https://example.com/",
+          "finalUrl": "https://example.com/",
+          "categories": {},
+          "audits": {}
+        }
+      ]
+    }
+  ]
+}

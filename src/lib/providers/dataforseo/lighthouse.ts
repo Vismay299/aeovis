@@ -2,11 +2,18 @@
 //   src/server/lib/dataforseo/lighthouse.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { dataforseoPost } from "./core.ts";
-import { assertOk, buildTaskBilling } from "./envelope.ts";
+import { dataforseoPost, type DataforseoRequestOptions } from "./core.ts";
+import { assertOk, buildTaskBilling, type DataforseoApiResponse } from "./envelope.ts";
 import { ChargedCallError } from "../../spend/errors.ts";
+import { meter } from "./client.ts";
+import { dataforseoPricing } from "../../pricing/dataforseo.ts";
+import {
+  parseDataforseoLighthousePayload,
+  type LighthouseStrategy,
+  type StoredLighthousePayload,
+} from "../../audit/lighthousePayload.ts";
 
-export type LighthouseStrategy = "mobile" | "desktop";
+export type { LighthouseStrategy, StoredLighthousePayload };
 
 export const requestCategories = [
   "performance",
@@ -15,94 +22,37 @@ export const requestCategories = [
   "seo",
 ] as const;
 
-const LIGHTHOUSE_PATH = "/v3/on_page/lighthouse/live/json";
+export const LIGHTHOUSE_PATH = "/v3/on_page/lighthouse/live/json";
 const REQUEST_TIMEOUT_MS = 60_000;
 
-export interface StoredLighthousePayload {
-  version: number;
-  source: string;
-  hasIssueDetails: boolean;
-  metadata: {
-    requestedUrl: string;
-    finalUrl: string;
-    strategy: LighthouseStrategy;
-    fetchedAt: string;
-    lighthouseVersion: string | null;
-    taskId: string | null;
-    cost: number | null;
-  };
-  scores: {
-    performance: number | null;
-    accessibility: number | null;
-    "best-practices": number | null;
-    seo: number | null;
-  };
-  metrics: Record<string, { score: number | null; displayValue: string | null; numericValue: number | null }>;
-  issues: Array<Record<string, unknown>>;
+let parseChain: Promise<unknown> = Promise.resolve();
+function withParseLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = parseChain.then(fn, fn);
+  parseChain = run.catch(() => {});
+  return run;
 }
 
-function scoreToPercent(score: unknown): number | null {
-  if (typeof score !== "number" || Number.isNaN(score)) return null;
-  return Math.round(score * 100);
-}
+export type LighthouseRequestOptions = Pick<DataforseoRequestOptions, "fetchImpl" | "env" | "baseUrl" | "signal">;
 
-function parsePayload(body: unknown, input: { url: string; strategy: LighthouseStrategy }): StoredLighthousePayload {
-  const task = (body as any)?.tasks?.[0] ?? {};
-  const result = task?.result?.[0] ?? {};
-  const categories = result?.categories ?? {};
-  const audits = result?.audits ?? {};
-  const fetchedAt = new Date().toISOString();
-
-  const payload: StoredLighthousePayload = {
-    version: 2,
-    source: "dataforseo-lighthouse",
-    hasIssueDetails: false,
-    metadata: {
-      requestedUrl: result?.requestedUrl ?? input.url,
-      finalUrl: result?.finalUrl ?? input.url,
-      strategy: input.strategy,
-      fetchedAt,
-      lighthouseVersion: result?.lighthouseVersion ?? null,
-      taskId: task?.id ?? null,
-      cost: typeof task?.cost === "number" ? task.cost : null,
-    },
-    scores: {
-      performance: scoreToPercent(categories?.performance?.score),
-      accessibility: scoreToPercent(categories?.accessibility?.score),
-      "best-practices": scoreToPercent(categories?.["best-practices"]?.score ?? categories?.best_practices?.score),
-      seo: scoreToPercent(categories?.seo?.score),
-    },
-    metrics: {
-      largestContentfulPaint: {
-        score: null,
-        displayValue: audits?.["largest-contentful-paint"]?.displayValue ?? null,
-        numericValue: typeof audits?.["largest-contentful-paint"]?.numericValue === "number"
-          ? audits["largest-contentful-paint"].numericValue
-          : null,
+export async function fetchLighthouseResult(
+  input: { url: string; strategy: LighthouseStrategy },
+  options?: LighthouseRequestOptions,
+): Promise<DataforseoApiResponse<StoredLighthousePayload>> {
+  const body = await dataforseoPost(
+    LIGHTHOUSE_PATH,
+    [
+      {
+        url: input.url,
+        for_mobile: input.strategy === "mobile",
+        categories: [...requestCategories],
       },
-    },
-    issues: [],
-  };
-  return payload;
-}
-
-export async function fetchLighthouseResult(input: {
-  url: string;
-  strategy: LighthouseStrategy;
-}): Promise<{ data: StoredLighthousePayload; billing: { path: string[]; costUsd: number } }> {
-  const body = await dataforseoPost(LIGHTHOUSE_PATH, [
-    {
-      url: input.url,
-      for_mobile: input.strategy === "mobile",
-      categories: [...requestCategories],
-    },
-  ], { timeoutMs: REQUEST_TIMEOUT_MS });
-
-  const task = assertOk(body as any);
-  const billing = buildTaskBilling(task as any);
-
+    ],
+    { timeoutMs: REQUEST_TIMEOUT_MS, fetchImpl: options?.fetchImpl, env: options?.env, baseUrl: options?.baseUrl, signal: options?.signal },
+  );
+  const task = assertOk(body);
+  const billing = buildTaskBilling(task);
   try {
-    const data = parsePayload(body, input);
+    const data = await withParseLock(async () => parseDataforseoLighthousePayload(body, input));
     return { data, billing };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -112,6 +62,17 @@ export async function fetchLighthouseResult(input: {
       endpoint: LIGHTHOUSE_PATH,
       status: 502,
       code: "dataforseo_lighthouse_parse_failed",
+      details: { providerCode: "dataforseo_lighthouse_parse_failed" },
     });
   }
+}
+
+export function createLighthouseClient(deps?: { metered?: typeof import("../../spend/index.ts").metered; spendDeps?: import("../../spend/index.ts").SpendDeps }) {
+  const live = meter<{ url: string; strategy: LighthouseStrategy }, StoredLighthousePayload>(
+    (input) => fetchLighthouseResult(input),
+    () => dataforseoPricing.lighthouse.live({}),
+    "site_audit.lighthouse" as never,
+    deps as never,
+  );
+  return { live };
 }
