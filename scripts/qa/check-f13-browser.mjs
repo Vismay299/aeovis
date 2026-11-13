@@ -223,12 +223,15 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
     const empty = savedList === "empty" || savedList === "filteredEmpty";
     const pageNumber = Number(url.searchParams.get("page") ?? 1);
     const pageSize = Number(url.searchParams.get("size") ?? 50);
+    const totalCount = empty ? 0 : savedRowsFixture.length;
+    const lastPage = Math.max(1, Math.ceil(totalCount / pageSize));
+    const outOfRange = pageNumber > lastPage;
     return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        rows: empty ? [] : savedRowsFixture,
-        totalCount: empty ? 0 : savedRowsFixture.length,
+        rows: empty || outOfRange ? [] : savedRowsFixture,
+        totalCount,
         page: pageNumber,
         pageSize,
         tags: savedTagsFixture,
@@ -590,14 +593,19 @@ try {
     try {
       await page.getByRole("button", { name: "Filters" }).click();
       await page.getByLabel("Include Terms").pressSequentially("tee", { delay: 60 });
+      // The debounce window itself: 200 ms after the last keystroke the URL
+      // must still be untouched.
+      await page.waitForTimeout(200);
+      assert.equal(new URL(page.url()).searchParams.get("include"), null, "the URL must not change before the 350 ms debounce elapses");
       await page.waitForFunction(() => new URL(location.href).searchParams.get("include") === "tee");
+      await until(() => savedListRequests.some((search) => search.includes("include=tee")), "the debounced list request did not arrive");
       const writes = await page.evaluate(() => window.__savedUrlWrites);
       const includeWrites = writes.filter((url) => url.includes("include="));
       assert.equal(includeWrites.length, 1, `expected one URL write, got ${JSON.stringify(writes)}`);
       const includeRequests = savedListRequests.filter((search) => search.includes("include=tee"));
       assert.equal(includeRequests.length, 1, `expected one list request for include=tee, got ${JSON.stringify(savedListRequests)}`);
       assert.equal(new URL(page.url()).searchParams.get("page"), null, "a filter change must reset paging");
-      return "three keystrokes inside 350 ms produced one URL write and one list request";
+      return "the URL stayed empty at 200 ms and three keystrokes produced one write and one request after the 350 ms debounce";
     } finally { await context.close(); }
   });
 
@@ -677,16 +685,51 @@ try {
       await emptyState.page.getByRole("link", { name: "Open Keyword Research" }).waitFor();
     } finally { await emptyState.context.close(); }
 
-    const filteredState = await openSaved({ savedList: "filteredEmpty" }, "/portal/keywords/saved?include=nomatch");
+    const filteredState = await openSaved({ savedList: "filteredEmpty" }, "/portal/keywords/saved?include=nomatch&tags=11111111-1111-4111-8111-111111111111");
     try {
       const { page } = filteredState;
       await page.getByText("No rows match these filters").waitFor();
       await page.getByRole("button", { name: "Clear filters" }).click();
-      await page.waitForFunction(() => !new URL(location.href).searchParams.has("include"));
+      await page.waitForFunction(() => {
+        const params = new URL(location.href).searchParams;
+        return !params.has("include") && !params.has("tags");
+      });
       await page.getByText("No saved keywords yet").waitFor();
     } finally { await filteredState.context.close(); }
 
-    return "the tag-delete fallback and both empty states render";
+    const phoneState = await openSaved({ viewport: { width: 375, height: 812 } });
+    try {
+      const { page } = phoneState;
+      await page.getByRole("checkbox", { name: "Select oversized t shirt" }).waitFor();
+      const phoneDocWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      assert.ok(phoneDocWidth <= 375, `document width ${phoneDocWidth} exceeded 375px`);
+      for (const keyword of ["oversized t shirt", "vintage hoodie"]) {
+        await page.getByRole("checkbox", { name: `Select ${keyword}` }).check();
+      }
+      await page.getByRole("toolbar", { name: "Bulk actions" }).waitFor();
+      const bar = await page.evaluate(() => {
+        const toolbar = document.querySelector('[role="toolbar"][aria-label="Bulk actions"]');
+        const outer = toolbar?.parentElement;
+        const toolbarRect = toolbar?.getBoundingClientRect();
+        const outerRect = outer?.getBoundingClientRect();
+        const clear = [...(toolbar?.querySelectorAll("button") ?? [])].find((button) => button.textContent.trim() === "Clear");
+        const clearRect = clear?.getBoundingClientRect();
+        return {
+          position: outer ? getComputedStyle(outer).position : null,
+          toolbarRight: toolbarRect?.right,
+          outerRight: outerRect?.right,
+          clearLeft: clearRect?.left,
+          clearRight: clearRect?.right,
+          width: toolbarRect?.width,
+        };
+      });
+      assert.equal(bar.position, "fixed", "the bulk bar must stay fixed");
+      assert.ok(bar.toolbarRight <= 375 && bar.outerRight <= 375, `bulk bar overflows 375px: ${JSON.stringify(bar)}`);
+      assert.ok(bar.clearLeft >= 0 && bar.clearRight <= 375, `Clear is not fully inside 375px: ${JSON.stringify(bar)}`);
+      assert.ok(bar.width > 0, "the bulk bar must be visible");
+    } finally { await phoneState.context.close(); }
+
+    return "the tag-delete fallback, both empty states, and the 375px fixed bulk bar render";
   });
 } finally {
   await browser.close();

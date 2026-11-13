@@ -92,6 +92,13 @@ export function SavedKeywordsPage() {
 
   const hasData = saved.list.data !== undefined;
   const isInitialLoading = saved.list.isPending && !hasData;
+  // An out-of-range page is being reset to page 1; show the skeleton, never the
+  // "no keywords" state that would imply the workspace is empty. Read the page
+  // echoed by the response, because placeholder data keeps the out-of-range
+  // page while the reset request loads.
+  const dataPage = saved.list.data?.page ?? saved.search.page;
+  const isOutOfRange =
+    saved.totalCount > 0 && saved.rows.length === 0 && dataPage > 1;
   const errorCard = saved.list.isError ? (
     <QueryError
       cause={saved.list.error}
@@ -127,7 +134,7 @@ export function SavedKeywordsPage() {
           pageSize={saved.search.size}
           sort={saved.search.sort}
           order={saved.search.order}
-          isLoading={isInitialLoading}
+          isLoading={isInitialLoading || isOutOfRange}
           isFiltered={saved.activeFilterCount > 0}
           selectedIds={selectedRows.map((row) => row.id)}
           filters={saved.filters.draft}

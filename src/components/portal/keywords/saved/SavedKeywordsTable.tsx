@@ -119,6 +119,28 @@ export function SavedKeywordsTable({
   const allSelected =
     pageRows.length > 0 && pageRows.every((row) => selectedIds.includes(row.id));
 
+  const sortableHeader = (column: (typeof COLUMNS)[number]) => (
+    <th
+      key={column.key}
+      className={cn(
+        "p-3 font-medium whitespace-nowrap",
+        ["searchVolume", "cpc", "competition", "keywordDifficulty"].includes(
+          column.key,
+        ) && "tabular-nums",
+      )}
+      aria-sort={ariaSort(sort === column.key, order)}
+    >
+      <button
+        type="button"
+        className="font-medium transition-colors hover:text-foreground"
+        aria-label={column.aria}
+        onClick={() => onSort(column.key)}
+      >
+        {column.label}
+      </button>
+    </th>
+  );
+
   return (
     <Card className="min-w-0">
       <SavedKeywordsFilters
@@ -183,29 +205,10 @@ export function SavedKeywordsTable({
                       }
                     />
                   </th>
-                  {COLUMNS.map((column) => (
-                    <th
-                      key={column.key}
-                      className={cn(
-                        "p-3 font-medium whitespace-nowrap",
-                        ["searchVolume", "cpc", "competition", "keywordDifficulty"].includes(
-                          column.key,
-                        ) && "tabular-nums",
-                      )}
-                      aria-sort={ariaSort(sort === column.key, order)}
-                    >
-                      <button
-                        type="button"
-                        className="font-medium transition-colors hover:text-foreground"
-                        aria-label={column.aria}
-                        onClick={() => onSort(column.key)}
-                      >
-                        {column.label}
-                      </button>
-                    </th>
-                  ))}
+                  {COLUMNS.slice(0, 5).map(sortableHeader)}
                   <th className="p-3 font-medium">Intent</th>
                   <th className="p-3 font-medium">Tags</th>
+                  {sortableHeader(COLUMNS[5])}
                   <th className="p-3 font-medium">
                     <span className="sr-only">Actions</span>
                   </th>
@@ -239,13 +242,6 @@ export function SavedKeywordsTable({
                       <ScoreBadge value={row.keywordDifficulty} />
                     </td>
                     <td className="p-3">
-                      {row.fetchedAt ? (
-                        new Date(row.fetchedAt).toLocaleDateString()
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="p-3">
                       <IntentBadge intent={row.intent} />
                     </td>
                     <td className="p-3">
@@ -255,6 +251,13 @@ export function SavedKeywordsTable({
                             <TagChip key={tag.id} tag={tag} />
                           ))}
                         </div>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="p-3">
+                      {row.fetchedAt ? (
+                        new Date(row.fetchedAt).toLocaleDateString()
                       ) : (
                         "—"
                       )}

@@ -5,8 +5,8 @@
 
 "use client";
 
-import { useMemo } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { z } from "zod";
 import { usePortal } from "@/components/portal/PortalShell";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
@@ -239,9 +239,23 @@ export function useSavedKeywordsQuery() {
         withBrand("/api/customer/keywords/saved", brandKey, query),
         { signal },
       ),
-    placeholderData: keepPreviousData,
+    // Only keep the previous page while the workspace is the same. A bare
+    // `keepPreviousData` would also survive a brandKey change and show another
+    // workspace's rows and tags while the new list loads (§6.6.3).
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery?.queryKey[1] === brandKey ? previousData : undefined,
     retry: false,
   });
+
+  // A stale URL or a deletion past the end of the list must not strand the
+  // reader on the "no saved keywords yet" state while rows still exist.
+  useEffect(() => {
+    const data = list.data;
+    if (!data) return;
+    if (search.page > 1 && data.totalCount > 0 && data.rows.length === 0) {
+      setParams({ page: 1 });
+    }
+  }, [list.data, search.page, setParams]);
 
   const selectedTagIds = selectedTagIdsFrom(search);
   const activeFilterCount =
