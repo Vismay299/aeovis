@@ -39,7 +39,7 @@ if (!(await waitForServer(1000))) {
   }
 }
 const onlyIndex = process.argv.indexOf("--only");
-const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B22";
+const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B23";
 const selectedScenarios = new Set();
 for (const selection of requested.split(",")) {
   const range = selection.match(/^B(\d+)-B(\d+)$/);

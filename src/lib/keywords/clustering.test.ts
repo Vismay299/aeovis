@@ -11,6 +11,7 @@ import {
   type ClusterJobDeps,
 } from "./clustering.ts";
 import { createMemorySavedKeywordsRepository } from "./memoryRepository.ts";
+import { LONG_PAID_STEP } from "../jobs/stepConfigs.ts";
 
 test("clusterOutputSchema parses valid output", () => {
   const o = {
@@ -130,14 +131,26 @@ test("runClusterJob maps the llm-cluster.json fixture to a proposal without live
     renderProjectContextMarkdown: () => "# Project context\n\nNo sections yet.",
     appendResearch: async () => {},
   };
-  const result = await runClusterJob(
-    {
-      jobId,
-      brandKey: "test-brand",
-      payload: { savedKeywordIds: ids, approvedMaxUsd: 0.05, requestedBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+  // A job context that memoises steps the way the F01 runner does.
+  const memo = new Map<string, unknown>();
+  const stepOptions: Record<string, unknown> = {};
+  const jobCtx = {
+    jobId,
+    brandKey: "test-brand",
+    payload: { savedKeywordIds: ids, approvedMaxUsd: 0.05, requestedBy: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+    step: {
+      async do<T>(name: string, options: unknown, fn: () => Promise<T>): Promise<T> {
+        stepOptions[name] = options;
+        if (!memo.has(name)) memo.set(name, await fn());
+        return memo.get(name) as T;
+      },
     },
-    deps,
-  );
+  };
+  const result = await runClusterJob(jobCtx, deps);
+  // A replay of the same job returns the memoised proposal without a new call.
+  const replay = await runClusterJob(jobCtx, deps);
+  assert.deepEqual(replay.result, result.result);
+  assert.deepEqual(stepOptions.cluster, LONG_PAID_STEP);
 
   assert.equal(result.status, "completed");
   // The paid LLM runs exactly once: no replayed paid calls.

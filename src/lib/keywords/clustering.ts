@@ -10,6 +10,8 @@ import { getProjectContextByKey, renderProjectContextMarkdown } from "../project
 import { createSavedKeywordsRepository, type SavedKeywordsRepository } from "./repository.ts";
 import { getSupabaseAdmin } from "../supabase/admin.js";
 import { AppError } from "../http/errors.ts";
+import { LONG_PAID_STEP } from "../jobs/stepConfigs.ts";
+import { jobStepKey } from "../jobs/runner.ts";
 
 export const CLUSTER_SYSTEM =
   "You group search keywords into page-level topics for one website. Put keywords together only when one page could satisfy all of them: same searcher intent and buyer stage. Similar words do not guarantee the same topic. Name each topic in 2–5 plain words. Use every keyword index exactly once. If a page from the site context fits a topic, give its URL as targetPage; otherwise use null. Do not invent volumes.";
@@ -154,6 +156,7 @@ export async function runClusterJob(
     jobId: string;
     brandKey: string;
     payload: { savedKeywordIds: string[]; approvedMaxUsd: number; requestedBy: string };
+    step?: { do<T>(name: string, options: unknown, fn: () => Promise<T>): Promise<T> };
   },
   deps?: ClusterJobDeps,
 ): Promise<{ status: "completed"; result: ClusterJobResult }> {
@@ -175,64 +178,80 @@ export async function runClusterJob(
   const approvedMaxUsd = ctx.payload.approvedMaxUsd;
   const requestedBy = ctx.payload.requestedBy;
 
-  // Read saved keywords (with metrics) via repository list, filter by ids.
-  const listed = await repo.list({
-    brandKey,
-    pageSize: 5000,
-  });
-  const idSet = new Set(ids);
-  const rows = listed.rows
-    .filter((r) => idSet.has(r.id))
-    .sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+  // Spec §6.3: one billed, single-attempt "cluster" step. A replayed job
+  // gets the memoised proposal back instead of paying for the call again.
+  const runStep = async () => {
+    // Read saved keywords (with metrics) via repository list, filter by ids.
+    const listed = await repo.list({
+      brandKey,
+      pageSize: 5000,
+    });
+    const idSet = new Set(ids);
+    const rows = listed.rows
+      .filter((r) => idSet.has(r.id))
+      .sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
 
-  const keywordRows: ClusterKeywordRow[] = rows.map((r) => ({
-    id: r.id,
-    keyword: r.keyword,
-    searchVolume: r.searchVolume ?? null,
-    keywordDifficulty: r.keywordDifficulty ?? null,
-    intent: r.intent ?? "unknown",
-  }));
+    const keywordRows: ClusterKeywordRow[] = rows.map((r) => ({
+      id: r.id,
+      keyword: r.keyword,
+      searchVolume: r.searchVolume ?? null,
+      keywordDifficulty: r.keywordDifficulty ?? null,
+      intent: r.intent ?? "unknown",
+    }));
 
-  const n = keywordRows.length;
+    const n = keywordRows.length;
 
-  // project context markdown (truncated 3500)
-  let contextMarkdown = "";
-  if (admin) {
-    try {
-      const ctxObj = await doGetContext(admin, brandKey);
-      const md = doRender(ctxObj);
-      contextMarkdown = md.slice(0, 3500);
-    } catch {
-      contextMarkdown = "";
+    // project context markdown (truncated 3500)
+    let contextMarkdown = "";
+    if (admin) {
+      try {
+        const ctxObj = await doGetContext(admin, brandKey);
+        const md = doRender(ctxObj);
+        contextMarkdown = md.slice(0, 3500);
+      } catch {
+        contextMarkdown = "";
+      }
     }
-  }
 
-  const prompt = buildClusterPrompt(keywordRows, contextMarkdown);
+    const prompt = buildClusterPrompt(keywordRows, contextMarkdown);
 
-  const result = await doLlmObject({
-    brandKey,
-    feature: "keywords.clustering",
-    schema: clusterOutputSchema,
-    system: CLUSTER_SYSTEM,
-    prompt,
-    maxUsd: approvedMaxUsd,
-    idempotencyKey: `job:${ctx.jobId}:cluster`,
-    maxOutputTokens: 8000,
-    timeoutMs: 180000,
-  });
+    const result = await doLlmObject({
+      brandKey,
+      feature: "keywords.clustering",
+      schema: clusterOutputSchema,
+      system: CLUSTER_SYSTEM,
+      prompt,
+      maxUsd: approvedMaxUsd,
+      idempotencyKey: jobStepKey(ctx, "cluster"),
+      maxOutputTokens: 8000,
+      timeoutMs: 180000,
+    });
 
-  const validated = validateClusters(result.object, n);
+    const validated = validateClusters(result.object, n);
 
-  const clusters = validated.clusters.map((c) => ({
-    name: c.name,
-    intent: c.intent,
-    priority: c.priority,
-    targetPage: c.targetPage,
-    rationale: c.rationale,
-    savedKeywordIds: c.keywordIndexes.map((i) => keywordRows[i].id),
-  }));
+    const clusters = validated.clusters.map((c) => ({
+      name: c.name,
+      intent: c.intent,
+      priority: c.priority,
+      targetPage: c.targetPage,
+      rationale: c.rationale,
+      savedKeywordIds: c.keywordIndexes.map((i) => keywordRows[i].id),
+    }));
 
-  const unsortedIds = validated.unsorted.map((i) => keywordRows[i].id);
+    const unsortedIds = validated.unsorted.map((i) => keywordRows[i].id);
+
+    return {
+      n,
+      clusters,
+      unsorted: unsortedIds,
+      model: result.model,
+      usd: result.usd,
+    };
+  };
+  const stepped = ctx.step
+    ? await ctx.step.do("cluster", LONG_PAID_STEP, runStep)
+    : await runStep();
+  const { n, clusters, unsorted: unsortedIds } = stepped;
 
   // log
   try {
@@ -253,8 +272,8 @@ export async function runClusterJob(
     result: {
       clusters,
       unsorted: unsortedIds,
-      model: result.model,
-      usd: result.usd,
+      model: stepped.model,
+      usd: stepped.usd,
     },
   };
 }
