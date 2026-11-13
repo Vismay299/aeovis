@@ -16,6 +16,7 @@
 
 import {
   BookOpen,
+  Bookmark,
   Globe,
   LayoutDashboard,
   MapPin,
@@ -118,6 +119,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: Search,
         badge: "gsc",
         prefetch: gscQueryOptions,
+      },
+      {
+        id: "saved-keywords",
+        label: "Saved Keywords",
+        href: "/portal/keywords/saved",
+        icon: Bookmark,
+        flag: "keyword_research",
       },
     ],
   },

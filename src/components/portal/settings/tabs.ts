@@ -24,5 +24,6 @@ export const SETTINGS_TABS: SettingsTab[] = [
   { href: "/portal/settings/privacy", label: "Privacy", flag: "product_analytics" },
   { href: "/portal/settings/indexnow", label: "IndexNow", flag: "indexnow" },
   { href: "/portal/settings/schedule", label: "Schedule", flag: "customer_scheduling" },
+  { href: "/portal/settings/integrations", label: "Integrations", flag: "ga4", ownerOnly: false },
 ];
 

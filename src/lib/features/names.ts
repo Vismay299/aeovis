@@ -53,6 +53,9 @@ export const FEATURES = {
   site_audit_lighthouse: { spend: ["site_audit.lighthouse"] as const },
   site_audit_render: { spend: ["site_audit.render"] as const },
   site_audit_crawler_access: { spend: [] as const },
+  // F06 phase 3: gates the server-side export route and the Scans "All answers"
+  // export scope. Storage only; no paid provider calls.
+  server_exports: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

@@ -90,6 +90,15 @@ export const keys = {
     ["backlinkSnapshotTargets", brandKey] as const,
   backlinkSnapshots: (brandKey: string, target: string, scope: string) =>
     ["backlinkSnapshots", brandKey, target, scope] as const,
+  // F20
+  ga4Connection: (brandKey: string) => ["ga4Connection", brandKey] as const,
+  ga4Properties: (brandKey: string) => ["ga4Properties", brandKey] as const,
+  ga4Accounts: (brandKey: string) => ["ga4Accounts", brandKey] as const,
+  ga4Overview: (brandKey: string, range: string) => ["ga4Overview", brandKey, range] as const,
+  ga4Report: (brandKey: string, kind: string, paramsHash: string) =>
+    ["ga4Report", brandKey, kind, paramsHash] as const,
+  ga4Health: (brandKey: string) => ["ga4Health", brandKey] as const,
+  ga4Opportunities: (brandKey: string, range: string) => ["ga4Opportunities", brandKey, range] as const,
 } as const;
 
 export const privacyKeys = {
@@ -129,6 +138,13 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "ahrefsRatings",
   "backlinkSnapshotTargets",
   "backlinkSnapshots",
+  "ga4Connection",
+  "ga4Properties",
+  "ga4Accounts",
+  "ga4Overview",
+  "ga4Report",
+  "ga4Health",
+  "ga4Opportunities",
 ]);
 
 export function isWorkspaceKey(

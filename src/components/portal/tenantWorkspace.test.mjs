@@ -60,6 +60,7 @@ test("tenant Scans renders a runnable mock inside the tenant page rather than li
         useSelectionAnchor: () => ({ current: null }),
       }],
       ["@/components/app/export/useExportRows", { useExportRows: () => () => {} }],
+      ["@/components/app/export/useServerExport", { useServerExport: () => ({ mutate: () => {}, isPending: false }) }],
       ["@/components/app/QueryState", { QueryError: () => null }],
       ["@/lib/export/filenames", await import("../../lib/export/filenames.ts")],
       ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (_schema, defaults) => [defaults, () => {}] }],

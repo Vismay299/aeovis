@@ -69,6 +69,13 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.domainPages("acme", "pages-input"),
     keys.domainCompetitors("acme", "competitors-input"),
     keys.declaredCompetitors("acme"),
+    keys.ga4Connection("acme"),
+    keys.ga4Properties("acme"),
+    keys.ga4Accounts("acme"),
+    keys.ga4Overview("acme", "last_28_days"),
+    keys.ga4Report("acme", "landing_pages", "hash"),
+    keys.ga4Health("acme"),
+    keys.ga4Opportunities("acme", "last_28_days"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
