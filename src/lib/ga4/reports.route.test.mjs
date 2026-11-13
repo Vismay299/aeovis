@@ -23,7 +23,8 @@ function deps({ user = OWNER, role = "owner", flag = true, ...over } = {}) {
   };
 }
 
-const get = (route, path, d, params) => route.GET(new Request(`https://app.test${path}`), params ? { params } : {}, d);
+// Next 15 hands dynamic routes their params as a Promise.
+const get = (route, path, d, params) => route.GET(new Request(`https://app.test${path}`), params ? { params: Promise.resolve(params) } : {}, d);
 
 test("flag off answers 404 before any provider call", async () => {
   let calls = 0;
@@ -107,4 +108,15 @@ test("health route is flag-gated and no-store", async () => {
   const ok = await get(healthRoute, "/api/customer/ga4/health?brand_key=acme", deps({ getMeasurementHealth: async () => ({ status: "ok" }) }));
   assert.equal(ok.status, 200);
   assert.equal(ok.headers.get("cache-control"), "no-store");
+});
+
+test("boolean query flags parse \"false\" as false", async () => {
+  let seen = null;
+  const d = deps({ runReport: async (_admin, _ws, input) => { seen = input; return { rows: [] }; } });
+  const res = await get(reportsRoute, "/api/customer/ga4/reports/landing_pages?brand_key=acme&includeDate=false&comparePreviousPeriod=true", d, { kind: "landing_pages" });
+  assert.equal(res.status, 200);
+  assert.equal(seen.includeDate, false);
+  assert.equal(seen.comparePreviousPeriod, true);
+  const bad = await get(reportsRoute, "/api/customer/ga4/reports/landing_pages?brand_key=acme&includeDate=yes", d, { kind: "landing_pages" });
+  assert.equal(bad.status, 400);
 });

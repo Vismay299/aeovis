@@ -18,6 +18,10 @@ const GA4_REPORT_KINDS = [
   "audience_breakdown",
 ] as const;
 
+// queryBoolean turns the string "false" into true; accept the two
+// literal strings instead.
+const queryBoolean = z.enum(["true", "false"]).transform((v) => v === "true");
+
 const reportsQuery = z.strictObject({
   brand_key: z.string().optional(),
   range: z.enum(["last_7_days", "last_28_days", "last_90_days"]).optional(),
@@ -26,13 +30,13 @@ const reportsQuery = z.strictObject({
   channel: z.enum(["organic_search", "all"]).optional(),
   limit: z.coerce.number().int().optional(),
   offset: z.coerce.number().int().optional(),
-  includeDate: z.coerce.boolean().optional(),
+  includeDate: queryBoolean.optional(),
   breakdown: z.enum(["event", "event_and_landing_page"]).optional(),
   acquisitionBreakdown: z.enum(["channel_group", "source_medium", "campaign"]).optional(),
   ecommerceBreakdown: z.enum(["item", "landing_page"]).optional(),
-  ecommerceOnlyWithTransactions: z.coerce.boolean().optional(),
+  ecommerceOnlyWithTransactions: queryBoolean.optional(),
   audienceBreakdown: z.enum(["device", "country", "new_vs_returning"]).optional(),
-  comparePreviousPeriod: z.coerce.boolean().optional(),
+  comparePreviousPeriod: queryBoolean.optional(),
 });
 
 export type Ga4ReportsRouteDeps = RequireWorkspaceDeps & {
@@ -67,11 +71,12 @@ function toGa4ErrorResponse(err: unknown): Response {
 
 export async function GET(
   request: Request,
-  ctx: { params: { kind: string } } | any,
+  ctx: { params: Promise<{ kind: string }> | { kind: string } },
   deps?: Ga4ReportsRouteDeps,
 ): Promise<Response> {
   try {
-    const kind = ctx?.params?.kind;
+    // Next 15 passes params as a Promise.
+    const kind = (await ctx?.params)?.kind;
     if (!GA4_REPORT_KINDS.includes(kind as any)) {
       throw new AppError(404, "invalid_request", "Unknown report kind.");
     }
