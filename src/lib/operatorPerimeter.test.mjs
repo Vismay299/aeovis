@@ -281,6 +281,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     "/api/customer/ga4/accounts/[grantId]",
     "/api/customer/ga4/callback",
     "/api/customer/ga4/connect",
+    "/api/customer/ga4/properties",
+    "/api/customer/ga4/property",
     "/api/customer/gsc",
       "/api/customer/gsc/callback",
       "/api/customer/gsc/connect",

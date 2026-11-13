@@ -87,13 +87,15 @@ test("listGrantsForUser: queries grants and computes workspace usage counts", as
       }
       if (table === "ga4_connections") {
         return {
-          select: () => Promise.resolve({
-            data: [
-              { grant_id: "g1" },
-              { grant_id: "g1" },
-              { grant_id: "other" },
-            ],
-            error: null,
+          select: () => ({
+            // The query is scoped to the caller's grants.
+            in: (column: string, ids: string[]) => {
+              assert.equal(column, "grant_id");
+              return Promise.resolve({
+                data: [{ grant_id: "g1" }, { grant_id: "g1" }, { grant_id: "other" }].filter((row) => ids.includes(row.grant_id)),
+                error: null,
+              });
+            },
           }),
         };
       }
