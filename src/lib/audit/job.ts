@@ -167,10 +167,7 @@ export function registerSiteAuditJob(): void {
         // 6. lighthouse (if requested)
         if (freshForCrawl.run_lighthouse) {
           currentPhase = "lighthouse";
-          await ctx.step.do("lighthouse-select", DB_STEP, async () => {
-            const fresh = (await store.getAudit(auditId)) ?? audit;
-            return runLighthousePhase(fresh, store, ctx.jobId);
-          });
+          await runLighthousePhase(ctx, { audit: freshForCrawl, store, admin, deps, jobId: ctx.jobId });
         }
 
         // 7. multipage-checks

@@ -15,6 +15,8 @@ import { AuditPhaseError } from "./errors.ts";
 import { AUDIT_ROBOTS_TOKEN } from "../../shared/audit.ts";
 import type { AuditRow, AuditStore } from "./store.ts";
 import type { DetectedIssue } from "./issues/pageReporters.ts";
+import { selectLighthouseSample, failedLighthouseFetch, fetchLighthouseResult as fetchAuditLighthouse, storeLighthouseResult } from "./lighthouse.ts";
+import { DB_STEP } from "../jobs/stepConfigs.ts";
 
 export interface PhaseDeps {
   safeFetch?: any;
@@ -232,18 +234,109 @@ export async function runSiteChecks(
   return { siteIssues: issues.length };
 }
 
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 /**
- * Runs the Lighthouse phase if requested (Phase 5 will populate full logic).
+ * Runs the Lighthouse phase if requested.
  */
-export async function runLighthousePhase(
-  audit: AuditRow,
-  _store: AuditStore,
-  _jobId: string,
-): Promise<{ pages: Array<{ id: string; url: string }> }> {
-  if (!audit.run_lighthouse) {
+export async function runLighthousePhase(...args: any[]): Promise<any> {
+  // Normalize arguments: support (ctx, params) and legacy (audit, store, jobId).
+  let ctx: any = args[0];
+  let params: any = args[1];
+  if (!ctx || typeof ctx.step?.do !== "function") {
+    const jobId = (params && (params.jobId ?? params?.audit?.id)) ?? "job";
+    ctx = { jobId, step: { do: async (_n: string, _o: any, fn: any) => fn(), sleep: async () => {} } };
+  }
+  let audit: any = params?.audit ?? params;
+  let store: any = params?.store ?? params?.auditStore;
+  const admin = params?.admin;
+  const deps = params?.deps;
+  const jobId = params?.jobId ?? ctx.jobId;
+
+  if (!audit || !store || !audit.run_lighthouse) {
     return { pages: [] };
   }
-  return { pages: [] };
+
+  const candidates = await store.lighthouseCandidates(audit.id);
+  const sampleUrls = selectLighthouseSample(
+    candidates.map((c: any) => ({ url: c.url, statusCode: c.statusCode, fetchClass: c.fetchClass })),
+    audit.start_url,
+    "auto",
+  );
+  const samplePages = candidates.filter((c: any) => sampleUrls.includes(c.url)) as any[];
+
+  try {
+    await store.updateAudit(audit.id, jobId, { lighthouse_total: 2 * samplePages.length });
+  } catch {
+    // ignore
+  }
+
+  const LIGHTHOUSE_LIVE_USD = 0.005;
+  let completed = 0;
+  let failed = 0;
+  const waves = chunkArray(samplePages, 5);
+
+  for (let w = 0; w < waves.length; w++) {
+    const wavePages = waves[w];
+    const calls = wavePages.length * 2;
+    const approved = Number(audit.lighthouse_approved_usd ?? 0);
+
+    const waveResult = await ctx.step.do(
+      `lighthouse-wave-${w + 1}`,
+      { timeoutMs: 140_000, retries: 0, billed: true },
+      async () => {
+        const spent = (completed + failed) * LIGHTHOUSE_LIVE_USD;
+        if (spent + calls * LIGHTHOUSE_LIVE_USD > approved + 0.000001) {
+          return { skipped: true, results: [] as any[] };
+        }
+        const results: any[] = [];
+        for (const page of wavePages as any[]) {
+          for (const strategy of ["mobile", "desktop"] as const) {
+            try {
+              const fetched = await fetchAuditLighthouse(page.url, page.id, strategy);
+              const stored = await storeLighthouseResult({ auditId: audit.id, pageId: page.id, strategy, fetched });
+              results.push(stored ?? fetched.result);
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : String(error);
+              const fr = failedLighthouseFetch(page.url, page.id, strategy, msg);
+              results.push(fr.result);
+            }
+          }
+        }
+        return { skipped: false, results };
+      },
+    );
+
+    if (waveResult?.skipped) continue;
+
+    await ctx.step.do(`lighthouse-persist-${w + 1}`, DB_STEP, async () => {
+      const rows = waveResult?.results ?? [];
+      try {
+        await store.insertLighthouse({ id: audit.id, brandKey: audit.brand_key }, rows);
+      } catch {
+        // ignore
+      }
+      for (const r of rows) {
+        if (r?.errorMessage) failed += 1;
+        else completed += 1;
+      }
+      try {
+        await store.updateAudit(audit.id, jobId, {
+          lighthouse_completed: completed,
+          lighthouse_failed: failed,
+        });
+      } catch {
+        // ignore
+      }
+      return { completed: rows.filter((r: any) => !r?.errorMessage).length, failed: rows.filter((r: any) => r?.errorMessage).length };
+    });
+  }
+
+  return { pages: samplePages.map((p: any) => ({ id: p.id, url: p.url })) };
 }
 
 /**
