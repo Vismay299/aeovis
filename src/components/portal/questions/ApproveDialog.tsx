@@ -41,8 +41,10 @@ export function ApproveDialog({
     return Array.from(m.entries()).sort(([a], [b]) => (a === "General" ? 1 : b === "General" ? -1 : a.localeCompare(b)));
   }, [active]);
   const diagnosticCount = active.filter((q) => q.branded).length;
-  const recommendationCount = Math.max(0, active.length - diagnosticCount);
-  const informationCount = 0; // dry-run summary not exposed; keep simple
+  // The recommendation/information split is decided server-side at approval
+  // (no dry-run endpoint), so only the diagnostic count is known here.
+  const nonDiagnosticCount = Math.max(0, active.length - diagnosticCount);
+  const firstApproval = !state.approved;
 
   async function approve() {
     setConflict(false);
@@ -51,13 +53,14 @@ export function ApproveDialog({
       const res = await mutations.approve.mutateAsync({ expectedRevision: state.revision });
       const version = res?.panel?.version ?? nextVersion;
       toast.success(`Approved. Scans ask version ${version} from now on.`, {
-        action: !scan?.active ? {
+        // A first approval opens the baseline cost dialog instead.
+        action: !firstApproval && !scan?.active ? {
           label: "Run scan",
           onClick: () => scan?.start?.(),
         } : undefined,
       });
       onApproved();
-      onOfferBaseline();
+      if (firstApproval) onOfferBaseline();
     } catch (e) {
       if (isRevisionConflict(e)) {
         setConflict(true);
@@ -98,7 +101,7 @@ export function ApproveDialog({
             {byTopic.map(([topic, count]) => <div key={topic}>{topic}: {count}</div>)}
           </div>
           <p className="text-sm text-muted-foreground">
-            {recommendationCount} recommendation · {informationCount} information · {diagnosticCount} diagnostic
+            {nonDiagnosticCount} recommendation or information · {diagnosticCount} diagnostic
           </p>
           <p className="text-sm text-muted-foreground">
             Every scan from now on asks exactly these {active.length} questions. Earlier scans keep the version they asked.

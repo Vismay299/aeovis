@@ -1,5 +1,9 @@
 "use client";
 
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/client/features/ai-visibility/TopicField.tsx
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
+
 import * as React from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

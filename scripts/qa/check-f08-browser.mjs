@@ -338,10 +338,12 @@ try {
       await scanDialog.waitFor({ state: "hidden", timeout: 5000 });
       assert.equal(scanPosts.length, 0, "cancel must not start scan");
 
+      // Same first approval again (fresh workspace state), this time confirming.
+      approvedVersion = null;
       dirty = true;
       revision += 1;
       await page.reload({ waitUntil: "networkidle" });
-      await page.getByRole("button", { name: "Approve changes" }).first().click();
+      await page.getByRole("button", { name: "Approve" }).first().click();
       approveDialog = page.locator('[data-slot="dialog-content"]').filter({ hasText: "Approve version" }).first();
       await approveDialog.waitFor({ state: "visible", timeout: 10000 });
       await approveDialog.getByRole("button", { name: "Approve" }).click();
@@ -352,10 +354,26 @@ try {
       await page.waitForTimeout(500);
       assert.equal(scanPosts.length, 1, "confirm must start scan once");
       assert.equal(scanPosts[0]?.maxUsd, 24, "scan must be posted with approved maxUsd");
-      return "Baseline dialog: cancel started nothing, confirm posted scan with maxUsd, warning visible.";
+
+      // A later re-approval only toasts; it does not offer the first-scan dialog again.
+      dirty = true;
+      revision += 1;
+      await page.reload({ waitUntil: "networkidle" });
+      await page.getByRole("button", { name: "Approve changes" }).first().click();
+      approveDialog = page.locator('[data-slot="dialog-content"]').filter({ hasText: "Approve version 2" }).first();
+      await approveDialog.waitFor({ state: "visible", timeout: 10000 });
+      await approveDialog.getByRole("button", { name: "Approve" }).click();
+      await page.getByText("Approved. Scans ask version 2 from now on.").waitFor({ timeout: 10000 });
+      await page.waitForTimeout(300);
+      assert.equal(
+        await page.locator('[data-slot="dialog-content"]').filter({ hasText: "Run your first scan" }).count(),
+        0,
+        "re-approval must not reopen the first-scan dialog",
+      );
+      assert.equal(scanPosts.length, 1, "re-approval starts nothing");
+      return "Baseline dialog: cancel started nothing, confirm posted scan with maxUsd, warning visible; re-approval only toasts.";
     } finally { await context.close(); }
   });
-  // B6-B9 placeholders to be expanded? For now ensure script structure works; but spec requires all pass.
   await record("B6", "near-duplicate keep both with reason then approve", async () => {
     const { context, page } = await openPortal(browser, origin, { viewport: { width: 1440, height: 1000 } });
     try {

@@ -897,6 +897,9 @@ test("measurement page swaps legacy question panel for QuestionsWorkspace when q
   const cards = findAllNodes(lifecycle.output, (node) => node.type === ui.Card);
   const legacy = cards.find((c) => c.props?.title === "Question panel");
   assert.equal(legacy, undefined, "legacy Question panel card must not render when question_curation is on");
-  const stub = find(lifecycle.output, (node) => node?.props?.["data-testid"] === "questions-workspace-stub");
+  // The page has loaded (other cards render), so the missing legacy card is a swap, not a skeleton.
+  assert.ok(cards.some((c) => c.props?.title === "Website technical evidence"), "measurement page must have loaded");
+  // The render tree holds elements, not their output, so match the stub by type.
+  const stub = findAllNodes(lifecycle.output, (node) => node.type === QuestionsWorkspaceStub)[0];
   assert.ok(stub, "QuestionsWorkspace must render when question_curation is on");
 });

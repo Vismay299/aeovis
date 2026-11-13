@@ -1,7 +1,3 @@
-// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
-//   src/client/features/ai-visibility/TrackerPromptFields.tsx (row actions pattern)
-// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
-
 "use client";
 
 import * as React from "react";

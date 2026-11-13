@@ -1,7 +1,3 @@
-// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
-//   (question history link affordance; spec F12 §6.6)
-// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
-
 import * as React from "react";
 import Link from "next/link";
 import { History } from "lucide-react";
