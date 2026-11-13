@@ -1,0 +1,36 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "tasks": [
+    {
+      "id": "lighthouse-desktop-task-1",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "path": ["v3", "on_page", "lighthouse", "live", "json"],
+      "cost": 0.00425,
+      "result": [
+        {
+          "requestedUrl": "https://example.com/about",
+          "finalUrl": "https://example.com/about",
+          "lighthouseVersion": "12.2.0",
+          "categories": {
+            "performance": { "score": 0.88, "auditRefs": [{ "id": "color-contrast" }] },
+            "accessibility": { "score": 0.71, "auditRefs": [{ "id": "color-contrast" }] },
+            "best-practices": { "score": 0.95, "auditRefs": [] },
+            "seo": { "score": 0.9, "auditRefs": [] }
+          },
+          "audits": {
+            "color-contrast": {
+              "title": "Background and foreground colors do not have a sufficient contrast ratio.",
+              "description": "Improve contrast.",
+              "score": 0,
+              "scoreDisplayMode": "binary",
+              "displayValue": null,
+              "details": { "overallSavingsBytes": 51000, "items": [{ "url": "https://example.com/about" }] }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

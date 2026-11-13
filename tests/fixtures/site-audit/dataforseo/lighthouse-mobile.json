@@ -1,0 +1,63 @@
+{
+  "status_code": 20000,
+  "status_message": "Ok.",
+  "tasks": [
+    {
+      "id": "lighthouse-mobile-task-1",
+      "status_code": 20000,
+      "status_message": "Ok.",
+      "path": ["v3", "on_page", "lighthouse", "live", "json"],
+      "cost": 0.00425,
+      "result": [
+        {
+          "requestedUrl": "https://example.com/",
+          "finalUrl": "https://example.com/",
+          "lighthouseVersion": "12.2.0",
+          "categories": {
+            "performance": { "score": 0.54, "auditRefs": [{ "id": "unused-javascript" }] },
+            "accessibility": { "score": 0.93, "auditRefs": [] },
+            "best-practices": { "score": 0.79, "auditRefs": [] },
+            "seo": { "score": 0.92, "auditRefs": [] }
+          },
+          "audits": {
+            "unused-javascript": {
+              "title": "Reduce unused JavaScript",
+              "description": "Trim dead code.",
+              "score": 0,
+              "scoreDisplayMode": "metricSavings",
+              "displayValue": "Potential savings of 188 KiB",
+              "numericValue": 193002,
+              "details": {
+                "overallSavingsMs": 1270,
+                "overallSavingsBytes": 193002,
+                "items": [{ "url": "https://cdn.example.com/app.js", "wastedBytes": 193002 }]
+              }
+            },
+            "interactive": {
+              "title": "Time to Interactive",
+              "description": "Time until the page becomes interactive.",
+              "score": 0.13,
+              "scoreDisplayMode": "numeric",
+              "displayValue": "12.8 s",
+              "numericValue": 12800
+            },
+            "largest-contentful-paint": {
+              "title": "Largest Contentful Paint",
+              "score": 0.54,
+              "scoreDisplayMode": "numeric",
+              "displayValue": "2.5 s",
+              "numericValue": 2500
+            },
+            "server-response-time": {
+              "title": "Server response time",
+              "score": 0.9,
+              "scoreDisplayMode": "numeric",
+              "displayValue": "0.2 s",
+              "numericValue": 200
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

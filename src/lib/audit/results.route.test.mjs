@@ -6,8 +6,10 @@ import { GET as summaryGet } from "../../app/api/customer/audit/[auditId]/summar
 import { GET as issuesGet } from "../../app/api/customer/audit/[auditId]/issues/route.ts";
 import { GET as pagesGet } from "../../app/api/customer/audit/[auditId]/pages/route.ts";
 import { GET as performanceGet } from "../../app/api/customer/audit/[auditId]/performance/route.ts";
+import { GET as lighthouseDetailGet } from "../../app/api/customer/audit/[auditId]/lighthouse/[resultId]/route.ts";
+import { GET as lighthouseExportGet } from "../../app/api/customer/audit/[auditId]/lighthouse/[resultId]/export/route.ts";
 import { AppError } from "../http/appError.ts";
-import { getAuditFeed, getAuditSummary, listAuditIssues, listAuditPages } from "./results.ts";
+import { getAuditFeed, getAuditSummary, listAuditIssues, listAuditPages, getLighthouseDetail } from "./results.ts";
 
 const auditId = "6f1d2c3b-0a4e-4b8f-9c1d-2e3f4a5b6c7d";
 const workspace = { user: { id: "user-1", email: "owner@example.com" }, brandKey: "brand-1", role: "owner", brand: {}, admin: {} };
@@ -176,4 +178,174 @@ test("in-memory result readers apply filters, order and pagination", async () =>
   assert.equal(summary.issueGroups.find((group) => group.issueType === "missing-title").pages, 2);
   assert.equal(summary.stats.averageResponseMs, 600);
   assert.equal(summary.flags.linkGraphComplete, true);
+});
+
+const resultId = "11111111-2222-4333-8555-666666666666";
+const lhContext = { params: { auditId, resultId } };
+function lhRequest(path = "") {
+  return new Request(`https://app.example/api/customer/audit/${auditId}/lighthouse/${resultId}${path}`);
+}
+const lhDetail = {
+  id: resultId,
+  finalUrl: "https://example.com/",
+  strategy: "mobile",
+  createdAt: "2026-11-01T00:01:00.000Z",
+  hasIssueDetails: true,
+  scores: { performance: 80, accessibility: 90, "best-practices": 92, seo: 88 },
+  metrics: {},
+  issues: [{ category: "performance", auditKey: "unused-javascript", title: "Reduce unused JavaScript", severity: "critical" }],
+};
+
+test("lighthouse detail returns scores and filters refusal happens before any provider call", async () => {
+  let providerCalls = 0;
+  const response = await lighthouseDetailGet(lhRequest(), lhContext, {
+    ...baseDeps,
+    getLighthouseDetail: async () => {
+      providerCalls += 1;
+      return lhDetail;
+    },
+  });
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  const body = await response.json();
+  assert.equal(body.finalUrl, "https://example.com/");
+  assert.equal(body.scores.performance, 80);
+  assert.equal(providerCalls, 1);
+});
+
+test("lighthouse detail without stored payload is a 404 with details copy", async () => {
+  const response = await lighthouseDetailGet(lhRequest(), lhContext, {
+    ...baseDeps,
+    getLighthouseDetail: async () => {
+      throw new AppError(404, "lighthouse_details_unavailable", "This Lighthouse run was saved without details.");
+    },
+  });
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).code, "lighthouse_details_unavailable");
+});
+
+test("lighthouse detail is workspace-scoped and flag-gated", async () => {
+  const hidden = await lighthouseDetailGet(lhRequest(), lhContext, {
+    ...baseDeps,
+    getLighthouseDetail: async () => {
+      throw new AppError(404, "audit_not_found", "Audit not found.");
+    },
+  });
+  assert.equal(hidden.status, 404);
+  const off = await lighthouseDetailGet(lhRequest(), lhContext, { ...baseDeps, isFeatureEnabled: async () => false });
+  assert.equal(off.status, 404);
+  assert.equal((await off.json()).code, "feature_unavailable");
+});
+
+test("getLighthouseDetail reads the stored payload and throws when details are missing", async () => {
+  const payload = JSON.stringify({
+    version: 2,
+    source: "dataforseo-lighthouse",
+    hasIssueDetails: true,
+    metadata: {
+      requestedUrl: "https://example.com/",
+      finalUrl: "https://example.com/",
+      strategy: "mobile",
+      fetchedAt: "2026-11-01T00:01:00.000Z",
+      lighthouseVersion: null,
+      taskId: null,
+      cost: null,
+    },
+    scores: { performance: 80, accessibility: 90, "best-practices": 92, seo: 88 },
+    metrics: {
+      firstContentfulPaint: { score: null, displayValue: null, numericValue: null },
+      largestContentfulPaint: { score: null, displayValue: "1.1 s", numericValue: 1100 },
+      totalBlockingTime: { score: null, displayValue: null, numericValue: null },
+      cumulativeLayoutShift: { score: null, displayValue: null, numericValue: 0.02 },
+      speedIndex: { score: null, displayValue: null, numericValue: null },
+      timeToInteractive: { score: null, displayValue: null, numericValue: null },
+      interactionToNextPaint: { score: null, displayValue: null, numericValue: 130 },
+      serverResponseTime: { score: null, displayValue: null, numericValue: 250 },
+    },
+    issues: [],
+  });
+  const admin = {
+    from(table) {
+      return {
+        select() { return this; },
+        eq() { return this; },
+        async maybeSingle() {
+          if (table === "site_audits") return { data: { id: auditId }, error: null };
+          return {
+            data: {
+              id: resultId,
+              strategy: "mobile",
+              created_at: "2026-11-01T00:01:00.000Z",
+              performance_score: 80,
+              accessibility_score: 90,
+              best_practices_score: 92,
+              seo_score: 88,
+              payload_path: "brand-1/audit-1/p-a-mobile.json",
+            },
+            error: null,
+          };
+        },
+      };
+    },
+    storage: {
+      from() {
+        return {
+          async download() {
+            return { data: { text: async () => payload }, error: null };
+          },
+        };
+      },
+    },
+  };
+  const detail = await getLighthouseDetail(admin, "brand-1", auditId, resultId);
+  assert.equal(detail.finalUrl, "https://example.com/");
+  assert.equal(detail.metrics.largestContentfulPaint.numericValue, 1100);
+  const missing = {
+    from(table) {
+      return {
+        select() { return this; },
+        eq() { return this; },
+        async maybeSingle() {
+          if (table === "site_audits") return { data: { id: auditId }, error: null };
+          return { data: { id: resultId, payload_path: null }, error: null };
+        },
+      };
+    },
+    storage: { from() { return { async download() { return { data: null, error: new Error("nope") }; } }; } },
+  };
+  await assert.rejects(getLighthouseDetail(missing, "brand-1", auditId, resultId), (err) => {
+    assert.equal(err.code, "lighthouse_details_unavailable");
+    return true;
+  });
+});
+
+test("lighthouse export validates mode and returns the filtered file", async () => {
+  const bad = await lighthouseExportGet(lhRequest("?mode=category"), lhContext, {
+    ...baseDeps,
+    getLighthouseDetail: async () => lhDetail,
+  });
+  assert.equal(bad.status, 400);
+  const issuesFile = await lighthouseExportGet(lhRequest("?mode=issues"), lhContext, {
+    ...baseDeps,
+    getLighthouseDetail: async () => lhDetail,
+    downloadPayload: async () => JSON.stringify({
+      version: 2,
+      source: "dataforseo-lighthouse",
+      hasIssueDetails: true,
+      metadata: {
+        requestedUrl: "https://example.com/",
+        finalUrl: "https://example.com/",
+        strategy: "mobile",
+        fetchedAt: "2026-11-01T00:01:00.000Z",
+        lighthouseVersion: null,
+        taskId: null,
+        cost: null,
+      },
+      scores: { performance: 80, accessibility: 90, "best-practices": 92, seo: 88 },
+      metrics: {},
+      issues: [],
+    }),
+  });
+  assert.equal(issuesFile.headers.get("content-disposition").includes(".json"), true);
+  const off = await lighthouseExportGet(lhRequest(), lhContext, { ...baseDeps, isFeatureEnabled: async () => false });
+  assert.equal(off.status, 404);
 });

@@ -255,6 +255,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/audit/[auditId]/pages",
       "/api/customer/audit/[auditId]/performance",
       "/api/customer/audit/[auditId]/summary",
+      "/api/customer/audit/[auditId]/lighthouse/[resultId]",
+      "/api/customer/audit/[auditId]/lighthouse/[resultId]/export",
       "/api/customer/content",
     "/api/customer/content/[id]",
     "/api/customer/context",
