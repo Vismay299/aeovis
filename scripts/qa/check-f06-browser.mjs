@@ -274,6 +274,70 @@ try {
       await context.close();
     }
   });
+
+  await record("F06-B06", "With server_exports on, the All answers CSV scope posts once, navigates to the signed link and shows the ready toast; with it off the scope is absent.", async () => {
+    const history = await readFixture("scans-acme-history.json");
+    const features = await readFixture("features-acme-server-exports.json");
+    const { context, page, blockedWrites } = await openScans();
+    try {
+      await setScanResponse(page, history);
+      await page.route("**/api/customer/features*", (route) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(features) }),
+      );
+      let exportPosts = 0;
+      await page.route("**/api/customer/exports", async (route) => {
+        exportPosts += 1;
+        assert.equal(route.request().method(), "POST");
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            exportId: "3f1c8a52-7d4e-4b8a-9a3e-2c6f0d9b1e47",
+            url: new URL("/__qa/download.csv", origin).href,
+            expiresAt: "2026-10-21T11:00:00.000Z",
+            format: "csv",
+            rowCount: 12,
+            filename: "perceev-acme-answers-2026-07-23-to-2026-10-21.csv",
+          }),
+        });
+      });
+      let downloads = 0;
+      await page.route("**/__qa/download.csv", (route) => {
+        downloads += 1;
+        return route.fulfill({
+          status: 200,
+          headers: {
+            "content-type": "text/csv",
+            "content-disposition": 'attachment; filename="qa-export.csv"',
+          },
+          body: '"Date","AI visibility (%)"\r\n"2026-08-01","50"',
+        });
+      });
+
+      await page.goto(new URL("/portal/scans", origin).href, { waitUntil: "networkidle" });
+      const menu = page.getByRole("button", { name: "Export" }).first();
+      await menu.click();
+      await page.getByRole("menuitem", { name: "All answers, last 90 days (CSV)" }).click();
+      await page.getByText("Export ready. Your download has started.").waitFor({ state: "visible", timeout: 10000 });
+      assert.equal(exportPosts, 1, "one POST to the export route");
+      assert.equal(downloads, 1, "the browser navigates to the signed link once");
+      assert.equal(blockedWrites.length, 0, "the page-level route fulfils the POST, so the write guard never sees it");
+
+      const off = await openScans();
+      try {
+        await setScanResponse(off.page, history);
+        await off.page.goto(new URL("/portal/scans", origin).href, { waitUntil: "networkidle" });
+        await off.page.getByRole("button", { name: "Export" }).first().click();
+        assert.equal(await off.page.getByRole("menuitem", { name: /All answers/ }).count(), 0);
+        assert.equal(off.blockedWrites.length, 0);
+      } finally {
+        await off.context.close();
+      }
+      return "Server scope posted once, downloaded the signed link and toasted; it was absent with the flag off.";
+    } finally {
+      await context.close();
+    }
+  });
 } finally {
   await browser.close();
 }

@@ -548,3 +548,9 @@ SOFTWARE.
 - src/lib/rank-tracking/cost.test.ts
 - src/lib/rank-tracking/retries.test.ts
 - src/lib/rank-tracking/schedules.test.ts
+
+### F06 Phase 3 ports
+- src/lib/export/serverCsv.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/lib/export/serverExport.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/lib/export/kinds/workspaceAnswers.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/app/api/customer/exports/route.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)

@@ -61,15 +61,20 @@ export function ExportMenu<A extends ExportAction>({
   disabled?: boolean;
   /** Label for "copy-list", for example "Copy keywords". */
   copyListLabel?: string;
-  scopes?: { id: string; label: string; actions?: A[] }[];
+  /**
+   * A scope may rename its own items when the action alone is ambiguous, for
+   * example F06's "All answers, last 90 days (CSV)".
+   */
+  scopes?: { id: string; label: string; actions?: A[]; labels?: Partial<Record<A, string>> }[];
 }) {
-  const renderItems = (scope?: string, scopeActions: A[] = actions) =>
+  const renderItems = (scope?: string, scopeActions: A[] = actions, labels?: Partial<Record<A, string>>) =>
     scopeActions.map((action) => (
       <DropdownMenuItem key={action} onClick={() => onExport(action, scope)}>
         {ACTION_ITEMS[action].icon}
-        {action === "copy-list" && copyListLabel
-          ? copyListLabel
-          : ACTION_ITEMS[action].label}
+        {labels?.[action] ??
+          (action === "copy-list" && copyListLabel
+            ? copyListLabel
+            : ACTION_ITEMS[action].label)}
       </DropdownMenuItem>
     ));
 
@@ -96,7 +101,7 @@ export function ExportMenu<A extends ExportAction>({
                 {index > 0 ? <DropdownMenuSeparator /> : null}
                 <DropdownMenuGroup>
                   <DropdownMenuLabel>{scope.label}</DropdownMenuLabel>
-                  {renderItems(scope.id, scope.actions)}
+                  {renderItems(scope.id, scope.actions, scope.labels)}
                 </DropdownMenuGroup>
               </Fragment>
             ))

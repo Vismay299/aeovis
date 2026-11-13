@@ -21,6 +21,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/040_f01_jobs.sql
 \ir ../supabase/migrations/041_f01_spend.sql
 \ir ../supabase/migrations/043_f01_jobs_cron.sql
+\ir ../supabase/migrations/065_f06_exports.sql
 \ir ../supabase/migrations/070_f07_project_memory.sql
 \ir ../supabase/migrations/075_f08_workspace_questions.sql
 \ir ../supabase/migrations/076_f08_question_backfill.sql
@@ -645,5 +646,38 @@ DO $f17$ BEGIN
 END $f17$;
 RESET ROLE;
 -- End F17 tenant check.
+
+-- F06 phase 3: export_requests is tenant data. One row per fixture workspace;
+-- a member reads only their own workspace's row and `anon` reads none. The seed
+-- runs as the table owner, and the grant is explicit because bare PostgreSQL
+-- has no Supabase default privileges.
+RESET ROLE;
+INSERT INTO public.export_requests(brand_key, kind, format, params, status, row_count, byte_size, storage_path, expires_at) VALUES
+ ('10000000-0000-0000-0000-000000000001','workspace_answers','csv','{"from":"2026-07-01","to":"2026-07-31"}','ready',10,100,'10000000-0000-0000-0000-000000000001/workspace_answers/f06-a.csv',now() + interval '1 hour'),
+ ('10000000-0000-0000-0000-000000000002','workspace_answers','json','{"from":"2026-07-01","to":"2026-07-31"}','ready',5,50,'10000000-0000-0000-0000-000000000002/workspace_answers/f06-b.json',now() + interval '1 hour');
+GRANT SELECT ON public.export_requests TO authenticated;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $f06$ BEGIN
+  IF (SELECT count(*) FROM public.export_requests) <> 1
+   OR NOT EXISTS(SELECT 1 FROM public.export_requests WHERE brand_key='10000000-0000-0000-0000-000000000001')
+  THEN RAISE EXCEPTION 'F06 export rows leaked across customer workspaces'; END IF;
+END $f06$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $f06$ BEGIN
+  IF (SELECT count(*) FROM public.export_requests) <> 1
+   OR NOT EXISTS(SELECT 1 FROM public.export_requests WHERE brand_key='10000000-0000-0000-0000-000000000002')
+  THEN RAISE EXCEPTION 'F06 export rows leaked across customer workspaces'; END IF;
+END $f06$;
+SET LOCAL ROLE anon;
+DO $f06$ BEGIN
+  BEGIN
+    PERFORM count(*) FROM public.export_requests;
+    RAISE EXCEPTION 'F06 anon read of export_requests was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $f06$;
+RESET ROLE;
+-- End F06 tenant check.
 ROLLBACK;
 
