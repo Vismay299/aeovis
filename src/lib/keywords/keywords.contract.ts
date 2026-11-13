@@ -685,6 +685,97 @@ export const keywordLocationsContract = defineRouteContract({
   ],
 });
 
+export const clusterBody = z.strictObject({
+  brand_key: z.string().min(1).max(200).optional(),
+  savedKeywordIds: z.array(z.string().uuid()).min(10).max(500),
+  maxUsd: z.number().positive().max(1000).optional(),
+});
+
+export const clusterResponse = z.looseObject({
+  jobId: z.string(),
+  status: z.literal("queued"),
+  pollAfterSeconds: z.number(),
+});
+
+export const clusterContract = defineRouteContract({
+  id: "customer.keywords.cluster",
+  method: "POST",
+  path: "/api/customer/keywords/cluster",
+  file: "src/app/api/customer/keywords/cluster/route.ts",
+  auth: "workspace",
+  request: clusterBody,
+  response: clusterResponse,
+  errorCodes: [
+    "invalid_request",
+    "invalid_json",
+    "too_few_keywords",
+    "job_already_running",
+    "approval_required",
+    "price_changed",
+    "feature_unavailable",
+    "unauthenticated",
+    "unauthorized",
+    "workspace_not_found",
+  ],
+  examples: [
+    {
+      response: {
+        jobId: "00000000-0000-0000-0000-000000000001",
+        status: "queued" as const,
+        pollAfterSeconds: 3,
+      },
+    },
+  ],
+});
+
+export const clusterApplyBody = z.strictObject({
+  brand_key: z.string().min(1).max(200).optional(),
+  jobId: z.string().uuid(),
+  clusters: z
+    .array(
+      z.strictObject({
+        name: z.string().trim().min(1).max(64),
+        savedKeywordIds: z.array(z.string().uuid()).min(1).max(500),
+      }),
+    )
+    .min(1)
+    .max(60),
+});
+
+export const clusterApplyResponse = z.looseObject({
+  taggedCount: z.number(),
+  tags: z.array(z.looseObject({})),
+});
+
+export const clusterApplyContract = defineRouteContract({
+  id: "customer.keywords.cluster.apply",
+  method: "POST",
+  path: "/api/customer/keywords/cluster/apply",
+  file: "src/app/api/customer/keywords/cluster/apply/route.ts",
+  auth: "workspace",
+  request: clusterApplyBody,
+  response: clusterApplyResponse,
+  errorCodes: [
+    "invalid_request",
+    "invalid_json",
+    "job_not_found",
+    "job_not_ready",
+    "tag_limit",
+    "feature_unavailable",
+    "unauthenticated",
+    "unauthorized",
+    "workspace_not_found",
+  ],
+  examples: [
+    {
+      response: {
+        taggedCount: 9,
+        tags: [],
+      },
+    },
+  ],
+});
+
 export const contracts: RouteContract[] = [
   keywordResearchContract,
   serpContract,
@@ -697,4 +788,6 @@ export const contracts: RouteContract[] = [
   savedKeywordsExportContract,
   savedKeywordsRefreshContract,
   keywordLocationsContract,
+  clusterContract,
+  clusterApplyContract,
 ];
