@@ -12,6 +12,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ExportMenu } from "@/components/app/ExportMenu";
 import { QueryError } from "@/components/app/QueryState";
 import { PricedActionButton } from "@/components/app/cost/PricedActionButton";
@@ -51,6 +52,8 @@ type Props = {
   /** The overview's hostname, sent to the competitors route. */
   domain: string;
   scope: ResearchScope;
+  /** The shown market's language, sent with the request and the quote. */
+  languageCode: string;
   routeState: DomainOverviewRouteState;
   tabs: ReactNode;
   hasProjectMemory: boolean;
@@ -74,6 +77,7 @@ export function CompetitorsTab({
   displayTarget,
   domain,
   scope,
+  languageCode,
   routeState,
   tabs,
   hasProjectMemory,
@@ -86,16 +90,9 @@ export function CompetitorsTab({
     context: string;
     maxUsd: number;
   } | null>(null);
-  const approvalContext = JSON.stringify([
-    brandKey,
-    routeState.domain,
-    routeState.scope,
-    routeState.locationCode,
-  ]);
-  const liveMaxUsd =
-    approval?.context === approvalContext ? approval.maxUsd : undefined;
   const runExport = useExportRows();
   const lastTracked = useRef<string | null>(null);
+  const queryClient = useQueryClient();
 
   // The idle copy counts the rows on the current Top Keywords page, so this
   // tab reads the same page. It is always a cache peek: no gesture, no spend.
@@ -129,11 +126,28 @@ export function CompetitorsTab({
   const sentKeywordCount = requestKeywords.length;
   const priceKeywordCount = Math.max(sentKeywordCount, 1);
 
+  // FE-1: the approval is bound to the exact request, not just the market. A
+  // different keyword set, sort, limit or language drops it and falls back to a
+  // free cache-only read, so an unapproved request can never spend.
+  const approvalContext = JSON.stringify({
+    brandKey,
+    domain,
+    scope,
+    locationCode: routeState.locationCode,
+    languageCode,
+    keywords: requestKeywords,
+    sortBy,
+    limit: COMPETITOR_LIMIT,
+  });
+  const liveMaxUsd =
+    approval?.context === approvalContext ? approval.maxUsd : undefined;
+
   const competitorsQuery = useDomainCompetitorsQuery({
     brandKey,
     domain,
     scope,
     locationCode: routeState.locationCode,
+    languageCode,
     keywords: requestKeywords,
     sortBy,
     limit: COMPETITOR_LIMIT,
@@ -151,6 +165,19 @@ export function CompetitorsTab({
   const priceChanged = domainPriceChangeFromError(competitorsQuery.error);
 
   const fetchedAt = response?.status === "ok" ? response.fetchedAt : undefined;
+
+  // FE-2: a paid run fills the provider cache, so every sibling cache-only read
+  // (a remount, a sort round-trip) must revalidate instead of replaying a stale
+  // pre-run "not_cached". Marking the entries stale issues no request now; the
+  // next cache-only read is free.
+  const liveSucceededAt = isOk && liveMaxUsd != null ? (fetchedAt ?? "ok") : null;
+  useEffect(() => {
+    if (liveSucceededAt == null) return;
+    void queryClient.invalidateQueries({
+      queryKey: ["domainCompetitors", brandKey],
+      refetchType: "none",
+    });
+  }, [brandKey, liveSucceededAt, queryClient]);
 
   // One event per paid result set.
   useEffect(() => {
@@ -213,6 +240,7 @@ export function CompetitorsTab({
             domain,
             scope,
             locationCode: routeState.locationCode,
+            languageCode,
             keywordCount: priceKeywordCount,
             limit: COMPETITOR_LIMIT,
           }}
@@ -257,6 +285,7 @@ export function CompetitorsTab({
             domain,
             scope,
             locationCode: routeState.locationCode,
+            languageCode,
             keywordCount: priceKeywordCount,
             limit: COMPETITOR_LIMIT,
           }}

@@ -242,6 +242,20 @@ export function KeywordsTab({
     });
   }, []);
 
+  // O6: a new page, page size, sort or filter set means a different row set, so
+  // a selection carried over from the previous view would no longer match what
+  // the bulk bar counts and exports.
+  const selectionViewKey = JSON.stringify([
+    routeState.page,
+    routeState.pageSize,
+    routeState.sort,
+    routeState.order,
+    routeState.appliedFilters,
+  ]);
+  useEffect(() => {
+    setSelectedKeywords(new Set());
+  }, [selectionViewKey]);
+
   const handleApplyFilters = useCallback(
     (values: KeywordsFilterValues) => {
       saveKeywordFilters(values);

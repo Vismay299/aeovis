@@ -758,6 +758,20 @@ try {
       assert.equal(savedBody.tagMode, "append");
       assert.equal(blockedWrites.length, 0, "no customer write was aborted");
 
+      // O6: a new sort means a different row set, so the selection (and its bulk
+      // bar) must not survive it.
+      await page.getByRole("button", { name: "Sort by Volume" }).click();
+      await page.waitForFunction(
+        () => !document.querySelector('[role="toolbar"][aria-label="Bulk actions"]'),
+        undefined,
+        { timeout: 10000 },
+      );
+      assert.equal(
+        await page.getByRole("toolbar", { name: "Bulk actions" }).count(),
+        0,
+        "a sort change clears the keyword selection",
+      );
+
       // The form's market no longer matches the shown one (the overview still answers India).
       await page.getByLabel("Country").click();
       await page.getByLabel("Country").fill("United States");
@@ -1078,6 +1092,11 @@ try {
         Math.abs(liveRequest.maxUsd - 0.018) < 1e-9,
         `the live request carried the approved maxUsd: ${liveRequest.maxUsd}`,
       );
+      assert.equal(
+        liveRequest.languageCode,
+        "en",
+        "the approved request carries the shown market's language",
+      );
 
       // A sort change re-reads the 12-hour cache and never spends again.
       await page.getByRole("combobox", { name: "Sort competitors" }).click();
@@ -1106,6 +1125,22 @@ try {
         .first()
         .innerText();
       assert.equal(firstDomain, "competitor-three.example", "the server order is kept");
+
+      // FE-2: sorting back to the mount-time sort must read the warm cache, not
+      // replay the pre-run "not_cached" entry that the mount left behind.
+      await page.getByRole("combobox", { name: "Sort competitors" }).click();
+      await page.getByRole("option", { name: "Visibility", exact: true }).click();
+      await page.getByText("competitor-one.example").waitFor({ state: "visible", timeout: 15000 });
+      const backRequest = competitorRequests[competitorRequests.length - 1];
+      assert.equal(backRequest.sortBy, "visibility", "sorting back asks for the mount sort");
+      assert.equal(backRequest.cacheOnly, true, "sorting back is a free cache read");
+      const backFirstDomain = await competitorsTable
+        .locator("tbody tr")
+        .first()
+        .locator("a")
+        .first()
+        .innerText();
+      assert.equal(backFirstDomain, "competitor-one.example", "the warm cache is shown, not the idle state");
 
       // Second pass: with no loaded Top Keywords page the action is disabled.
       const second = await openPortal(browser, origin, {
@@ -1154,6 +1189,16 @@ try {
           });
         });
 
+        // O8: a quote is available, so an aborted price request cannot be what
+        // disables the button — only the empty keyword guard can.
+        await second.page.route("**/api/customer/price/estimate*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makePriceQuote("domain.competitors.run", 0.018)),
+          });
+        });
+
         await second.page.goto(
           new URL("/portal/domain?domain=offcult.in&tab=competitors", origin).href,
           { waitUntil: "networkidle" },
@@ -1161,6 +1206,11 @@ try {
 
         const idleFind = second.page.getByRole("button", { name: "Find competitors" });
         await idleFind.waitFor({ state: "visible", timeout: 15000 });
+        assert.equal(
+          (await idleFind.innerText()).trim(),
+          "Find competitors",
+          "no price is quoted while the action is disabled (O8)",
+        );
         assert.equal(
           await idleFind.isDisabled(),
           true,
@@ -1404,7 +1454,129 @@ try {
         await third.context.close();
       }
 
-      return "Added offcult.in with the toast and action, the quick pick filled the input with no request, project_memory off hid both, and a declared domain showed the badge instead of the action";
+      // Fourth pass: adding from a competitors results row flips that row to the
+      // `Competitor` badge instead of offering Add again (FE-3).
+      const fourth = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+      });
+      try {
+        let rowAddedBody = null;
+
+        await fourth.page.route("**/api/customer/features*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              brandKey: "acme",
+              features: { domain_research: true, keyword_research: true, project_memory: true },
+            }),
+          });
+        });
+
+        await fourth.page.route("**/api/customer/domain/overview*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeOverviewBody()),
+          });
+        });
+
+        await fourth.page.route("**/api/customer/domain/keywords*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(makeKeywordsBody(makeSampleKeywords().slice(0, 2))),
+          });
+        });
+
+        // The warm cache already holds one undeclared competitor row: no click needed.
+        await fourth.page.route("**/api/customer/domain/competitors*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              status: "ok",
+              keywordCount: 2,
+              competitors: [
+                makeCompetitorRow("bewakoof.com", {
+                  keywordsCount: 2,
+                  avgPosition: 4.2,
+                  visibility: 0.41,
+                  etv: 12000,
+                }),
+              ],
+              cached: true,
+              fetchedAt: new Date().toISOString(),
+              provenance: { gateway: "dataforseo" },
+            }),
+          });
+        });
+
+        await fourth.page.route("**/api/customer/domain/competitors/declared*", async (route) => {
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ available: true, competitors: [], ownHost: "offcult.in" }),
+          });
+        });
+
+        // The harness aborts every non-GET customer call, so this write is answered here.
+        await fourth.page.route("**/api/customer/domain/competitors/add*", async (route) => {
+          rowAddedBody = JSON.parse(route.request().postData() || "{}");
+          await route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              competitor: { domain: "bewakoof.com", name: null },
+              added: true,
+            }),
+          });
+        });
+
+        await fourth.page.goto(
+          new URL("/portal/domain?domain=offcult.in&tab=competitors", origin).href,
+          { waitUntil: "networkidle" },
+        );
+
+        const resultsTable = fourth.page
+          .locator("table")
+          .filter({ hasText: "Shared keywords" });
+        await fourth.page.getByText("bewakoof.com", { exact: true }).first().waitFor({
+          state: "visible",
+          timeout: 15000,
+        });
+        const resultRow = resultsTable.locator("tbody tr").first();
+        assert.equal(
+          await resultRow.getByRole("button", { name: "Add as competitor" }).count(),
+          1,
+          "the results row offers Add as competitor",
+        );
+        await resultRow.getByRole("button", { name: "Add as competitor" }).click();
+
+        await fourth.page
+          .getByText("Added bewakoof.com to your competitors.", { exact: true })
+          .waitFor({ state: "visible", timeout: 15000 });
+        assert.ok(rowAddedBody, "the row add posted to /api/customer/domain/competitors/add");
+        assert.equal(rowAddedBody.domain, "bewakoof.com");
+        assert.equal(
+          await resultRow.getByRole("button", { name: "Add as competitor" }).count(),
+          0,
+          "the row no longer offers Add as competitor",
+        );
+        await resultRow.getByText("Competitor", { exact: true }).first().waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+        assert.equal(
+          await resultRow.getByText("Competitor", { exact: true }).count(),
+          2,
+          "the row shows the Competitor badge in the domain and action cells",
+        );
+      } finally {
+        await fourth.context.close();
+      }
+
+      return "Added offcult.in with the toast and action, the quick pick filled the input with no request, project_memory off hid both, a declared domain showed the badge instead of the action, and a results row flipped to the badge after its own add";
     } finally {
       await context.close();
     }

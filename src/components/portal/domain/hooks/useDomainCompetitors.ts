@@ -134,5 +134,12 @@ export function useDomainCompetitorsQuery(input: Input) {
     },
     staleTime: 60_000,
     retry: false,
+    // A cache-only read is free, so it may revalidate on every mount: that is
+    // what surfaces a warm provider cache after a paid run instead of replaying
+    // a stale pre-run "not_cached". A live read is the opposite: it may only
+    // run from an explicit, approved click.
+    refetchOnMount: cacheOnly ? "always" : false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }

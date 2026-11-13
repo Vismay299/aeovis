@@ -71,6 +71,7 @@ import {
   type DomainOverviewResponse,
 } from "./hooks/useDomainOverviewQuery";
 import { useDeclaredCompetitors } from "./hooks/useDeclaredCompetitors";
+import type { DomainCompetitorsResponse } from "./hooks/useDomainCompetitors";
 import {
   useDomainSearchTabs,
   formatDomainTabLabel,
@@ -393,10 +394,10 @@ export function DomainOverviewPage({
     enableLiveMode();
   }, [enableLiveMode]);
 
-  // A competitor was just stored in F07. Patch the cached overview so the
-  // badge and the button state update without a refetch: in live mode an
-  // overview refetch would be another paid call, and this gesture approved
-  // no such call.
+  // A competitor was just stored in F07. Patch the cached overview and the
+  // cached competitors rows so the badge and the button state update without a
+  // refetch: in live mode either refetch would be another paid call, and this
+  // gesture approved no such call.
   const handleCompetitorAdded = useCallback(
     (domain: string) => {
       queryClient.setQueriesData<DomainOverviewResponse>(
@@ -404,6 +405,20 @@ export function DomainOverviewPage({
         (previous) =>
           previous && previous.status === "ok" && previous.domain === domain
             ? { ...previous, isDeclaredCompetitor: true }
+            : previous,
+      );
+      queryClient.setQueriesData<DomainCompetitorsResponse>(
+        { queryKey: ["domainCompetitors", brandKey] },
+        (previous) =>
+          previous && previous.status === "ok"
+            ? {
+                ...previous,
+                competitors: previous.competitors.map((item) =>
+                  item.domain === domain
+                    ? { ...item, isDeclaredCompetitor: true }
+                    : item,
+                ),
+              }
             : previous,
       );
       void queryClient.invalidateQueries({
@@ -637,6 +652,7 @@ export function DomainOverviewPage({
                 displayTarget={overviewOkData.displayTarget}
                 domain={overviewOkData.domain}
                 scope={overviewOkData.scope}
+                languageCode={overviewOkData.market.languageCode}
                 routeState={routeState}
                 tabs={tabsBar}
                 hasProjectMemory={hasProjectMemory}

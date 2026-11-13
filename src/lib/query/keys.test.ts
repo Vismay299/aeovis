@@ -64,6 +64,11 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.ahrefsRatings("acme", "ratings-input"),
     keys.backlinkSnapshotTargets("acme"),
     keys.backlinkSnapshots("acme", "example.com", "subdomains"),
+    keys.domainOverview("acme", "overview-input"),
+    keys.domainKeywords("acme", "keywords-input"),
+    keys.domainPages("acme", "pages-input"),
+    keys.domainCompetitors("acme", "competitors-input"),
+    keys.declaredCompetitors("acme"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
