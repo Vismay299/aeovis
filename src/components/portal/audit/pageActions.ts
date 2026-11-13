@@ -4,8 +4,8 @@
 // PR, so the pages table's bulk bar and row menu can run it without either
 // feature editing the other.
 
-import type { ComponentType } from "react";
-import type { LucideIcon } from "lucide-react";
+import { lazy, type ComponentType } from "react";
+import { Send, type LucideIcon } from "lucide-react";
 
 export type AuditPageRef = {
   url: string;
@@ -27,4 +27,26 @@ export type AuditPageAction = {
   }>;
 };
 
-export const AUDIT_PAGE_ACTIONS: AuditPageAction[] = [];
+const SubmitIndexNowDialogComponent = lazy(
+  () => import("../indexnow/SubmitIndexNowDialog.tsx"),
+) as unknown as ComponentType<{
+  brandKey: string;
+  auditId: string;
+  pages: AuditPageRef[];
+  onClose(): void;
+}>;
+
+export const AUDIT_PAGE_ACTIONS: AuditPageAction[] = [
+  {
+    id: "indexnow_submit",
+    label: "Submit to IndexNow",
+    flag: "indexnow",
+    icon: Send,
+    eligible: (page) =>
+      page.statusCode !== null &&
+      page.statusCode >= 200 &&
+      page.statusCode < 300 &&
+      page.indexable !== false,
+    Dialog: SubmitIndexNowDialogComponent,
+  },
+];
