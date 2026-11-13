@@ -90,6 +90,26 @@ export const keys = {
     ["backlinkSnapshotTargets", brandKey] as const,
   backlinkSnapshots: (brandKey: string, target: string, scope: string) =>
     ["backlinkSnapshots", brandKey, target, scope] as const,
+  // F18 — site audits. The workspace list and its capabilities are scoped to
+  // the brand; an audit and its reads are addressed by the id the route
+  // authorises.
+  siteAudits: (brandKey: string) => ["siteAudits", brandKey] as const,
+  siteAuditCapabilities: (brandKey: string) =>
+    ["siteAuditCapabilities", brandKey] as const,
+  siteAudit: (auditId: string) => ["siteAudit", auditId] as const,
+  siteAuditFeed: (auditId: string) => ["siteAuditFeed", auditId] as const,
+  siteAuditSummary: (auditId: string) => ["siteAuditSummary", auditId] as const,
+  siteAuditIssues: (auditId: string, type: string, offset: number) =>
+    ["siteAuditIssues", auditId, type, offset] as const,
+  siteAuditPages: (auditId: string, filtersHash: string) =>
+    ["siteAuditPages", auditId, filtersHash] as const,
+  siteAuditPerformance: (auditId: string) =>
+    ["siteAuditPerformance", auditId] as const,
+  // Registered for F18 phase 5 (Lighthouse detail) and phase 8 (compare).
+  siteAuditLighthouse: (resultId: string) =>
+    ["siteAuditLighthouse", resultId] as const,
+  siteAuditCompare: (base: string, head: string) =>
+    ["siteAuditCompare", base, head] as const,
 } as const;
 
 export const privacyKeys = {
@@ -124,6 +144,8 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "ahrefsRatings",
   "backlinkSnapshotTargets",
   "backlinkSnapshots",
+  "siteAudits",
+  "siteAuditCapabilities",
 ]);
 
 export function isWorkspaceKey(
