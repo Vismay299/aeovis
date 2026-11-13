@@ -49,6 +49,7 @@ class Chain {
     this.filters = [];
     this.orders = [];
     this.limitCount = null;
+    this.rangeBounds = null;
     this.options = null;
   }
 
@@ -86,6 +87,10 @@ class Chain {
   }
   limit(count) {
     this.limitCount = count;
+    return this;
+  }
+  range(from, to) {
+    this.rangeBounds = [from, to];
     return this;
   }
 
@@ -132,6 +137,9 @@ class Chain {
       rows = [...rows].sort((a, b) => (ascending ? compare(a[column], b[column]) : compare(b[column], a[column])));
     }
     if (this.limitCount != null) rows = rows.slice(0, this.limitCount);
+    if (this.rangeBounds) rows = rows.slice(this.rangeBounds[0], this.rangeBounds[1] + 1);
+    // PostgREST caps every response at max_rows and truncates silently.
+    if (this.db.maxRows != null) rows = rows.slice(0, this.db.maxRows);
 
     if (this.table === "export_requests" && this.options?.head) {
       return { count: rows.length, data: null, error: null };
@@ -184,6 +192,7 @@ function makeAdmin(seed = {}) {
     scans: seed.scans ?? [],
     promptResults: seed.promptResults ?? [],
     exportRequests: seed.exportRequests ?? [],
+    maxRows: seed.maxRows ?? null,
     storage: makeStorage(),
   };
   admin.from = (table) => ({
@@ -357,6 +366,32 @@ test("more than 50,000 rows -> 413 export_too_large with nothing uploaded", asyn
   assert.equal(admin.exportRequests[0].error_code, "export_too_large");
 });
 
+test("answers beyond one PostgREST page are all exported (max_rows truncates silently)", async () => {
+  const scans = [scan({ id: "scan-a" }), scan({ id: "scan-b", scanned_at: "2026-08-02T10:00:00.000Z" })];
+  const promptResults = [];
+  for (const current of scans) {
+    for (let index = 0; index < 1_300; index++) {
+      promptResults.push(answer({ id: `answer-${current.id}-${String(index).padStart(4, "0")}`, scan_id: current.id }));
+    }
+  }
+  // A server max_rows below the page size must not end the read early either.
+  const admin = makeAdmin({ scans, promptResults, maxRows: 700 });
+  const response = await read(await request(validBody({ format: "json" }), depsFor(admin)));
+  assert.equal(response.status, 200);
+  assert.equal(response.body.rowCount, 2_600);
+  const exported = JSON.parse(admin.storage.uploads[0].body).answers.map((row) => row.answer_id);
+  assert.equal(new Set(exported).size, 2_600);
+});
+
+test("more than 500 scans in range -> 413 export_too_large rather than dropping scans", async () => {
+  const scans = Array.from({ length: 501 }, (_, index) => scan({ id: `scan-${String(index).padStart(3, "0")}` }));
+  const admin = makeAdmin({ scans, promptResults: [answer({ scan_id: "scan-000" })] });
+  const response = await read(await request(validBody(), depsFor(admin)));
+  assert.equal(response.status, 413);
+  assert.equal(response.body.code, "export_too_large");
+  assert.equal(admin.storage.uploads.length, 0);
+});
+
 test("success stores a private CSV, records the audit row and signs a one-hour URL", async () => {
   const admin = makeAdmin({
     scans: [scan(), scan({ id: "scan-beta", brand_key: "beta" })],
@@ -430,4 +465,6 @@ test("Storage upload failure -> 503 storage_unavailable and a failed audit row",
   assert.equal(response.body.code, "storage_unavailable");
   assert.equal(admin.exportRequests[0].status, "failed");
   assert.equal(admin.exportRequests[0].error_code, "storage_unavailable");
+  // The path is recorded up front so retention removes any partial object.
+  assert.match(admin.exportRequests[0].storage_path, /^acme\/workspace_answers\/.+\.csv$/);
 });

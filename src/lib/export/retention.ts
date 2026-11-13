@@ -83,10 +83,13 @@ export async function runExportRetention(
     removed += ids.length;
   }
 
+  // Only rows whose object is already gone: pruning a row whose Storage
+  // removal keeps failing would forget the path and orphan the object.
   const { data: prunedRows, error: pruneError } = await admin
     .from("export_requests")
     .delete()
     .lt("created_at", rowCutoff)
+    .not("deleted_at", "is", null)
     .select("id");
   if (pruneError) throw pruneError;
   const pruned = Array.isArray(prunedRows) ? prunedRows.length : 0;

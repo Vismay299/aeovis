@@ -94,6 +94,9 @@ export async function createServerExport(
   }
 
   const exportId = randomUUID();
+  // Recorded on the pending row so retention removes the object even when a
+  // later step fails after the upload (an orphan otherwise lives forever).
+  const storagePath = `${brandKey}/${kindDef.kind}/${exportId}.${format}`;
   const expiresAt = new Date(startedAt.getTime() + EXPORT_URL_TTL_SECONDS * 1_000).toISOString();
   const { error: insertError } = await admin.from("export_requests").insert({
     id: exportId,
@@ -102,6 +105,7 @@ export async function createServerExport(
     format,
     params: parsedParams.data,
     status: "pending",
+    storage_path: storagePath,
     created_by: userId,
     created_at: nowIso,
     expires_at: expiresAt,
@@ -144,7 +148,6 @@ export async function createServerExport(
     throw new AppError(413, "export_too_large", TOO_LARGE_MESSAGE);
   }
 
-  const storagePath = `${brandKey}/${kindDef.kind}/${exportId}.${format}`;
   const { error: uploadError } = await admin.storage.from("exports").upload(storagePath, body, {
     contentType: format === "csv" ? "text/csv; charset=utf-8" : "application/json",
     upsert: false,
@@ -169,7 +172,6 @@ export async function createServerExport(
       status: "ready",
       row_count: loaded.rows.length,
       byte_size: bytes,
-      storage_path: storagePath,
     })
     .eq("id", exportId);
   if (readyError) throw readyError;

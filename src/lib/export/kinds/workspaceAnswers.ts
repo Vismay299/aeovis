@@ -12,6 +12,12 @@ import type { ExportKind } from "./index.ts";
 export const WORKSPACE_ANSWERS_MAX_ROWS = 50_000;
 export const WORKSPACE_ANSWERS_SCAN_LIMIT = 500;
 export const WORKSPACE_ANSWERS_PROMPT_CHUNK = 100;
+/**
+ * Rows per PostgREST request. Supabase caps every response at `max_rows`
+ * (1,000 by default) and truncates silently, so each chunk is paged with
+ * `.range()` over a total order instead of trusting one response.
+ */
+export const WORKSPACE_ANSWERS_PAGE_SIZE = 1_000;
 export const WORKSPACE_ANSWERS_RANGE_MESSAGE =
   "Choose a date range of up to 92 days that ends today or earlier.";
 export const WORKSPACE_ANSWERS_TOO_LARGE_MESSAGE =
@@ -154,30 +160,46 @@ export const workspaceAnswersKind: ExportKind<WorkspaceAnswersParams> = {
       .gte("scanned_at", from)
       .lt("scanned_at", toExclusive)
       .order("scanned_at", { ascending: true })
-      .limit(WORKSPACE_ANSWERS_SCAN_LIMIT);
+      .order("id", { ascending: true })
+      .limit(WORKSPACE_ANSWERS_SCAN_LIMIT + 1);
     if (scansError) throw scansError;
 
     const scanRows = (Array.isArray(scans) ? scans : []) as Record<string, unknown>[];
+    // More scans than the cap would silently drop the newest ones; refuse
+    // instead, like the row cap, so the customer picks a shorter range.
+    if (scanRows.length > WORKSPACE_ANSWERS_SCAN_LIMIT) {
+      throw new AppError(413, "export_too_large", WORKSPACE_ANSWERS_TOO_LARGE_MESSAGE);
+    }
     const scanIds = scanRows.map((scan) => String(scan.id));
     const scannedAt = new Map(scanRows.map((scan) => [String(scan.id), scan.scanned_at ?? null]));
 
     const rows: Record<string, unknown>[] = [];
     for (let offset = 0; offset < scanIds.length; offset += WORKSPACE_ANSWERS_PROMPT_CHUNK) {
       const chunk = scanIds.slice(offset, offset + WORKSPACE_ANSWERS_PROMPT_CHUNK);
-      const { data: answers, error: answersError } = await admin
-        .from("prompt_results")
-        .select(
-          "id, scan_id, query, engine, answered, mentioned, brand_cited, position, sentiment, answer_text, created_at, failed:raw->error, references:raw->references, brands:raw->brands",
-        )
-        .in("scan_id", chunk)
-        .order("scan_id", { ascending: true })
-        .order("created_at", { ascending: true });
-      if (answersError) throw answersError;
-      for (const answer of (Array.isArray(answers) ? answers : []) as Record<string, unknown>[]) {
-        rows.push({ ...answer, scanned_at: scannedAt.get(String(answer.scan_id)) ?? null });
-        if (rows.length > WORKSPACE_ANSWERS_MAX_ROWS) {
-          throw new AppError(413, "export_too_large", WORKSPACE_ANSWERS_TOO_LARGE_MESSAGE);
+      for (let start = 0; ; ) {
+        const { data: answers, error: answersError } = await admin
+          .from("prompt_results")
+          .select(
+            "id, scan_id, query, engine, answered, mentioned, brand_cited, position, sentiment, answer_text, created_at, failed:raw->error, references:raw->references, brands:raw->brands",
+          )
+          .in("scan_id", chunk)
+          .order("scan_id", { ascending: true })
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true })
+          .range(start, start + WORKSPACE_ANSWERS_PAGE_SIZE - 1);
+        if (answersError) throw answersError;
+        const page = (Array.isArray(answers) ? answers : []) as Record<string, unknown>[];
+        for (const answer of page) {
+          rows.push({ ...answer, scanned_at: scannedAt.get(String(answer.scan_id)) ?? null });
+          if (rows.length > WORKSPACE_ANSWERS_MAX_ROWS) {
+            throw new AppError(413, "export_too_large", WORKSPACE_ANSWERS_TOO_LARGE_MESSAGE);
+          }
         }
+        // Advance by what actually came back and stop only on an empty page:
+        // a server max_rows below our page size returns short pages that are
+        // not the end of the data.
+        if (page.length === 0) break;
+        start += page.length;
       }
     }
 
