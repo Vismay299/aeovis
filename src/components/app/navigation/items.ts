@@ -26,6 +26,7 @@ import {
   Search,
   Settings,
   Users,
+  ChartColumn,
 } from "lucide-react";
 import type { NavGroup } from "./navModel.ts";
 import {
@@ -118,6 +119,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         icon: Search,
         badge: "gsc",
         prefetch: gscQueryOptions,
+      },
+      {
+        id: "analytics",
+        label: "Analytics",
+        href: "/portal/analytics",
+        icon: ChartColumn,
+        flag: "ga4",
       },
     ],
   },
