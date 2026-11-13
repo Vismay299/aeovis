@@ -39,7 +39,7 @@ if (!(await waitForServer(1000))) {
   }
 }
 const onlyIndex = process.argv.indexOf("--only");
-const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B17";
+const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B22";
 const selectedScenarios = new Set();
 for (const selection of requested.split(",")) {
   const range = selection.match(/^B(\d+)-B(\d+)$/);
@@ -79,6 +79,73 @@ const familyRows = [
   { keyword: "family beta", searchVolume: 10000, trend: [{ year: 2026, month: 8, searchVolume: 10000 }, { year: 2026, month: 9, searchVolume: 8000 }], cpc: 0.55, competition: 0.5, keywordDifficulty: 32, intent: "commercial" },
 ];
 const serpItems = [{ rank: 1, title: "Oversized T-Shirts", url: "https://example.test/oversized", domain: "example.test", description: "A fixture search result.", etv: 10, estimatedPaidTrafficCost: null, referringDomains: 1, backlinks: 2, isNew: false, rankChange: null }];
+
+// Phase 5: the saved-keywords fixtures.
+const savedTagsFixture = [
+  { id: "11111111-1111-4111-8111-111111111111", name: "Tees", normalizedName: "tees", color: "sky", keywordCount: 1 },
+  { id: "22222222-2222-4222-8222-222222222222", name: "Evergreen", normalizedName: "evergreen", color: "emerald", keywordCount: 3 },
+];
+const savedTagRef = (index) => {
+  const { keywordCount: _count, ...tag } = savedTagsFixture[index];
+  return tag;
+};
+const savedRowsFixture = [
+  {
+    id: "33333333-3333-4333-8333-333333333333",
+    keyword: "oversized t shirt",
+    locationCode: 2356,
+    languageCode: "en",
+    createdAt: "2026-11-01T10:00:00.000Z",
+    searchVolume: 74000,
+    cpc: 0.41,
+    competition: 1,
+    keywordDifficulty: 38,
+    intent: "transactional",
+    monthlySearches: [],
+    fetchedAt: "2026-11-10T09:59:00.000Z",
+    tags: [savedTagRef(0)],
+  },
+  {
+    id: "44444444-4444-4444-8444-444444444444",
+    keyword: "vintage hoodie",
+    locationCode: 2356,
+    languageCode: "en",
+    createdAt: "2026-11-02T10:00:00.000Z",
+    searchVolume: null,
+    cpc: null,
+    competition: null,
+    keywordDifficulty: null,
+    intent: null,
+    monthlySearches: [],
+    fetchedAt: null,
+    tags: [],
+  },
+];
+const refreshQuote = {
+  ...quote,
+  action: "keywords.metrics_refresh.run",
+  totalUsd: 0.42,
+  expectedUsd: 0.42,
+  units: [{ key: "stale", label: "stale keywords", count: 2 }],
+  lines: [{ label: "Keyword stats refresh", quantity: 2, unitUsd: 0.21, totalUsd: 0.42 }],
+  warnings: [],
+  blocked: null,
+};
+const refreshBlockedQuote = (code) => ({
+  ...refreshQuote,
+  totalUsd: 0,
+  expectedUsd: 0,
+  lines: [],
+  units: [],
+  blocked: {
+    code,
+    message:
+      code === "refresh_running"
+        ? "Keyword stats are already updating."
+        : "Every saved keyword was updated in the last 7 days.",
+  },
+});
+
 const browser = await chromium.launch({ headless: true });
 let failures = 0;
 let passed = 0;
@@ -95,10 +162,27 @@ async function record(id, expected, run) {
   }
 }
 
-async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, serpItemCount = 1, serpDepth100Error = false, priceChanged = false, viewport = { width: 1280, height: 900 }, fixtureRows = rows, researchErrorCode = null, delayedQuoteKeyword = null } = {}) {
+async function until(check, message, timeoutMs = 8000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (check()) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(message);
+}
+
+async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, serpItemCount = 1, serpDepth100Error = false, priceChanged = false, viewport = { width: 1280, height: 900 }, fixtureRows = rows, researchErrorCode = null, delayedQuoteKeyword = null, savedList = "rows", tagDeleteInUse = false, refreshRunning = false, refreshBlocked = null } = {}) {
   const { context, page } = await openPortal(browser, origin, { viewport });
   const researchRequests = [];
   const serpRequests = [];
+  const savedListRequests = [];
+  const savedExportRequests = [];
+  const savedRemoveRequests = [];
+  const savedBulkTagRequests = [];
+  const savedRefreshRequests = [];
+  const savedTagRequests = [];
+  let jobPolls = 0;
+  let firstJobPollAt = 0;
   await page.route("**/api/customer/features*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ brandKey: "acme", features: { keyword_research: flag, price_review: true } }) }));
   await page.route("**/api/customer/price/estimate*", async (route) => {
     const body = route.request().postDataJSON();
@@ -107,7 +191,26 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
       const totalUsd = body.input?.depth === 100 ? 0.0155 : 0.0035;
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action, totalUsd, expectedUsd: totalUsd, lines: [{ label: `Top ${body.input?.depth ?? 20} Google results`, quantity: 1, unitUsd: totalUsd, totalUsd }] }) });
     }
+    if (body.action === "keywords.metrics_refresh.run") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(refreshBlocked ? refreshBlockedQuote(refreshBlocked) : refreshQuote) });
+    }
+    if (body.input?.locationName) {
+      const local = { label: `Local volume for ${body.input.locationName}`, quantity: 1, unitUsd: 0.09, totalUsd: 0.09 };
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action, totalUsd: quote.totalUsd + 0.09, expectedUsd: quote.expectedUsd + 0.09, lines: [...quote.lines, local] }) });
+    }
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...quote, action: body.action }) });
+  });
+  const locationRequests = [];
+  await page.route("**/api/customer/keywords/locations*", (route) => {
+    const url = new URL(route.request().url());
+    locationRequests.push(Object.fromEntries(url.searchParams));
+    const q = (url.searchParams.get("q") ?? "").toLowerCase();
+    const registry = [
+      { locationName: "Mumbai,Maharashtra,India", displayLabel: "Mumbai, Maharashtra, India", locationType: "City" },
+      { locationName: "Navi Mumbai,Maharashtra,India", displayLabel: "Navi Mumbai, Maharashtra, India", locationType: "City" },
+      { locationName: "Pune,Maharashtra,India", displayLabel: "Pune, Maharashtra, India", locationType: "City" },
+    ];
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ locations: registry.filter((row) => row.locationName.toLowerCase().includes(q)) }) });
   });
   await page.route("**/api/customer/keywords/research", (route) => {
     const body = route.request().postDataJSON();
@@ -125,12 +228,101 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
     const items = Array.from({ length: count }, (_, index) => ({ ...serpItems[0], rank: index + 1, title: `Search result ${index + 1}` }));
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ requestedKeyword: body.keyword, depth: body.depth, items, cached: body.cacheOnly }) });
   });
-  await page.route("**/api/customer/keywords/saved", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ created: route.request().postDataJSON().keywords.length, savedKeywordIds: [] }) }));
-  return { context, page, researchRequests, serpRequests };
+  await page.route(/\/api\/customer\/keywords\/saved(\?.*)?$/, (route) => {
+    const request = route.request();
+    if (request.method() !== "GET") {
+      const body = request.postDataJSON();
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ created: body.keywords.length, savedKeywordIds: [] }) });
+    }
+    const url = new URL(request.url());
+    savedListRequests.push(url.search);
+    const empty = savedList === "empty" || savedList === "filteredEmpty";
+    const pageNumber = Number(url.searchParams.get("page") ?? 1);
+    const pageSize = Number(url.searchParams.get("size") ?? 50);
+    const totalCount = empty ? 0 : savedRowsFixture.length;
+    const lastPage = Math.max(1, Math.ceil(totalCount / pageSize));
+    const outOfRange = pageNumber > lastPage;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        rows: empty || outOfRange ? [] : savedRowsFixture,
+        totalCount,
+        page: pageNumber,
+        pageSize,
+        tags: savedTagsFixture,
+      }),
+    });
+  });
+  await page.route(/\/api\/customer\/keywords\/saved\/export(\?.*)?$/, (route) => {
+    savedExportRequests.push(route.request().url());
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: savedRowsFixture, totalCount: savedRowsFixture.length, truncated: false }) });
+  });
+  await page.route(/\/api\/customer\/keywords\/saved\/remove(\?.*)?$/, (route) => {
+    const body = route.request().postDataJSON();
+    savedRemoveRequests.push(body);
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ deletedCount: body.savedKeywordIds.length }) });
+  });
+  await page.route(/\/api\/customer\/keywords\/saved\/tags(\?.*)?$/, (route) => {
+    const body = route.request().postDataJSON();
+    savedBulkTagRequests.push(body);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        taggedCount: body.savedKeywordIds.length,
+        addedTags: (body.addTags ?? []).map((name) => ({ id: "new-tag-id", name, normalizedName: name.toLowerCase(), color: null })),
+        removedTagIds: body.removeTagIds ?? [],
+        removedAssignments: (body.removeTagIds ?? []).length,
+      }),
+    });
+  });
+  await page.route(/\/api\/customer\/keywords\/saved\/refresh(\?.*)?$/, (route) => {
+    const body = route.request().postDataJSON();
+    savedRefreshRequests.push(body);
+    if (refreshRunning) {
+      return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "This is already running.", code: "job_already_running", details: { activeJobId: "job-refresh-1" } }) });
+    }
+    return route.fulfill({ status: 202, contentType: "application/json", body: JSON.stringify({ jobId: "job-refresh-1", status: "queued", pollAfterSeconds: 1 }) });
+  });
+  await page.route(/\/api\/customer\/keywords\/tags\/[^/?]+(\?.*)?$/, (route) => {
+    const request = route.request();
+    savedTagRequests.push(`${request.method()} ${new URL(request.url()).pathname}`);
+    if (request.method() === "DELETE" && tagDeleteInUse) {
+      return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "Tag is attached to 3 keywords. Remove the tag from those keywords first.", code: "tag_in_use" }) });
+    }
+    if (request.method() === "DELETE") {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ deleted: true }) });
+    }
+    const body = request.postDataJSON();
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ tag: { id: "tag-1", name: body.name ?? "Tees", normalizedName: (body.name ?? "Tees").toLowerCase(), color: body.color ?? "sky" } }) });
+  });
+  await page.route(/\/api\/customer\/jobs\/[^/?]+(\?.*)?$/, (route) => {
+    jobPolls += 1;
+    if (!firstJobPollAt) firstJobPollAt = Date.now();
+    // The first poll(s) report progress; the next paced poll finishes, so the
+    // running line is always observable even under React's dev double-mount.
+    const running = Date.now() - firstJobPollAt < 1500;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(running
+        ? { jobId: "job-refresh-1", kind: "keywords.refresh_metrics", trigger: "manual", status: "running", progress: { done: 1, total: 2, label: "Updating keyword stats" }, pollAfterSeconds: 1, result: null, error: null }
+        : { jobId: "job-refresh-1", kind: "keywords.refresh_metrics", trigger: "manual", status: "completed", progress: { done: 2, total: 2, label: "Updating keyword stats" }, pollAfterSeconds: null, result: { updated: 12, requested: 15, skippedFresh: 3, failedBatches: 0, totalBatches: 2 }, error: null }),
+    });
+  });
+  return { context, page, researchRequests, serpRequests, savedListRequests, savedExportRequests, savedRemoveRequests, savedBulkTagRequests, savedRefreshRequests, savedTagRequests, locationRequests };
 }
 
 async function openResearch(options, url = "/portal/keywords") {
   const state = await makePage(options);
+  await state.page.goto(new URL(url, origin).href, { waitUntil: "networkidle" });
+  return state;
+}
+
+async function openSaved(options, url = "/portal/keywords/saved", beforeGoto) {
+  const state = await makePage(options);
+  if (beforeGoto) await beforeGoto(state.page);
   await state.page.goto(new URL(url, origin).href, { waitUntil: "networkidle" });
   return state;
 }
@@ -399,6 +591,182 @@ try {
       assert.match(await page.locator("tbody tr").first().innerText(), /oversized tee outfit/);
       return "sort/order URL state controls ordering and aria-sort";
     } finally { await context.close(); }
+  });
+  await record("B18", "city picker lists Mumbai, prices local volume, sends locationName, and notes national-only saves", async () => {
+    const { context, page, researchRequests, locationRequests } = await openResearch({ cacheMiss: false }, "/portal/keywords");
+    try {
+      await page.getByLabel("Keywords").fill("plumber");
+      await page.getByRole("combobox", { name: "City (optional)" }).fill("mum");
+      const option = page.getByRole("option", { name: /^Mumbai, Maharashtra, India/ });
+      await option.waitFor();
+      assert.ok(locationRequests.some((request) => /^[a-z]{2}$/.test(request.country) && request.q === "mum"), `location lookups: ${JSON.stringify(locationRequests)}`);
+      await option.click();
+      await page.getByText("Local volume adds up to $0.09 per search.").waitFor();
+      await page.locator("#keyword-research-submit:not([disabled])").filter({ hasText: /up to \$0\.17/ }).click();
+      await page.getByRole("button", { name: "oversized shirt for men" }).waitFor();
+      const run = researchRequests.find((request) => request.cacheOnly === false);
+      assert.equal(run?.locationName, "Mumbai,Maharashtra,India");
+      assert.equal(new URL(page.url()).searchParams.get("locName"), "Mumbai,Maharashtra,India");
+      await page.getByRole("checkbox", { name: "Select oversized t shirt" }).check();
+      await page.getByRole("button", { name: "Save Keywords" }).click();
+      await page.getByRole("dialog").getByText("Saved keywords show national metrics. The local volume for Mumbai, Maharashtra, India is not saved.").waitFor();
+      return "typing \"mum\" listed Mumbai; selecting it priced and sent local volume; save dialog noted national metrics";
+    } finally { await context.close(); }
+  });
+
+  // spec P5.T2.S1 calls these B9–B12; phase 4 already uses those ids (B9–B17), so they land as B19–B22 (B18 is phase 8's city picker).
+  await record("B19", "Include Terms debounces two keystrokes into one URL write and one list request", async () => {
+    const { context, page, savedListRequests } = await openSaved({}, "/portal/keywords/saved", async (target) => {
+      await target.addInitScript(() => {
+        const writes = [];
+        window.__savedUrlWrites = writes;
+        const replaceState = window.history.replaceState.bind(window.history);
+        window.history.replaceState = (...args) => {
+          writes.push(String(args[2]));
+          return replaceState(...args);
+        };
+      });
+    });
+    try {
+      await page.getByRole("button", { name: "Filters" }).click();
+      await page.getByLabel("Include Terms").pressSequentially("tee", { delay: 60 });
+      // The debounce window itself: 200 ms after the last keystroke the URL
+      // must still be untouched.
+      await page.waitForTimeout(200);
+      assert.equal(new URL(page.url()).searchParams.get("include"), null, "the URL must not change before the 350 ms debounce elapses");
+      await page.waitForFunction(() => new URL(location.href).searchParams.get("include") === "tee");
+      await until(() => savedListRequests.some((search) => search.includes("include=tee")), "the debounced list request did not arrive");
+      const writes = await page.evaluate(() => window.__savedUrlWrites);
+      const includeWrites = writes.filter((url) => url.includes("include="));
+      assert.equal(includeWrites.length, 1, `expected one URL write, got ${JSON.stringify(writes)}`);
+      const includeRequests = savedListRequests.filter((search) => search.includes("include=tee"));
+      assert.equal(includeRequests.length, 1, `expected one list request for include=tee, got ${JSON.stringify(savedListRequests)}`);
+      assert.equal(new URL(page.url()).searchParams.get("page"), null, "a filter change must reset paging");
+      return "the URL stayed empty at 200 ms and three keystrokes produced one write and one request after the 350 ms debounce";
+    } finally { await context.close(); }
+  });
+
+  await record("B20", "bulk tag add and remove toasts, then delete confirmation and toast", async () => {
+    const { context, page, savedBulkTagRequests, savedRemoveRequests } = await openSaved({});
+    try {
+      for (const keyword of ["oversized t shirt", "vintage hoodie"]) {
+        await page.getByRole("checkbox", { name: `Select ${keyword}` }).check();
+      }
+      let bulk = page.getByRole("toolbar");
+      await bulk.getByRole("button", { name: "Tag", exact: true }).click();
+      let dialog = page.getByRole("dialog");
+      await dialog.getByText("Update tags").waitFor();
+      await page.getByLabel("Search or create").fill("summer");
+      await dialog.getByRole("button", { name: "Create “summer”" }).click();
+      await dialog.getByRole("button", { name: "Apply" }).click();
+      await page.getByText("Updated tags for 2 keywords").waitFor();
+      await until(() => savedBulkTagRequests.length === 1, "the add-tags request did not arrive");
+      assert.deepEqual(savedBulkTagRequests[0].addTags, ["summer"]);
+
+      for (const keyword of ["oversized t shirt", "vintage hoodie"]) {
+        await page.getByRole("checkbox", { name: `Select ${keyword}` }).check();
+      }
+      bulk = page.getByRole("toolbar");
+      await bulk.getByRole("button", { name: "Tag", exact: true }).click();
+      dialog = page.getByRole("dialog");
+      await dialog.getByRole("button", { name: /Remove tags/ }).click();
+      await page.getByRole("checkbox", { name: "Remove Tees" }).check();
+      await dialog.getByRole("button", { name: "Apply" }).click();
+      await until(() => savedBulkTagRequests.length === 2, "the remove-tags request did not arrive");
+      assert.deepEqual(savedBulkTagRequests[1].removeTagIds, ["11111111-1111-4111-8111-111111111111"]);
+
+      await page.getByRole("checkbox", { name: "Select oversized t shirt" }).check();
+      await page.getByRole("toolbar").getByRole("button", { name: "Delete", exact: true }).click();
+      const confirm = page.getByRole("alertdialog");
+      await confirm.getByText("Delete keywords?").waitFor();
+      await confirm.getByRole("button", { name: "Delete 1 keyword" }).click();
+      await page.getByText("1 keyword removed").waitFor();
+      await until(() => savedRemoveRequests.length === 1, "the remove request did not arrive");
+      assert.equal(savedRemoveRequests[0].savedKeywordIds.length, 1);
+      return "bulk tag add/remove and the delete confirmation each reported their toast";
+    } finally { await context.close(); }
+  });
+
+  await record("B21", "refresh dialog runs to 202, shows progress, then the finish toast", async () => {
+    const { context, page, savedRefreshRequests } = await openSaved({});
+    try {
+      await page.getByRole("button", { name: /Update keyword stats · up to \$0\.42/ }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByText("Update keyword stats").waitFor();
+      await dialog.getByText("Fetches new volume, difficulty, and CPC for saved keywords not updated in the last 7 days. Keywords updated recently are skipped for free.").waitFor();
+      await dialog.getByRole("button", { name: "Update stats" }).click();
+      await page.getByText("Updating keyword stats… 1 of 2 requests").waitFor({ timeout: 15000 });
+      await until(() => savedRefreshRequests.length === 1, "the refresh request did not arrive");
+      assert.equal(savedRefreshRequests[0].maxUsd, 0.42);
+      await page.getByText("Updated stats for 12 keywords · 3 already up to date").waitFor({ timeout: 15000 });
+      return "the paid refresh showed its price, ran once, and reported progress and completion";
+    } finally { await context.close(); }
+  });
+
+  await record("B22", "tag delete 409 copy, then the empty and filtered-empty states", async () => {
+    const tagState = await openSaved({ tagDeleteInUse: true });
+    try {
+      const { page } = tagState;
+      await page.getByRole("button", { name: "Tags" }).click();
+      await page.getByRole("button", { name: "Manage tags" }).click();
+      await page.getByRole("button", { name: "Delete tag Tees" }).click();
+      await page.getByRole("button", { name: "Delete", exact: true }).click();
+      await page.getByText("Could not delete tag. Detach it from all keywords and try again.").waitFor();
+    } finally { await tagState.context.close(); }
+
+    const emptyState = await openSaved({ savedList: "empty" });
+    try {
+      const body = await emptyState.page.locator("body").innerText();
+      assert.ok(body.includes("No saved keywords yet"), `missing empty title: ${body}`);
+      assert.ok(body.includes("Use Keyword Research to find and save keywords."), `missing empty description: ${body}`);
+      await emptyState.page.getByRole("link", { name: "Open Keyword Research" }).waitFor();
+    } finally { await emptyState.context.close(); }
+
+    const filteredState = await openSaved({ savedList: "filteredEmpty" }, "/portal/keywords/saved?include=nomatch&tags=11111111-1111-4111-8111-111111111111");
+    try {
+      const { page } = filteredState;
+      await page.getByText("No rows match these filters").waitFor();
+      await page.getByRole("button", { name: "Clear filters" }).click();
+      await page.waitForFunction(() => {
+        const params = new URL(location.href).searchParams;
+        return !params.has("include") && !params.has("tags");
+      });
+      await page.getByText("No saved keywords yet").waitFor();
+    } finally { await filteredState.context.close(); }
+
+    const phoneState = await openSaved({ viewport: { width: 375, height: 812 } });
+    try {
+      const { page } = phoneState;
+      await page.getByRole("checkbox", { name: "Select oversized t shirt" }).waitFor();
+      const phoneDocWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      assert.ok(phoneDocWidth <= 375, `document width ${phoneDocWidth} exceeded 375px`);
+      for (const keyword of ["oversized t shirt", "vintage hoodie"]) {
+        await page.getByRole("checkbox", { name: `Select ${keyword}` }).check();
+      }
+      await page.getByRole("toolbar", { name: "Bulk actions" }).waitFor();
+      const bar = await page.evaluate(() => {
+        const toolbar = document.querySelector('[role="toolbar"][aria-label="Bulk actions"]');
+        const outer = toolbar?.parentElement;
+        const toolbarRect = toolbar?.getBoundingClientRect();
+        const outerRect = outer?.getBoundingClientRect();
+        const clear = [...(toolbar?.querySelectorAll("button") ?? [])].find((button) => button.textContent.trim() === "Clear");
+        const clearRect = clear?.getBoundingClientRect();
+        return {
+          position: outer ? getComputedStyle(outer).position : null,
+          toolbarRight: toolbarRect?.right,
+          outerRight: outerRect?.right,
+          clearLeft: clearRect?.left,
+          clearRight: clearRect?.right,
+          width: toolbarRect?.width,
+        };
+      });
+      assert.equal(bar.position, "fixed", "the bulk bar must stay fixed");
+      assert.ok(bar.toolbarRight <= 375 && bar.outerRight <= 375, `bulk bar overflows 375px: ${JSON.stringify(bar)}`);
+      assert.ok(bar.clearLeft >= 0 && bar.clearRight <= 375, `Clear is not fully inside 375px: ${JSON.stringify(bar)}`);
+      assert.ok(bar.width > 0, "the bulk bar must be visible");
+    } finally { await phoneState.context.close(); }
+
+    return "the tag-delete fallback, both empty states, and the 375px fixed bulk bar render";
   });
 } finally {
   await browser.close();

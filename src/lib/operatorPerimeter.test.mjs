@@ -273,6 +273,9 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     // F04 — the client-visible feature flags. Self-gated like every other
     // customer route: it answers only for a workspace the caller belongs to.
     "/api/customer/features",
+    // F06 phase 3 - server-side exports. Self-gated via requireWorkspace and the
+    // server_exports flag.
+    "/api/customer/exports",
     "/api/customer/ga4",
     "/api/customer/ga4/accounts",
     "/api/customer/ga4/accounts/[grantId]",
@@ -302,6 +305,7 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/keywords/saved/tags",
       "/api/customer/keywords/serp",
       "/api/customer/keywords/tags/[tagId]",
+      "/api/customer/keywords/locations",
       // F17 — local SEO routes. Self-gated via requireWorkspace and the local_seo flag.
       "/api/customer/local/businesses",
       "/api/customer/local/businesses/[businessId]",

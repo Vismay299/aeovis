@@ -430,6 +430,15 @@ SOFTWARE.
 - `src/app/api/customer/keywords/saved/tags/route.ts` (from `src/server/features/keywords/services/research/saved-keywords.ts`)
 - `src/app/api/customer/keywords/tags/[tagId]/route.ts` (from `src/server/features/keywords/services/research/saved-keywords.ts`)
 - `src/app/api/customer/keywords/saved/export/route.ts` (from `src/serverFunctions/keywords.ts`, `src/server/features/keywords/services/research/saved-keywords.ts`)
+- `src/lib/providers/dataforseo/serp-locations.ts` (from `src/server/lib/dataforseo/serp-locations.ts`)
+- `src/shared/serp-location-search.ts` (from `src/shared/serp-location-search.ts`)
+- `src/lib/keywords/localVolume.ts` (from `src/server/features/keywords/services/research/local-volume.ts`)
+- `src/app/api/customer/keywords/locations/route.ts` (from `src/serverFunctions/serp-locations.ts`)
+- `src/shared/serp-location-search.test.ts` (from `src/shared/serp-location-search.test.ts`)
+- `src/lib/keywords/localVolume.test.ts` (from `src/server/features/keywords/services/research/research.test.ts`)
+- `src/components/portal/keywords/research/SerpLocationCombobox.tsx` (from `src/client/components/SerpLocationCombobox.tsx`)
+- `src/components/portal/keywords/research/usePrewarmSerpLocations.tsx` (from `src/client/components/usePrewarmSerpLocations.ts`)
+- `src/components/portal/keywords/research/KeywordAreaField.tsx` (from `src/client/features/keywords/page/KeywordAreaField.tsx`)
 - `src/app/api/customer/keywords/saved/refresh/route.ts` (from `src/server/features/keywords/services/research/refresh-metrics.ts`)
 - `src/lib/keywords/repository.ts` (from `src/server/features/keywords/repositories/KeywordResearchRepository.ts`, `src/server/features/keywords/repositories/SavedKeywordTagsRepository.ts`)
 - `src/lib/keywords/memoryRepository.ts` (from `src/server/features/keywords/repositories/KeywordResearchRepository.ts`, `src/server/features/keywords/repositories/SavedKeywordTagsRepository.ts`)
@@ -533,6 +542,24 @@ SOFTWARE.
 - `src/components/portal/keywords/research/hooks/useKeywordSearchTabs.ts` (from `openseo:src/client/features/search-tabs/useSearchTabs.ts`, `openseo:src/client/features/keywords/page/KeywordResearchPage.tsx`)
 - `src/components/portal/keywords/research/hooks/useKeywordSerpAnalysis.ts` (from `openseo:src/client/features/keywords/hooks/useKeywordSerpAnalysis.ts`)
 
+### F13 Phase 5 ports (saved-keywords page)
+- `src/components/portal/keywords/saved/SavedKeywordsPage.tsx` (from `openseo:src/routes/_app/p/$projectId/saved.tsx`, `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsHeader.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsTable.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsFilters.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsFilterPanel.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsTagFilter.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/ManageTagRow.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/TagChip.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsBulkActionBar.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsBulkTagsModal.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/SavedKeywordsModals.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/RefreshStatsStatus.tsx` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/hooks/useSavedKeywordsQuery.ts` (from `openseo:src/routes/_app/p/$projectId/saved.tsx`, `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/hooks/useSavedKeywordsExport.ts` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/hooks/useTagManage.ts` (from `openseo:src/client/features/saved-keywords/**`)
+- `src/components/portal/keywords/saved/hooks/useRefreshStats.ts` (from `openseo:src/client/features/saved-keywords/**`)
+
 ### F15 Phase 1 ports
 - src/shared/rank-tracking.ts
 - src/shared/rank-tracking-filters.ts
@@ -551,3 +578,9 @@ SOFTWARE.
 - src/lib/rank-tracking/cost.test.ts
 - src/lib/rank-tracking/retries.test.ts
 - src/lib/rank-tracking/schedules.test.ts
+
+### F06 Phase 3 ports
+- src/lib/export/serverCsv.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/lib/export/serverExport.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/lib/export/kinds/workspaceAnswers.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/app/api/customer/exports/route.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)

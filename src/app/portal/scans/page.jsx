@@ -15,6 +15,7 @@ import {
 import { PrefetchLink } from "@/components/app/PrefetchLink";
 import { ExportMenu } from "@/components/app/ExportMenu";
 import { useExportRows } from "@/components/app/export/useExportRows";
+import { useServerExport } from "@/components/app/export/useServerExport";
 import {
   DataTable,
   makeSelectionColumn,
@@ -97,11 +98,12 @@ function scanPath(scan) {
   return `/portal/scans/${encodeURIComponent(scan.id)}`;
 }
 
-function ScansHistoryTable({ scans, loading, error, onRetry, router, brandKey }) {
+function ScansHistoryTable({ scans, loading, error, onRetry, router, brandKey, serverExports = false }) {
   const [sortState, setSortState] = useUrlSearchState(sortSchema, SORT_DEFAULTS);
   const [rowSelection, setRowSelection] = useState({});
   const anchorRef = useSelectionAnchor();
   const runExportRows = useExportRows();
+  const serverExport = useServerExport();
   const sorting = useMemo(
     () => [{ id: sortState.sort, desc: sortState.order === "desc" }],
     [sortState.order, sortState.sort],
@@ -243,6 +245,33 @@ function ScansHistoryTable({ scans, loading, error, onRetry, router, brandKey })
     void runHistoryExport(format, selected, "selection");
   };
 
+  const runAllAnswersExport = (format) => {
+    if (!brandKey) return;
+    const to = new Date().toISOString().slice(0, 10);
+    const from = new Date(Date.now() - 89 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    serverExport.mutate({
+      brandKey,
+      kind: "workspace_answers",
+      format,
+      params: { from, to },
+    });
+  };
+
+  const exportScopes = [
+    { id: "history", label: "Scan history", actions: ["sheets", "csv", "excel", "json"] },
+    ...(serverExports
+      ? [{
+          id: "all-answers",
+          label: "All answers",
+          actions: ["csv", "json"],
+          labels: {
+            csv: "All answers, last 90 days (CSV)",
+            json: "All answers, last 90 days (JSON)",
+          },
+        }]
+      : []),
+  ];
+
   return (
     <>
       <DataTable
@@ -265,8 +294,15 @@ function ScansHistoryTable({ scans, loading, error, onRetry, router, brandKey })
             actions={(
               <ExportMenu
                 actions={["sheets", "csv", "excel", "json"]}
-                scopes={[{ id: "history", label: "Scan history", actions: ["sheets", "csv", "excel", "json"] }]}
-                onExport={(action) => { void runHistoryExport(action, scans); }}
+                scopes={exportScopes}
+                busy={serverExport.isPending}
+                onExport={(action, scope) => {
+                  if (scope === "all-answers") {
+                    if (action === "csv" || action === "json") runAllAnswersExport(action);
+                    return;
+                  }
+                  void runHistoryExport(action, scans);
+                }}
               />
             )}
           />
@@ -299,7 +335,7 @@ function ScansHistoryTable({ scans, loading, error, onRetry, router, brandKey })
 }
 
 export default function ScansPage() {
-  const { brandKey, brand, scan, redirectToLogin } = usePortal();
+  const { brandKey, brand, scan, features, redirectToLogin } = usePortal();
   const router = useRouter();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -376,7 +412,7 @@ export default function ScansPage() {
 
         {initialLoad ? (
           <Card title="Scan history" description={brand?.display_name ? `Each scan of ${brand.display_name}, newest first.` : "Newest first."} flush>
-            <ScansHistoryTable key={brandKey} scans={[]} loading router={router} brandKey={brandKey} />
+            <ScansHistoryTable key={brandKey} scans={[]} loading router={router} brandKey={brandKey} serverExports={features?.server_exports === true} />
           </Card>
         ) : showEmpty ? (
           <Card>
@@ -402,6 +438,7 @@ export default function ScansPage() {
               onRetry={() => setReloadToken((n) => n + 1)}
               router={router}
               brandKey={brandKey}
+              serverExports={features?.server_exports === true}
             />
           </Card>
         ) : null}
