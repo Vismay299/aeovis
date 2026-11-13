@@ -17,8 +17,9 @@
  *   B08 AI access shows "Blocked" for OAI-SearchBot
  *   B09 an injected registry tab and page action render; flag-off entries hide
  *   B10 375 px viewport has no horizontal page scroll
+ *   B11 lighthouse detail renders scores and filters by category
  *
- * Output: "F18 browser: 10/10 passed" on pass.
+ * Output: "F18 browser: 11/11 passed" on pass.
  */
 
 import assert from "node:assert/strict";
@@ -58,7 +59,7 @@ assert.ok(
 const port = parseInt(origin.port || "3328", 10);
 const base = origin.href.replace(/\/$/, "");
 
-let requested = ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10"];
+let requested = ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "B11"];
 for (let i = 0; i < process.argv.length; i++) {
   if (process.argv[i].startsWith("--only=")) {
     requested = process.argv[i].split("=")[1].split(",").map((s) => s.trim());
@@ -207,6 +208,18 @@ async function installAuditApi(page, options = {}) {
   await page.route(
     (url) => url.pathname.endsWith("/performance"),
     (route) => jsonResponse(route, value(performance)),
+  );
+  await page.route(
+    (url) => /\/lighthouse\/[^/]+\/export/.test(url.pathname),
+    (route) =>
+      jsonResponse(route, {
+        filename: "lighthouse-mobile-issues.json",
+        content: JSON.stringify({ resultId: "x", category: "all", issues: [] }),
+      }),
+  );
+  await page.route(
+    (url) => /\/lighthouse\/[^/]+$/.test(url.pathname),
+    (route) => jsonResponse(route, value(options.lighthouseDetail ?? fixture("lighthouse-detail.json"))),
   );
   await page.route(
     (url) => url.pathname.endsWith("/cancel"),
@@ -417,6 +430,17 @@ scenario("B09", async (page) => {
   );
   await page.getByRole("button", { name: "Test action" }).click();
   await page.getByTestId("injected-action-dialog-test-action").waitFor();
+});
+
+scenario("B11", async (page) => {
+  const resultId = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
+  await page.goto(`${base}/portal/audit/${COMPLETED_ID}/lighthouse/${resultId}`, { waitUntil: "domcontentloaded" });
+  await page.getByRole("link", { name: "Back to audit" }).waitFor({ timeout: 20000 });
+  await page.getByText("Reduce unused JavaScript").waitFor({ timeout: 10000 });
+  await page.getByRole("tab", { name: /Performance/ }).click();
+  await page.waitForURL(/category=performance/, { timeout: 10000 });
+  await page.getByText("Reduce unused JavaScript").waitFor({ timeout: 10000 });
+  assert.equal(await page.getByText("Background and foreground colors do not have a sufficient contrast ratio.").count(), 0);
 });
 
 scenario("B10", async (page) => {

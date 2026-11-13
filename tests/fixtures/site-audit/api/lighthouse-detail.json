@@ -1,0 +1,46 @@
+{
+  "id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+  "finalUrl": "https://offcult.in/",
+  "strategy": "mobile",
+  "createdAt": "2026-10-22T09:01:12.000Z",
+  "hasIssueDetails": true,
+  "scores": { "performance": 62, "accessibility": 88, "best-practices": 96, "seo": 92 },
+  "metrics": {
+    "firstContentfulPaint": { "score": null, "displayValue": "1.2 s", "numericValue": 1200 },
+    "largestContentfulPaint": { "score": null, "displayValue": "3.1 s", "numericValue": 3120.5 },
+    "totalBlockingTime": { "score": null, "displayValue": "180 ms", "numericValue": 180 },
+    "cumulativeLayoutShift": { "score": null, "displayValue": "0.04", "numericValue": 0.04 },
+    "speedIndex": { "score": null, "displayValue": "2.4 s", "numericValue": 2400 },
+    "timeToInteractive": { "score": null, "displayValue": "4.1 s", "numericValue": 4100 },
+    "interactionToNextPaint": { "score": null, "displayValue": "180 ms", "numericValue": 180 },
+    "serverResponseTime": { "score": null, "displayValue": "0.4 s", "numericValue": 410 }
+  },
+  "issues": [
+    {
+      "category": "performance",
+      "auditKey": "unused-javascript",
+      "title": "Reduce unused JavaScript",
+      "description": "Trim dead code.",
+      "score": 30,
+      "scoreDisplayMode": "metricSavings",
+      "displayValue": "Potential savings of 820 ms",
+      "impactMs": 820,
+      "impactBytes": null,
+      "severity": "critical",
+      "items": ["{\"url\":\"https://offcult.in/app.js\"}"]
+    },
+    {
+      "category": "accessibility",
+      "auditKey": "color-contrast",
+      "title": "Background and foreground colors do not have a sufficient contrast ratio.",
+      "description": "Improve contrast.",
+      "score": 0,
+      "scoreDisplayMode": "binary",
+      "displayValue": null,
+      "impactMs": null,
+      "impactBytes": null,
+      "severity": "critical",
+      "items": []
+    }
+  ]
+}
