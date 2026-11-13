@@ -638,6 +638,53 @@ export const savedKeywordsRefreshContract = defineRouteContract({
   ],
 });
 
+export const keywordLocationsQuery = z.strictObject({
+  brand_key: z.string().min(1).max(200),
+  country: z.string().regex(/^[a-z]{2}$/i),
+  q: z.string().min(1).max(100),
+});
+
+export const keywordLocationsResponse = z.looseObject({
+  locations: z.array(
+    z.looseObject({
+      locationName: z.string(),
+      displayLabel: z.string(),
+      locationType: z.string(),
+    }),
+  ),
+});
+
+export const keywordLocationsContract = defineRouteContract({
+  id: "customer.keywords.locations",
+  method: "GET",
+  path: "/api/customer/keywords/locations",
+  file: "src/app/api/customer/keywords/locations/route.ts",
+  auth: "workspace",
+  query: keywordLocationsQuery,
+  response: keywordLocationsResponse,
+  errorCodes: [
+    "invalid_request",
+    "locations_unavailable",
+    "feature_unavailable",
+    "unauthenticated",
+    "unauthorized",
+    "workspace_not_found",
+  ],
+  examples: [
+    {
+      response: {
+        locations: [
+          {
+            locationName: "Mumbai,Maharashtra,India",
+            displayLabel: "Mumbai, Maharashtra, India",
+            locationType: "City",
+          },
+        ],
+      },
+    },
+  ],
+});
+
 export const contracts: RouteContract[] = [
   keywordResearchContract,
   serpContract,
@@ -649,4 +696,5 @@ export const contracts: RouteContract[] = [
   tagDeleteContract,
   savedKeywordsExportContract,
   savedKeywordsRefreshContract,
+  keywordLocationsContract,
 ];
