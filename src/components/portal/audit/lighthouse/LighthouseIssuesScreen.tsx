@@ -6,7 +6,9 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { toast } from "sonner";
+import { usePortal } from "@/components/portal/PortalShell";
 import { keys } from "@/lib/query/keys";
 import { BackLink } from "@/components/app/PageHeader";
 import { QueryError } from "@/components/app/QueryState";
@@ -38,10 +40,13 @@ export function LighthouseIssuesScreen({
   onCategoryChange: (next: CategoryTab) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  // Every audit route resolves the workspace from brand_key, as the other
+  // audit hooks send it.
+  const { brandKey } = usePortal();
   const detailQuery = useQuery<LighthouseDetail>({
     queryKey: keys.siteAuditLighthouse(resultId),
-    queryFn: () => fetchJson<LighthouseDetail>(`/api/customer/audit/${auditId}/lighthouse/${resultId}`),
-    enabled: Boolean(auditId) && Boolean(resultId),
+    queryFn: () => fetchJson<LighthouseDetail>(withBrand(`/api/customer/audit/${auditId}/lighthouse/${resultId}`, brandKey)),
+    enabled: Boolean(brandKey) && Boolean(auditId) && Boolean(resultId),
   });
 
   const issues = detailQuery.data?.issues ?? [];
@@ -62,8 +67,13 @@ export function LighthouseIssuesScreen({
   async function runExport(mode: "full" | "issues" | "category") {
     setBusy(true);
     try {
-      const params = mode === "category" ? `?mode=category&category=${category}` : `?mode=${mode}`;
-      const res = await fetch(`/api/customer/audit/${auditId}/lighthouse/${resultId}/export${params}`);
+      const params = mode === "category" ? { mode, category } : { mode };
+      const res = await fetch(withBrand(`/api/customer/audit/${auditId}/lighthouse/${resultId}/export`, brandKey, params));
+      if (!res.ok) {
+        // Never save an error body as the export file.
+        toast.error("Couldn't export this Lighthouse report. Please retry.");
+        return;
+      }
       const content = await res.text();
       const disposition = res.headers.get("content-disposition") ?? "";
       const filename = disposition.match(/filename="([^"]+)"/)?.[1] ?? `lighthouse-${mode}.json`;

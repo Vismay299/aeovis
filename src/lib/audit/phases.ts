@@ -433,22 +433,23 @@ export async function runLighthousePhase(...args: any[]): Promise<any> {
       return { skipped: false, results: settled };
     });
 
-    await ctx.step.do(`lighthouse-persist-${w + 1}`, DB_STEP, async () => {
+    // Counters advance from the step's (memoised) output, never inside the
+    // callback: on a job replay the callback is skipped and the in-memory
+    // counters would otherwise restart at zero, under-counting both the
+    // progress columns and the budget already used by earlier waves.
+    const persisted = await ctx.step.do(`lighthouse-persist-${w + 1}`, DB_STEP, async () => {
       const rows = waveResult?.results ?? [];
       await store.insertLighthouse({ id: audit.id, brandKey: audit.brand_key }, rows);
-      for (const r of rows) {
-        if (r?.errorMessage) failed += 1;
-        else completed += 1;
-      }
+      const waveCompleted = rows.filter((r: any) => !r?.errorMessage).length;
+      const waveFailed = rows.length - waveCompleted;
       await store.updateAudit(audit.id, jobId, {
-        lighthouse_completed: completed,
-        lighthouse_failed: failed,
+        lighthouse_completed: completed + waveCompleted,
+        lighthouse_failed: failed + waveFailed,
       });
-      return {
-        completed: rows.filter((r: any) => !r?.errorMessage).length,
-        failed: rows.filter((r: any) => r?.errorMessage).length,
-      };
+      return { completed: waveCompleted, failed: waveFailed };
     });
+    completed += Number(persisted?.completed ?? 0);
+    failed += Number(persisted?.failed ?? 0);
   }
 
   return { pages: samplePages };

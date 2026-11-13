@@ -210,7 +210,7 @@ async function installAuditApi(page, options = {}) {
     (route) => jsonResponse(route, value(performance)),
   );
   await page.route(
-    (url) => /\/lighthouse\/[^/]+\/export/.test(url.pathname),
+    (url) => /^\/api\/.*\/lighthouse\/[^/]+\/export$/.test(url.pathname),
     (route) =>
       jsonResponse(route, {
         filename: "lighthouse-mobile-issues.json",
@@ -218,7 +218,8 @@ async function installAuditApi(page, options = {}) {
       }),
   );
   await page.route(
-    (url) => /\/lighthouse\/[^/]+$/.test(url.pathname),
+    // API only: the portal page /portal/audit/…/lighthouse/<id> has the same tail.
+    (url) => /^\/api\/.*\/lighthouse\/[^/]+$/.test(url.pathname),
     (route) => jsonResponse(route, value(options.lighthouseDetail ?? fixture("lighthouse-detail.json"))),
   );
   await page.route(

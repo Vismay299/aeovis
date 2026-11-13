@@ -243,3 +243,39 @@ test("refusal happens before any provider call when the budget is zero", async (
   assert.equal(fetchCalls, 0);
   assert.ok(store.inserted.every((r: any) => r.errorMessage === "Lighthouse budget reached"));
 });
+
+test("a replayed job keeps earlier waves in the counters and the budget guard", async () => {
+  const pages = Array.from({ length: 10 }, (_, i) => ({ id: `p${i}`, url: `https://example.com/p${i}` }));
+  const store = makeStore(pages);
+  let fetchCalls = 0;
+  // The first invocation finished select, wave 1 and persist 1 (5 pages × 2
+  // strategies, all ok); this replay gets their memoised outputs back.
+  const memo: Record<string, unknown> = {
+    "lighthouse-select": { pages },
+    "lighthouse-wave-1": {
+      skipped: false,
+      results: pages.slice(0, 5).flatMap((p) => [okFetch(p, "mobile").result, okFetch(p, "desktop").result]),
+    },
+    "lighthouse-persist-1": { completed: 10, failed: 0 },
+  };
+  const ctx = makeCtx({}, async (name, _opts, fn) => (name in memo ? memo[name] : fn()));
+  await runLighthousePhase(ctx as never, {
+    // 20 calls cost 0.10; 0.075 covers wave 1 (already spent) but not wave 2.
+    audit: makeAudit({ lighthouse_approved_usd: 0.075 }),
+    store: store as never,
+    jobId: "job-1",
+    deps: {
+      fetchLighthouse: async (page: any, strategy: any) => {
+        fetchCalls += 1;
+        return okFetch(page, strategy);
+      },
+      uploadPayload: async () => {},
+      metered: (async (_i: any, call: any) => (await call()).value) as never,
+    },
+  });
+  assert.equal(fetchCalls, 0, "wave 2 is over budget once wave 1's spend is counted");
+  const last = store.updates.at(-1);
+  assert.equal(last.lighthouse_completed, 10);
+  assert.equal(last.lighthouse_failed, 10);
+  assert.ok(store.inserted.every((r: any) => r.errorMessage === "Lighthouse budget reached"));
+});
