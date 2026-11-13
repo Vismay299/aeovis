@@ -1,0 +1,24 @@
+{
+  "status_code": 20000,
+  "tasks": [
+    {
+      "status_code": 20000,
+      "cost": 0.0035,
+      "result": [
+        {
+          "items": [
+            { "type": "organic", "rank_group": 1, "rank_absolute": 1, "domain": "a.com", "url": "https://a.com/1" },
+            { "type": "organic", "rank_group": 2, "rank_absolute": 2, "domain": "b.com", "url": "https://b.com/2" },
+            { "type": "people_also_ask", "text": "x" }
+          ]
+        },
+        {
+          "items": [
+            { "type": "organic", "rank_group": 11, "rank_absolute": 11, "domain": "c.com", "url": "https://c.com/3" },
+            { "type": "organic", "rank_group": 12, "rank_absolute": 12, "domain": "d.com", "url": "https://d.com/4" }
+          ]
+        }
+      ]
+    }
+  ]
+}

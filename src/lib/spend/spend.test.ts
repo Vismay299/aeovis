@@ -388,6 +388,9 @@ test("usd6 rounds half-up to six decimals and SPEND_FEATURES is a closed union",
     "backlinks.snapshots",
     "site_audit.lighthouse",
     "site_audit.render",
+    "rank_tracking.check",
+    "rank_tracking.suggestions",
+    "rank_tracking.metrics",
   ]);
   assert.strictEqual(SPEND_FEATURES, SHARED_SPEND_FEATURES, "the lib path re-exports the shared array");
   assert.equal(isSpendFeature("platform.selftest"), true);
