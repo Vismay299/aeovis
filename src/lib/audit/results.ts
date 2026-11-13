@@ -200,40 +200,40 @@ export async function listAuditPerformance(admin: any, brandKey: string, auditId
   })) };
 }
 
-export async function getLighthouseDetail(admin: any, brandKey: string, auditId: string, resultId: string): Promise<any> {
+export async function getLighthouseDetail(
+  admin: any,
+  brandKey: string,
+  auditId: string,
+  resultId: string,
+  category?: string,
+): Promise<any> {
   await ownedAudit(admin, brandKey, auditId, "id");
   const { data: row, error } = await admin.from("site_audit_lighthouse").select("*").eq("id", resultId).eq("audit_id", auditId).eq("brand_key", brandKey).maybeSingle();
   if (error) throw error;
-  if (!row) throw new AppError(404, "not_found", "Lighthouse result not found.");
-  let payload: any = null;
-  let report: any = { hasIssueDetails: false, issues: [] };
-  if (row.payload_path) {
-    try {
-      const { data: fileData, error: dlErr } = await admin.storage.from("site-audit-lighthouse").download(row.payload_path);
-      if (!dlErr && fileData) {
-        const text = await fileData.text();
-        const parsed = readStoredLighthousePayload(text);
-        payload = parsed.storedPayload;
-        report = parsed.report;
-      }
-    } catch {
-      // ignore
-    }
+  if (!row) throw new AppError(404, "audit_not_found", "Audit not found.");
+  if (!row.payload_path) {
+    throw new AppError(404, "lighthouse_details_unavailable", "This Lighthouse run was saved without details.");
   }
+  const { data: fileData, error: dlErr } = await admin.storage.from("site-audit-lighthouse").download(row.payload_path);
+  if (dlErr || !fileData) {
+    throw new AppError(404, "lighthouse_details_unavailable", "This Lighthouse run was saved without details.");
+  }
+  const text = await fileData.text();
+  const parsed = readStoredLighthousePayload(text, category as never);
   return {
     id: row.id,
-    finalUrl: row.final_url ?? row.url ?? null,
+    finalUrl: parsed.storedPayload?.metadata.finalUrl ?? null,
     strategy: row.strategy,
     createdAt: row.created_at,
-    hasIssueDetails: report.hasIssueDetails,
+    hasIssueDetails: parsed.report.hasIssueDetails,
     scores: {
       performance: row.performance_score,
       accessibility: row.accessibility_score,
       "best-practices": row.best_practices_score,
       seo: row.seo_score,
     },
-    metrics: payload?.metrics ?? null,
-    issues: report.issues,
+    metrics: parsed.storedPayload?.metrics ?? null,
+    issues: parsed.report.issues,
   };
 }
 
