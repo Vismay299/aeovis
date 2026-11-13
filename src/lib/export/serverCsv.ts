@@ -18,7 +18,7 @@ export function serverCsvCell(value: string | number | boolean | null | undefine
   return `"${text.replaceAll('"', '""')}"`;
 }
 
-/** Every line is quoted and joined with CRLF, as OpenSEO's server export does. */
+/** Every line is quoted and joined with CRLF, as the upstream server export does. */
 export function serverCsv(headers: readonly string[], rows: readonly unknown[][]): string {
   return [headers, ...rows]
     .map((row) => row.map((value) => serverCsvCell(value as string | number | boolean | null | undefined)).join(","))
