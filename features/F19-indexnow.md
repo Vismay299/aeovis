@@ -458,9 +458,9 @@ F19 appends `{ id: "indexnow", label: "IndexNow", flag: "indexnow", Panel: Index
 
 ### Phase 3 — Site Audit tab and page action (requires F18's audit pages merged)
 
-- [ ] **P3.T1 Audit integration**
-  - [ ] **P3.T1.S1** *Files:* `src/components/portal/audit/tabs.ts`, `src/components/portal/audit/pageActions.ts` (F18 files; create with the §6.6.3 types and render them in F18's audit page and pages table only if F18 did not ship them), `src/components/portal/indexnow/{IndexNowAuditTab,SubmitIndexNowDialog}.tsx`. *Do:* §6.6.3; append the two entries. *Verify:* `npm run build` → exit 0.
-  - [ ] **P3.T1.S2** *Files:* `scripts/qa/check-f19-browser.mjs` (B4–B5; fixture audit with 150 pages incl. a 404 and a noindex page). *Do:* B4 the audit shows the "IndexNow" tab; nothing selected by default; selecting 3 pages (one 404) → dialog lists 2 and the "left out" note; submit → result list; B5 selecting all → the "I changed all 148 of these pages." checkbox is required before "Submit" enables. *Verify:* `node scripts/qa/check-f19-browser.mjs --only B4,B5` → "ok 2 scenarios" (F19-AC-12).
+- [x] **P3.T1 Audit integration**
+  - [x] **P3.T1.S1** *Files:* `src/components/portal/audit/tabs.ts`, `src/components/portal/audit/pageActions.ts` (F18 files; create with the §6.6.3 types and render them in F18's audit page and pages table only if F18 did not ship them), `src/components/portal/indexnow/{IndexNowAuditTab,SubmitIndexNowDialog}.tsx`. *Do:* §6.6.3; append the two entries. *Verify:* `npm run build` → exit 0.
+  - [x] **P3.T1.S2** *Files:* `scripts/qa/check-f19-browser.mjs` (B4–B5; fixture audit with 150 pages incl. a 404 and a noindex page). *Do:* B4 the audit shows the "IndexNow" tab; nothing selected by default; selecting 3 pages (one 404) → dialog lists 2 and the "left out" note; submit → result list; B5 selecting all → the "I changed all 148 of these pages." checkbox is required before "Submit" enables. *Verify:* `node scripts/qa/check-f19-browser.mjs --only B4,B5` → "ok 2 scenarios" (F19-AC-12).
 
 **Checkpoint:** full suite, build, B1–B5 pass. Completes F19-AC-12.
 

@@ -36,6 +36,8 @@ test("every builder returns its documented shape", () => {
   assert.deepEqual(keys.keywordSerp("a", "input"), ["keywordSerp", "a", "input"]);
   assert.deepEqual(keys.savedKeywords("a", "input"), ["savedKeywords", "a", "input"]);
   assert.deepEqual(keys.keywordLocations("a", "US", "shoes"), ["keywordLocations", "a", "US", "shoes"]);
+  assert.deepEqual(keys.questions("a"), ["questions", "a"]);
+  assert.deepEqual(keys.questionResearchKeywords("a"), ["questionResearchKeywords", "a"]);
   assert.deepEqual(keys.schedule("a"), ["schedule", "a"]);
 });
 
@@ -60,6 +62,8 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.keywordSerp("acme", "serp-input"),
     keys.savedKeywords("acme", "saved-input"),
     keys.keywordLocations("acme", "US", "shoes"),
+    keys.questions("acme"),
+    keys.questionResearchKeywords("acme"),
     keys.schedule("acme"),
     keys.backlinksOverview("acme", "overview-input"),
     keys.backlinksTab("acme", "backlinks", "tab-input"),
@@ -163,12 +167,16 @@ test("invalidateWorkspace passes a predicate matching only that workspace's keys
   assert.equal(matches(keys.keywordSerp("a", "input")), true);
   assert.equal(matches(keys.savedKeywords("a", "input")), true);
   assert.equal(matches(keys.keywordLocations("a", "US", "shoes")), true);
+  assert.equal(matches(keys.questions("a")), true);
+  assert.equal(matches(keys.questionResearchKeywords("a")), true);
   assert.equal(matches(keys.overview("b")), false);
   assert.equal(matches(keys.gsc("b")), false);
   assert.equal(matches(keys.keywordResearch("b", "input")), false);
   assert.equal(matches(keys.keywordSerp("b", "input")), false);
   assert.equal(matches(keys.savedKeywords("b", "input")), false);
   assert.equal(matches(keys.keywordLocations("b", "US", "shoes")), false);
+  assert.equal(matches(keys.questions("b")), false);
+  assert.equal(matches(keys.questionResearchKeywords("b")), false);
   assert.equal(matches(keys.scanReport("a")), false);
 });
 

@@ -593,7 +593,17 @@ SOFTWARE.
 - src/lib/export/serverCsv.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
 - src/lib/export/serverExport.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
 - src/lib/export/kinds/workspaceAnswers.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/lib/export/kinds/siteAudit.ts (from `src/client/features/audit/results/export.ts`)
 - src/app/api/customer/exports/route.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+
+### F08 Phase 4 ports
+- `src/components/portal/questions/AddQuestionsDialog.tsx` (from `openseo:src/client/features/ai-visibility/TrackerEditor.tsx`)
+- `src/components/portal/questions/QuestionFields.tsx` (from `openseo:src/client/features/ai-visibility/TrackerPromptFields.tsx`)
+- `src/components/portal/questions/TopicField.tsx` (from `openseo:src/client/features/ai-visibility/TopicField.tsx`)
+- `src/components/portal/questions/setup/QuestionSetupGate.tsx` (from `openseo:src/client/features/ai-visibility/AiResearchSetupGate.tsx`)
+- `src/components/portal/questions/setup/SetupReview.tsx` (from `openseo:src/client/features/projects/WebsiteSetupReview.tsx`)
+- `src/components/portal/questions/setup/CompetitorRow.tsx` (from `openseo:src/client/features/projects/WebsiteCompetitorRow.tsx`)
+- `src/components/portal/questions/research/QuestionResearchTable.tsx` (from `openseo:src/client/features/ai-visibility/PromptResearchTable.tsx`)
 
 ### F18 Phase 4 ports
 - `src/components/portal/audit/AuditDetail.tsx` (from `openseo:src/client/features/audit/AuditDetail.tsx`, `openseo:src/client/features/audit/shared.tsx`)
@@ -616,3 +626,15 @@ SOFTWARE.
 - `src/components/portal/audit/results/export.ts` (from `openseo:src/client/features/audit/results/export.ts`)
 - `src/app/portal/audit/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
 - `src/app/portal/audit/[auditId]/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
+
+### F15 Phase 2 ports
+- `src/lib/rank-tracking/service.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.ts`)
+- `src/lib/rank-tracking/runGuards.ts` (from `openseo:src/server/features/rank-tracking/services/rankCheckRunGuards.ts`)
+- `src/lib/rank-tracking/checkPaths.ts` (from `openseo:src/server/workflows/rankCheckPaths.ts`)
+- `src/lib/rank-tracking/retries.ts` (from `openseo:src/server/workflows/rankCheckRetries.ts`)
+- `src/lib/rank-tracking/checkJob.ts` (from `openseo:src/server/workflows/RankCheckWorkflow.ts`)
+- `src/lib/rank-tracking/results.ts` (from `openseo:src/server/features/rank-tracking/services/rankTrackingResults.ts`)
+- `src/lib/pricing/actions/rankTracking.ts` (from `openseo:src/shared/rank-tracking.ts`)
+- `src/lib/rank-tracking/jobs.ts` (from `openseo:src/server/features/rank-tracking/jobs`)
+- `src/lib/rank-tracking/service.test.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.test.ts`)
+- `src/lib/rank-tracking/rankTracking.contract.ts` (from `openseo:src/types/schemas/rank-tracking.ts`)

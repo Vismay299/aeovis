@@ -72,6 +72,10 @@ export const keys = {
     ["savedKeywords", brandKey, inputKey] as const,
   keywordLocations: (brandKey: string, iso: string, q: string) =>
     ["keywordLocations", brandKey, iso, q] as const,
+  // F08 — questions workspace
+  questions: (brandKey: string) => ["questions", brandKey] as const,
+  questionResearchKeywords: (brandKey: string) =>
+    ["questionResearchKeywords", brandKey] as const,
   // F14
   domainOverview: (brandKey: string, inputKey: string) =>
     ["domainOverview", brandKey, inputKey] as const,
@@ -153,6 +157,8 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "keywordSerp",
   "savedKeywords",
   "keywordLocations",
+  "questions",
+  "questionResearchKeywords",
   "domainOverview",
   "domainKeywords",
   "domainPages",

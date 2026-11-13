@@ -755,11 +755,13 @@ test("measurement page displays approved question panel, counts questions, runs 
   let scanStarted = false;
   const scan = { start: () => { scanStarted = true; }, starting: false, active: false };
 
+  const QuestionsWorkspaceStub = () => React.createElement("div", { "data-testid": "questions-workspace-stub" }, "QuestionsWorkspace");
   const { default: MeasurementPage } = await compileJsx(path.join(here, "../../app/portal/measurement/page.jsx"), {
     modules: new Map([
       ["react", lifecycle.react],
-      ["@/components/portal/PortalShell", { usePortal: () => ({ brandKey: "acme", brand: { display_name: "Acme" }, redirectToLogin: noop, scan }) }],
+      ["@/components/portal/PortalShell", { usePortal: () => ({ brandKey: "acme", brand: { display_name: "Acme" }, redirectToLogin: noop, scan, features: {} }) }],
       ["@/components/portal/ui", ui],
+      ["@/components/portal/questions/QuestionsWorkspace", { QuestionsWorkspace: QuestionsWorkspaceStub }],
     ]),
     autoNull: ["lucide-react"],
   });
@@ -848,3 +850,56 @@ test("measurement page displays approved question panel, counts questions, runs 
   });
 });
 
+
+test("measurement page swaps legacy question panel for QuestionsWorkspace when question_curation is on", async (t) => {
+  const lifecycle = createLifecycle();
+  t.after(() => lifecycle.close());
+
+  t.mock.method(globalThis, "fetch", async (url) => {
+    const urlStr = String(url);
+    if (urlStr.includes("/api/customer/repairs/")) return response(200, { items: [] });
+    if (urlStr.includes("/api/customer/measurement")) return response(200, { observations: [], windows: [] });
+    return response(200, {});
+  });
+
+  const ui = await compileJsx(path.join(here, "ui.jsx"), {
+    modules: new Map([["react", React], ["next/link", { __esModule: true, default: "a" }]]),
+    autoNull: ["lucide-react"],
+  });
+
+  const QuestionsWorkspaceStub = () => React.createElement("div", { "data-testid": "questions-workspace-stub" }, "QuestionsWorkspace");
+  const { default: MeasurementPage } = await compileJsx(path.join(here, "../../app/portal/measurement/page.jsx"), {
+    modules: new Map([
+      ["react", lifecycle.react],
+      ["@/components/portal/PortalShell", { usePortal: () => ({ brandKey: "acme", brand: { display_name: "Acme" }, redirectToLogin: noop, scan: { start: noop, starting: false, active: false }, features: { question_curation: true } }) }],
+      ["@/components/portal/ui", ui],
+      ["@/components/portal/questions/QuestionsWorkspace", { QuestionsWorkspace: QuestionsWorkspaceStub }],
+    ]),
+    autoNull: ["lucide-react"],
+  });
+
+  lifecycle.setRender(() => MeasurementPage());
+  await lifecycle.settle();
+
+  function findAllNodes(node, match, acc = []) {
+    if (!node || typeof node !== "object") return acc;
+    if (Array.isArray(node)) { for (const child of node) findAllNodes(child, match, acc); return acc; }
+    if (match(node)) acc.push(node);
+    if (node.props) {
+      for (const [key, val] of Object.entries(node.props)) {
+        if (key !== "children" && val && typeof val === "object") findAllNodes(val, match, acc);
+      }
+      findAllNodes(node.props.children, match, acc);
+    }
+    return acc;
+  }
+
+  const cards = findAllNodes(lifecycle.output, (node) => node.type === ui.Card);
+  const legacy = cards.find((c) => c.props?.title === "Question panel");
+  assert.equal(legacy, undefined, "legacy Question panel card must not render when question_curation is on");
+  // The page has loaded (other cards render), so the missing legacy card is a swap, not a skeleton.
+  assert.ok(cards.some((c) => c.props?.title === "Website technical evidence"), "measurement page must have loaded");
+  // The render tree holds elements, not their output, so match the stub by type.
+  const stub = findAllNodes(lifecycle.output, (node) => node.type === QuestionsWorkspaceStub)[0];
+  assert.ok(stub, "QuestionsWorkspace must render when question_curation is on");
+});
