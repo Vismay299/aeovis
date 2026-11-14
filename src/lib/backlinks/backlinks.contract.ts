@@ -425,9 +425,36 @@ export const topPagesContract = defineRouteContract({
   examples: [{ response: EXAMPLE_TOP_PAGES_RESPONSE }],
 });
 
+// --- 5. POST /api/customer/backlinks/ahrefs-dr ---
+export const ahrefsDomainRatingsRequestBody = z.strictObject({
+  domains: z.array(z.string().trim().min(1).max(253)).min(1).max(100),
+});
+
+export const ahrefsDomainRatingsResponseSchema = z.looseObject({
+  ratings: z.record(z.string(), z.number().nullable()),
+});
+
+const EXAMPLE_AHREFS_DR_RESPONSE = {
+  ratings: { "bewakoof.com": 61, "www.example.in": null },
+};
+
+export const ahrefsDomainRatingsContract = defineRouteContract({
+  id: "customer.backlinks.ahrefs_dr",
+  method: "POST",
+  path: "/api/customer/backlinks/ahrefs-dr",
+  file: "src/app/api/customer/backlinks/ahrefs-dr/route.ts",
+  auth: "workspace",
+  query: backlinksBrandQuery,
+  request: ahrefsDomainRatingsRequestBody,
+  response: ahrefsDomainRatingsResponseSchema,
+  errorCodes: BACKLINKS_COMMON_ERROR_CODES,
+  examples: [{ response: EXAMPLE_AHREFS_DR_RESPONSE }],
+});
+
 export const contracts: RouteContract[] = [
   backlinksOverviewContract,
   backlinksRowsContract,
   referringDomainsContract,
   topPagesContract,
+  ahrefsDomainRatingsContract,
 ];

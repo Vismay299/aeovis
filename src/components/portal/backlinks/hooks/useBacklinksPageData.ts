@@ -6,7 +6,7 @@ import { defaultScopeForInput } from "@/shared/researchScope";
 import { useMemo } from "react";
 import { useQuery, type QueryKey } from "@tanstack/react-query";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
-import { fetchJson, isApiError } from "@/lib/query/fetchJson";
+import { fetchJson, isApiError, withBrand } from "@/lib/query/fetchJson";
 import { keys, stableStringify } from "@/lib/query/keys";
 import {
   BACKLINKS_DEFAULT_SORT,
@@ -193,7 +193,7 @@ export function useBacklinksPageData({
     staleTime: BACKLINKS_QUERY_STALE_TIME_MS,
     ...paidQueryOptions(isLive),
     queryFn: () =>
-      fetchJson<OverviewApiResponse>("/api/customer/backlinks/overview", {
+      fetchJson<OverviewApiResponse>(withBrand("/api/customer/backlinks/overview", brandKey), {
         method: "POST",
         body: {
           target,
@@ -255,7 +255,7 @@ export function useBacklinksPageData({
     staleTime: BACKLINKS_QUERY_STALE_TIME_MS,
     placeholderData: rowsFilterError ? undefined : keepSameTarget,
     queryFn: () =>
-      fetchJson<RowsApiResponse>("/api/customer/backlinks/rows", {
+      fetchJson<RowsApiResponse>(withBrand("/api/customer/backlinks/rows", brandKey), {
         method: "POST",
         body: {
           target,
@@ -310,7 +310,7 @@ export function useBacklinksPageData({
     placeholderData: keepSameTarget,
     queryFn: () =>
       fetchJson<ReferringDomainsApiResponse>(
-        "/api/customer/backlinks/referring-domains",
+        withBrand("/api/customer/backlinks/referring-domains", brandKey),
         {
           method: "POST",
           body: {
@@ -364,7 +364,7 @@ export function useBacklinksPageData({
     placeholderData: keepSameTarget,
     queryFn: () =>
       fetchJson<TopPagesApiResponse>(
-        "/api/customer/backlinks/top-pages",
+        withBrand("/api/customer/backlinks/top-pages", brandKey),
         {
           method: "POST",
           body: {
