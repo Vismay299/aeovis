@@ -443,19 +443,22 @@ export async function estimateMetricsRun(
   if (keywords.length > 0 && ctx.admin) {
     try {
       const lowered = Array.from(new Set(keywords.map((keyword: any) => String(keyword.keyword).toLowerCase())));
-      const { data } = await ctx.admin
-        .from("keyword_metrics")
-        .select("keyword, fetched_at")
-        .eq("location_code", configRow.location_code)
-        .eq("language_code", dataLang)
-        .in("keyword", lowered);
-      const freshKeys = new Set(
-        ((data as Array<{ keyword: string; fetched_at: string }> | null) ?? [])
-          .filter((row) => row.fetched_at > cutoff)
-          .map((row) => String(row.keyword).toLowerCase()),
-      );
+      const freshKeys = new Set<string>();
+      for (let index = 0; index < lowered.length; index += 100) {
+        const { data, error } = await ctx.admin
+          .from("keyword_metrics")
+          .select("keyword, fetched_at")
+          .eq("location_code", configRow.location_code)
+          .eq("language_code", dataLang)
+          .in("keyword", lowered.slice(index, index + 100));
+        if (error) throw error;
+        for (const row of (data as Array<{ keyword: string; fetched_at: string }> | null) ?? []) {
+          if (Date.parse(row.fetched_at) > Date.parse(cutoff)) freshKeys.add(String(row.keyword).toLowerCase());
+        }
+      }
       fresh = keywords.filter((keyword: any) => freshKeys.has(String(keyword.keyword).toLowerCase())).length;
     } catch {
+      // A failed read prices every keyword as stale (never under-quotes).
       fresh = 0;
     }
   }

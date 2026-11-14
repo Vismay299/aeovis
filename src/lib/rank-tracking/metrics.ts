@@ -148,16 +148,22 @@ export async function refreshKeywordMetrics(
     const lowered = uniqueLowered(keywords.map((keyword) => keyword.keyword));
     const freshByKeyword = new Map<string, { search_volume: number | null; keyword_difficulty: number | null; cpc: number | null; fetched_at: string }>();
     if (lowered.length > 0) {
-      const { data } = await admin
-        .from("keyword_metrics")
-        .select("keyword, search_volume, keyword_difficulty, cpc, fetched_at")
-        .eq("location_code", config.location_code)
-        .eq("language_code", dataLang)
-        .in("keyword", lowered);
+      // Batched so a large tracker never overflows one request URL. A failed
+      // read must not fall through to "everything is stale" — that would buy
+      // every keyword again.
       const cutoff = freshCutoffIso(now);
-      for (const row of (data as Array<{ keyword: string; search_volume: number | null; keyword_difficulty: number | null; cpc: number | null; fetched_at: string }> ?? [])) {
-        if (row.fetched_at > cutoff) {
-          freshByKeyword.set(row.keyword.toLowerCase(), row);
+      for (let index = 0; index < lowered.length; index += 100) {
+        const { data, error } = await admin
+          .from("keyword_metrics")
+          .select("keyword, search_volume, keyword_difficulty, cpc, fetched_at")
+          .eq("location_code", config.location_code)
+          .eq("language_code", dataLang)
+          .in("keyword", lowered.slice(index, index + 100));
+        if (error) throw new AppError(503, "rank_metrics_unavailable", "Keyword stats could not be loaded. Please retry.", { cause: error });
+        for (const row of (data as Array<{ keyword: string; search_volume: number | null; keyword_difficulty: number | null; cpc: number | null; fetched_at: string }> ?? [])) {
+          if (Date.parse(row.fetched_at) > Date.parse(cutoff)) {
+            freshByKeyword.set(row.keyword.toLowerCase(), row);
+          }
         }
       }
     }

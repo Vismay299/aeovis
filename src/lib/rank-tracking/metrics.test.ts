@@ -37,7 +37,7 @@ const NOW = new Date("2026-10-21T00:00:00.000Z");
 const freshAt = NOW.toISOString();
 const staleAt = new Date(NOW.getTime() - 8 * 86_400_000).toISOString();
 
-function makeMetricsAdmin(rows: Array<{ keyword: string; search_volume: number | null; keyword_difficulty: number | null; cpc: number | null; fetched_at: string }>) {
+function makeMetricsAdmin(rows: Array<{ keyword: string; search_volume: number | null; keyword_difficulty: number | null; cpc: number | null; fetched_at: string }>, readError: unknown = null) {
   const tables: string[] = [];
   const inArgs: unknown[] = [];
   const admin = {
@@ -48,9 +48,11 @@ function makeMetricsAdmin(rows: Array<{ keyword: string; search_volume: number |
         select: () => ({
           eq: () => ({
             eq: () => ({
-              in: async (values: unknown) => {
+              in: async (_col: string, values: unknown) => {
                 inArgs.push(values);
-                return { data: rows, error: null };
+                if (readError) return { data: null, error: readError };
+                const wanted = new Set(values as string[]);
+                return { data: rows.filter((row) => wanted.has(row.keyword.toLowerCase())), error: null };
               },
             }),
           }),
@@ -475,4 +477,41 @@ test("route: success returns the refresh result with no-store", async () => {
   assert.deepEqual(await res.json(), { updated: 3, fromCache: 3, bought: 0 });
   assert.equal(fetcher.calls.length, 0);
   assert.equal(res.headers.get("cache-control"), "no-store");
+});
+
+test("a failed keyword_metrics read refuses instead of buying every keyword", async () => {
+  const repo = createMemoryRankTrackingRepository();
+  const keywords = overviewFixture.items.map((item) => item.keyword);
+  const { config } = await seedNational(repo, keywords);
+  const admin = makeMetricsAdmin([], { message: "boom" });
+  const fetcher = makeFakeFetch(overviewRows);
+  const s = spies();
+  await assert.rejects(
+    refreshKeywordMetrics(
+      repoWs(admin.admin) as any,
+      config.id,
+      { maxUsd: 1, requestId: crypto.randomUUID() },
+      { repo, fetchKeywordMetricsForList: fetcher.fetch, upsertMetrics: s.upsertMetrics, appendResearch: s.appendResearch, now: () => NOW },
+    ),
+    (err: any) => err?.code === "rank_metrics_unavailable",
+  );
+  assert.equal(fetcher.calls.length, 0, "no paid call after a failed cache read");
+});
+
+test("keyword_metrics lookups are batched by 100", async () => {
+  const repo = createMemoryRankTrackingRepository();
+  const keywords = Array.from({ length: 250 }, (_, i) => `kw ${i}`);
+  const { config } = await seedNational(repo, keywords);
+  const admin = makeMetricsAdmin(keywords.map((keyword) => ({ keyword, search_volume: 1, keyword_difficulty: 1, cpc: 0.1, fetched_at: freshAt })));
+  const fetcher = makeFakeFetch(overviewRows);
+  const s = spies();
+  const out = await refreshKeywordMetrics(
+    repoWs(admin.admin) as any,
+    config.id,
+    { maxUsd: 1, requestId: crypto.randomUUID() },
+    { repo, fetchKeywordMetricsForList: fetcher.fetch, upsertMetrics: s.upsertMetrics, appendResearch: s.appendResearch, now: () => NOW },
+  );
+  assert.deepEqual(admin.inArgs.map((v) => (v as unknown[]).length), [100, 100, 50]);
+  assert.equal(out.fromCache, 250);
+  assert.equal(fetcher.calls.length, 0);
 });
