@@ -337,8 +337,11 @@ try {
   });
   await run(["R02-20"], async () => {
     // Reset previous fixture day charges; this database belongs only to this job.
+    const linksTable = (await query("SELECT to_regclass('public.question_answer_links') AS t")).rows[0].t;
     await query(
-      "TRUNCATE measurement_evidence,measurement_incidents,probe_reconciliations,probe_late_receipts,probe_attempts,probe_observations,provider_dispatch_circuits,provider_canary_budgets",
+      // question_answer_links (F12, 095) references probe_observations; it is
+      // derived data, so it is cleared with them when the table exists.
+      `TRUNCATE measurement_evidence,measurement_incidents,probe_reconciliations,probe_late_receipts,probe_attempts,probe_observations,provider_dispatch_circuits,provider_canary_budgets${linksTable ? ",question_answer_links" : ""}`,
     );
     const { rows } = await fixture(10);
     const claims = await Promise.all(

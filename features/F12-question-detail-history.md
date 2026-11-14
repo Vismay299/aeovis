@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS public.question_answer_links (
   brand_key text NOT NULL REFERENCES public.customer_brands(brand_key) ON DELETE CASCADE,
   question_id uuid NOT NULL REFERENCES public.workspace_questions(id) ON DELETE CASCADE,
   source text NOT NULL CHECK (source IN ('scan','explore','legacy')),
-  observation_id text UNIQUE REFERENCES public.probe_observations(id),
+  observation_id text UNIQUE REFERENCES public.probe_observations(id) ON DELETE CASCADE,
   prompt_result_id uuid UNIQUE REFERENCES public.prompt_results(id) ON DELETE CASCADE,
   scan_job_id uuid,                       -- scan_jobs.id (scan and legacy rows)
   scan_id uuid,                           -- scans.id once the scan finalized
