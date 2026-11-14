@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import { runCrawlChunk, runCrawlPhase } from "./crawlPhase.ts";
 import { createMemoryAuditStore } from "./memoryStore.ts";
 import { AuditPhaseError } from "./errors.ts";
+import { finalizeAudit } from "./phases.ts";
+import { StepFailedError } from "../jobs/runner.ts";
 import type { AuditRow } from "./store.ts";
 import type { SafeFetchResult } from "../http/safeFetch.ts";
 
@@ -363,6 +365,64 @@ test("crawlPhase: renders billed in a chunk that fails still reach render_billed
   const fresh = await store.getAudit(auditId);
   assert.equal(fresh?.render_billed, renderCalls, "every billed render is recorded for settlement");
   assert.equal(fresh?.render_attempts, renderCalls);
+});
+
+test("crawlPhase: a failed rendered chunk is abandoned and the audit finishes partial", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-000000000035";
+  const audit = makeAudit(auditId, {
+    render_javascript: true,
+    render_hold_id: "hold-1",
+    render_approved_usd: 0.25,
+    site_platform: null,
+  });
+  store.seedAudit(audit);
+  await store.seedStart(auditId, "https://example.com/");
+  await store.seedSitemap(auditId, ["https://example.com/a"]);
+
+  // The runner surfaces a step whose retries are spent as StepFailedError.
+  const ctx: any = {
+    jobId: "job-1",
+    step: {
+      do: async (_name: string, opts: any, fn: () => Promise<any>) => {
+        try {
+          return await fn();
+        } catch (err) {
+          if (opts?.retries === 0) throw new StepFailedError("step_failed", (err as Error).message);
+          throw err;
+        }
+      },
+      sleep: async () => {},
+    },
+  };
+  let renderCalls = 0;
+  const outcome = await runCrawlPhase(ctx, {
+    audit,
+    store,
+    admin: null,
+    deps: {
+      initialIntervalMs: 0,
+      safeFetch: async (u: any) => mockHtml(u.toString()),
+      lookup: async () => ["93.184.216.34"],
+      firecrawlApiKey: "test-key",
+      renderPage: (async (_url: string, opts?: { usage?: { attempts: number; billed: number } }) => {
+        renderCalls += 1;
+        if (opts?.usage) {
+          opts.usage.attempts += 1;
+          opts.usage.billed += 1;
+        }
+        throw new Error("Rendered page is not usable");
+      }) as any,
+    },
+  });
+
+  // Two pages were leased; each renders at most once (no step retry re-renders).
+  assert.ok(renderCalls >= 1 && renderCalls <= 2, `renders: ${renderCalls}`);
+  const fresh = await store.getAudit(auditId);
+  assert.ok((fresh?.pages_abandoned ?? 0) > 0, "the chunk's pages are abandoned");
+  assert.equal(fresh?.render_billed, renderCalls, "every billed render is still recorded");
+  const final = await finalizeAudit(fresh!, outcome, store, "job-1");
+  assert.equal(final.status, "partial");
 });
 
 test("crawlPhase: no render call without an approved hold", async () => {
