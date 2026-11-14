@@ -1,0 +1,29 @@
+{
+  "status": "ok",
+  "source": { "provider": "google_analytics_admin", "propertyId": "properties/123456789", "propertyDisplayName": "Offcult India" },
+  "summary": {
+    "dataStreamCount": 1,
+    "webStreamCount": 1,
+    "keyEventCount": 1,
+    "customDimensionCount": 0,
+    "customMetricCount": 0,
+    "issueCount": 0
+  },
+  "issues": [],
+  "webStreams": [
+    {
+      "streamId": "1111111111",
+      "displayName": "Offcult web",
+      "measurementId": "G-ABC123XYZ",
+      "defaultUri": "https://offcult.in",
+      "createTime": "2026-01-01T00:00:00.000Z",
+      "updateTime": "2026-06-01T00:00:00.000Z",
+      "enhancedMeasurement": { "streamEnabled": true, "siteSearchEnabled": true }
+    }
+  ],
+  "otherStreams": [],
+  "keyEvents": [{ "eventName": "purchase" }],
+  "customDefinitions": { "dimensions": [], "metrics": [] },
+  "dataAsOf": "2026-10-22T09:00:00.000Z",
+  "cached": false
+}

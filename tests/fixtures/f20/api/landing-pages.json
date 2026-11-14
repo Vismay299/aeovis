@@ -1,0 +1,47 @@
+{
+  "status": "ok",
+  "source": { "provider": "google_analytics", "propertyId": "properties/123456789", "propertyDisplayName": "Offcult India" },
+  "request": {
+    "resolvedDateRange": { "startDate": "2026-09-24", "endDate": "2026-10-21" },
+    "propertyTimeZone": "Asia/Kolkata",
+    "currencyCode": "INR",
+    "channel": "organic_search",
+    "kind": "landing_pages",
+    "limit": 100,
+    "offset": 0
+  },
+  "rowCount": 2,
+  "totalRowCount": 2,
+  "rows": [
+    {
+      "hostName": "example.com",
+      "landingPage": "/guides/seo",
+      "sessions": 120,
+      "activeUsers": 100,
+      "engagedSessions": 80,
+      "engagementRate": 0.667,
+      "keyEvents": 9,
+      "sessionKeyEventRate": 0.075,
+      "transactions": 2,
+      "purchaseRevenue": 4999
+    },
+    {
+      "hostName": "example.com",
+      "landingPage": "/other",
+      "sessions": 40,
+      "activeUsers": 35,
+      "engagedSessions": 20,
+      "engagementRate": 0.5,
+      "keyEvents": 1,
+      "sessionKeyEventRate": 0.025,
+      "transactions": 0,
+      "purchaseRevenue": 0
+    }
+  ],
+  "pageInfo": { "offset": 0, "limit": 100, "hasMore": false, "nextOffset": null },
+  "reportMetadata": { "hasLimitedData": false },
+  "warnings": [],
+  "diagnostics": [],
+  "dataAsOf": "2026-10-22T09:00:00.000Z",
+  "cached": false
+}

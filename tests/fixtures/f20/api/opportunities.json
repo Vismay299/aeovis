@@ -1,0 +1,53 @@
+{
+  "status": "ok",
+  "source": { "provider": "google_analytics_search_opportunities" },
+  "request": {
+    "resolvedDateRange": { "startDate": "2026-09-21", "endDate": "2026-10-18" },
+    "propertyTimeZone": "Asia/Kolkata",
+    "limit": 50
+  },
+  "source_time_zones": { "gsc": "America/Los_Angeles", "ga4": "Asia/Kolkata" },
+  "rows": [
+    {
+      "page": "https://example.com/guides/seo",
+      "normalizedPage": "example.com/guides/seo",
+      "clicks": 12,
+      "impressions": 900,
+      "ctr": 0.0133,
+      "position": 8.4,
+      "joinStatus": "joined",
+      "ga4": {
+        "sessions": 20,
+        "engagementRate": 0.7,
+        "sessionKeyEventRate": 0.0
+      },
+      "score": 100,
+      "scoreComponents": { "demand": 95, "businessValue": 80, "reachability": 90 }
+    },
+    {
+      "page": "https://example.com/no-analytics",
+      "normalizedPage": "example.com/no-analytics",
+      "clicks": 1,
+      "impressions": 2000,
+      "ctr": 0.0005,
+      "position": 8.0,
+      "joinStatus": "gsc_only",
+      "ga4": null,
+      "score": null,
+      "scoreComponents": null
+    }
+  ],
+  "rowCount": 2,
+  "totalCandidateRows": 2,
+  "scoring": {
+    "formula": "round(100 * (0.5 * demand + 0.3 * businessValue + 0.2 * reachability))",
+    "businessValueMetric": "engagementRate",
+    "engagementFallback": true,
+    "scoreDataLimited": false
+  },
+  "coverage": { "gscRowsConsidered": 6, "ga4RowsConsidered": 1, "matchedRows": 1, "unmatchedGscRows": 1, "unmatchedGa4Rows": 0 },
+  "truncated": { "gsc": false, "ga4": false, "candidates": false },
+  "warnings": ["source_time_zones_differ"],
+  "dataAsOf": "2026-10-22T09:00:00.000Z",
+  "cached": false
+}

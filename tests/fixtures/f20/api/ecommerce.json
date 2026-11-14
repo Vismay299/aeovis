@@ -1,0 +1,32 @@
+{
+  "status": "ok",
+  "source": { "provider": "google_analytics", "propertyId": "properties/123456789", "propertyDisplayName": "Offcult India" },
+  "request": {
+    "resolvedDateRange": { "startDate": "2026-09-24", "endDate": "2026-10-21" },
+    "propertyTimeZone": "Asia/Kolkata",
+    "currencyCode": "INR",
+    "channel": "organic_search",
+    "kind": "ecommerce_performance",
+    "limit": 100,
+    "offset": 0
+  },
+  "rowCount": 1,
+  "totalRowCount": 1,
+  "rows": [
+    {
+      "itemName": "Canvas Tote",
+      "itemId": "tote-001",
+      "itemsViewed": 400,
+      "itemsAddedToCart": 60,
+      "itemsPurchased": 12,
+      "itemRevenue": 96400
+    }
+  ],
+  "pageInfo": { "offset": 0, "limit": 100, "hasMore": false, "nextOffset": null },
+  "reportMetadata": { "hasLimitedData": false },
+  "warnings": [],
+  "diagnostics": [],
+  "ecommerceActivity": { "status": "detected" },
+  "dataAsOf": "2026-10-22T09:00:00.000Z",
+  "cached": false
+}
