@@ -695,6 +695,12 @@ SOFTWARE.
 - src/lib/audit/renderedPage.test.ts (from src/server/lib/audit/rendered-page.test.ts)
 - src/lib/audit/renderSettle.ts (from src/server/lib/audit/rendering-billing.ts)
 
+### F12 Phase 2 ports
+- `src/shared/question-history.ts` (from `openseo:src/client/features/ai-visibility/PromptDateRange.tsx`, `openseo:src/client/features/ai-visibility/shared.tsx`)
+- `src/lib/questions/history/summary.ts` (from `openseo:src/shared/ai-visibility-results.ts`)
+- `src/lib/questions/history/history.ts` (from `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts`)
+- `src/lib/questions/history/answer.ts` (from `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts`)
+
 ### F15 Phase 4 ports
 - `src/components/portal/rank-tracking/CostEstimateBox.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingConfigModal.tsx:378-412`)
 - `src/components/portal/rank-tracking/DomainListFilters.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingFilters.tsx`)

@@ -229,7 +229,28 @@ export async function GET(
     const jobId = scan.origin_job_id ?? null;
     const { cost, answerCosts } = await readCosts(admin, scanId, jobId, scan.brand_key, deps ?? {});
 
+    let questionIdByQuery: Record<string, string> = {};
+    try {
+      const { data: linkRows, error: linksError } = await admin
+        .from("question_answer_links")
+        .select("asked_text,question_id")
+        .eq("scan_id", scanId)
+        .eq("brand_key", scan.brand_key);
+      if (!linksError && Array.isArray(linkRows)) {
+        for (const link of linkRows as Array<{ asked_text?: unknown; question_id?: unknown }>) {
+          const key = String(link.asked_text ?? "").trim().toLowerCase();
+          const value = String(link.question_id ?? "");
+          if (key && value && !(key in questionIdByQuery)) {
+            questionIdByQuery[key] = value;
+          }
+        }
+      }
+    } catch {
+      questionIdByQuery = {};
+    }
+
     return jsonOk({
+      questionIdByQuery,
       scan: {
         id: scan.id,
         brand: scan.brand,
