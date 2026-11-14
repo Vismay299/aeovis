@@ -36,6 +36,8 @@ export type AhrefsDomainRatingDeps = {
   fetch?: typeof fetch;
   cached?: typeof defaultCached;
   cacheDeps?: CacheDeps;
+  /** Per-lookup timeout; tests shorten it. Defaults to FETCH_TIMEOUT_MS. */
+  timeoutMs?: number;
 };
 
 export async function getAhrefsDomainRatings(
@@ -81,7 +83,13 @@ export async function getAhrefsDomainRatings(
         try {
           return [
             domain,
-            await resolveDomainRating(domain, fetchFn, cachedFn, deps?.cacheDeps),
+            await resolveDomainRating(
+              domain,
+              fetchFn,
+              cachedFn,
+              deps?.cacheDeps,
+              deps?.timeoutMs ?? FETCH_TIMEOUT_MS,
+            ),
           ] as const;
         } catch {
           return [domain, null] as const;
@@ -103,7 +111,8 @@ async function resolveDomainRating(
   domain: string,
   fetchFn: typeof fetch,
   cachedFn: typeof defaultCached,
-  cacheDeps?: CacheDeps,
+  cacheDeps: CacheDeps | undefined,
+  timeoutMs: number,
 ): Promise<number | null> {
   const res = await cachedFn(
     {
@@ -114,7 +123,7 @@ async function resolveDomainRating(
       schema: ahrefsCachedRatingSchema,
       scope: "global",
     },
-    () => fetchDomainRating(domain, fetchFn),
+    () => fetchDomainRating(domain, fetchFn, timeoutMs),
     cacheDeps,
   );
   return res.value.dr;
@@ -123,11 +132,12 @@ async function resolveDomainRating(
 async function fetchDomainRating(
   domain: string,
   fetchFn: typeof fetch,
+  timeoutMs: number,
 ): Promise<{ dr: number | null }> {
   const response = await fetchFn(
     `${AHREFS_DR_ENDPOINT}?target=${encodeURIComponent(domain)}`,
     {
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
       redirect: "error",
       headers: { Accept: "application/json" },
     },

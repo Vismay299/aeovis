@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   AHREFS_DR_ENDPOINT,
+  FETCH_TIMEOUT_MS,
   getAhrefsDomainRatings,
 } from "./ahrefsDomainRating.ts";
 import { createMemoryCacheStore } from "../cache/memoryStore.ts";
@@ -105,9 +106,15 @@ test("a 5s timeout returns null, is not cached, and the next call refetches", as
         reject(new DOMException("The operation was aborted.", "AbortError"));
         return;
       }
+      // AbortSignal.timeout's timer is unref'd; hold the event loop open
+      // until the abort fires so node:test does not cancel the test.
+      const keepAlive = setTimeout(() => {}, 10_000);
       signal?.addEventListener(
         "abort",
-        () => reject(new DOMException("The operation was aborted.", "AbortError")),
+        () => {
+          clearTimeout(keepAlive);
+          reject(new DOMException("The operation was aborted.", "AbortError"));
+        },
         { once: true },
       );
     });
@@ -116,13 +123,16 @@ test("a 5s timeout returns null, is not cached, and the next call refetches", as
   const first = await getAhrefsDomainRatings(["bewakoof.com"], {
     fetch: fetchHang,
     cacheDeps: { store },
+    timeoutMs: 25,
   });
   assert.equal(first["bewakoof.com"], null);
   assert.equal(fetchCalls, 1);
+  assert.equal(FETCH_TIMEOUT_MS, 5000);
 
   const second = await getAhrefsDomainRatings(["bewakoof.com"], {
     fetch: fetchHang,
     cacheDeps: { store },
+    timeoutMs: 25,
   });
   assert.equal(second["bewakoof.com"], null);
   assert.equal(fetchCalls, 2);
