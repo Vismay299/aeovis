@@ -693,7 +693,7 @@ Form: "Search term", "Near" (default the business coordinates; Maps link or coor
 
 ### Phase 5 — Tool definitions for F22
 
-- [ ] **P5.T1.S1** *Files:* `src/lib/local/tools.ts`, `tools.test.ts`. *Do:* §6.2.10; eight names exactly as OpenSEO; strict inputs (`z.toJSONSchema(..., { io: "input" })` has `additionalProperties: false`), loose outputs; paid tools refuse without `maxUsd`; resume by `fetchId`/`gridId` makes no paid call. *Verify:* `node --test src/lib/local/tools.test.ts` → pass (F17-AC-17).
+- [x] **P5.T1.S1** *Files:* `src/lib/local/tools.ts`, `tools.test.ts`. *Do:* §6.2.10; eight names exactly as OpenSEO; strict inputs (`z.toJSONSchema(..., { io: "input" })` has `additionalProperties: false`), loose outputs; paid tools refuse without `maxUsd`; resume by `fetchId`/`gridId` makes no paid call. *Verify:* `node --test src/lib/local/tools.test.ts` → pass (F17-AC-17).
 
 **Checkpoint:** full suite passes. Completes F17-AC-17.
 
