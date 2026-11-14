@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 /**
- * F19 Phase 2 browser verification (F19-AC-11).
+ * F19 Phase 4 browser verification (F19-AC-11..14).
  *
  * Scenarios:
  *   B1: no key -> "Set up IndexNow" -> key shown with both hosts unchecked
  *   B2: "Check again" -> "Not found" on both; then found + moved -> title "Your key file is set up" and only the bare host listed
  *   B3: submit two URLs (one off-site) -> success toast "Submitted 1 URL" and warning "Skipped 1 URL not on offcult.in", history row "Submitted via Bing"; phone width 390 px has no horizontal scroll
+ *   B4: audit shows IndexNow tab; panel loads; submit opens dialog
+ *   B5: select 3 pages (one 404) -> dialog lists 2 + left-out note; >100 needs checkbox
+ *   B6: publish a fixture draft -> offer "Tell Bing and other IndexNow search engines about this page now? It's free." -> "Submit to IndexNow" -> 202 message; with no key the setup link shows instead
+ *   B7: with features.indexnow=false the settings tab, the offer and the audit tab are absent
  *
- * Output: "ok 3 scenarios" on pass.
+ * Output: "ok 7 scenarios" on pass.
  */
 
 import assert from "node:assert/strict";
@@ -34,7 +38,7 @@ assert.ok(
 const port = parseInt(origin.port || "3328", 10);
 
 // Parse --only flag
-let requestedScenarios = ["B1", "B2", "B3", "B4", "B5"];
+let requestedScenarios = ["B1", "B2", "B3", "B4", "B5", "B6", "B7"];
 for (let i = 0; i < process.argv.length; i++) {
   if (process.argv[i].startsWith("--only=")) {
     requestedScenarios = process.argv[i].split("=")[1].split(",").map((s) => s.trim());
@@ -671,6 +675,385 @@ if (requestedScenarios.includes("B5")) {
   } finally {
     await big.context.close();
   }
+}
+
+// ==========================================
+// Scenario B6: publish a fixture draft -> offer -> submit -> 202 message; no key -> setup link
+// ==========================================
+if (requestedScenarios.includes("B6")) {
+  console.log("Running Scenario B6...");
+  const draftItem = {
+    id: "draft-b6",
+    title: "B6 draft",
+    body_md: "Hello world body content for the IndexNow offer check.",
+    status: "approved",
+    content_version: 3,
+    content_hash: "hash-b6",
+    rubric: { check: { passed: true, content_hash: "hash-b6" } },
+  };
+
+  // B6a: ready key -> 202 message
+  {
+    const { context, page } = await openPortal(browser, origin, {
+      viewport: { width: 1440, height: 900 },
+      fixtures: { memberships: offcultMembership },
+    });
+    try {
+      await page.route(
+        (url) => url.pathname === "/api/customer/features",
+        (route) =>
+          jsonResponse(route, {
+            brandKey: "offcult.in",
+            features: { indexnow: true },
+          }),
+      );
+      await page.route(
+        (url) => url.pathname.startsWith("/api/customer/content"),
+        async (route) => {
+          const req = route.request();
+          const method = req.method();
+          const pathname = new URL(req.url()).pathname;
+          if (method === "GET" && pathname === "/api/customer/content") {
+            return jsonResponse(route, {
+              items: [{ id: "draft-b6", title: "B6 draft", status: "approved" }],
+              jobs: [],
+            });
+          }
+          if (method === "GET" && pathname === "/api/customer/content/draft-b6") {
+            return jsonResponse(route, { item: draftItem });
+          }
+          if (method === "POST" && pathname === "/api/customer/content/draft-b6/publish") {
+            return jsonResponse(route, {
+              published: true,
+              publication: { url: "https://offcult.in/new-page" },
+              indexing: null,
+              observed_citation: null,
+            });
+          }
+          return route.fulfill({
+            status: 404,
+            contentType: "application/json",
+            body: "{}",
+          });
+        },
+      );
+      await page.route(
+        (url) => url.pathname === "/api/customer/indexnow",
+        (route) => jsonResponse(route, readFixture("b2-setup-found-moved.json")),
+      );
+      let submitBody = null;
+      await page.route(
+        (url) => url.pathname === "/api/customer/indexnow/submit",
+        async (route) => {
+          try {
+            submitBody = JSON.parse(route.request().postData() || "{}");
+          } catch {
+            submitBody = null;
+          }
+          return jsonResponse(route, readFixture("b6-submit-202.json"));
+        },
+      );
+
+      await page.goto(new URL("/portal/content?item=draft-b6", origin).href, {
+        waitUntil: "networkidle",
+      });
+
+      const urlInput = page.getByLabel("Published page URL");
+      await urlInput.waitFor({ state: "visible", timeout: 15000 });
+      await urlInput.fill("https://offcult.in/new-page");
+      await page.getByRole("button", { name: "Verify publication" }).click();
+
+      await page
+        .getByText("Publication verified and recorded.")
+        .first()
+        .waitFor({ timeout: 15000 });
+      const offer = page.getByText(
+        "Tell Bing and other IndexNow search engines about this page now? It's free.",
+      );
+      await offer.first().waitFor({ state: "visible", timeout: 15000 });
+      assert.ok(await offer.first().isVisible(), "B6: offer visible after publish");
+
+      await page.getByRole("button", { name: "Submit to IndexNow" }).click();
+      const done = page.getByText(
+        "Search engines will verify the key file on https://offcult.in first.",
+      );
+      await done.first().waitFor({ state: "visible", timeout: 15000 });
+      assert.ok(await done.first().isVisible(), "B6: 202 message visible");
+
+      assert.equal(submitBody?.source, "content", "B6: submit source is content");
+      assert.deepEqual(
+        submitBody?.urls,
+        ["https://offcult.in/new-page"],
+        "B6: submit sends the verified URL",
+      );
+      assert.equal(
+        submitBody?.sourceRef,
+        "draft-b6",
+        "B6: submit sends the content item id",
+      );
+      assert.match(
+        String(submitBody?.requestId ?? ""),
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+        "B6: submit sends a requestId",
+      );
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(500);
+      const scrollWidth = await page.evaluate(
+        () => document.documentElement.scrollWidth,
+      );
+      assert.ok(
+        scrollWidth <= 390,
+        `B6: expected document scrollWidth <= 390 on phone width 390 px, got ${scrollWidth}`,
+      );
+    } finally {
+      await context.close();
+    }
+  }
+
+  // B6b: no key -> setup link
+  {
+    const { context, page } = await openPortal(browser, origin, {
+      viewport: { width: 1440, height: 900 },
+      fixtures: { memberships: offcultMembership },
+    });
+    try {
+      await page.route(
+        (url) => url.pathname === "/api/customer/features",
+        (route) =>
+          jsonResponse(route, {
+            brandKey: "offcult.in",
+            features: { indexnow: true },
+          }),
+      );
+      await page.route(
+        (url) => url.pathname.startsWith("/api/customer/content"),
+        async (route) => {
+          const req = route.request();
+          const method = req.method();
+          const pathname = new URL(req.url()).pathname;
+          if (method === "GET" && pathname === "/api/customer/content") {
+            return jsonResponse(route, {
+              items: [{ id: "draft-b6", title: "B6 draft", status: "approved" }],
+              jobs: [],
+            });
+          }
+          if (method === "GET" && pathname === "/api/customer/content/draft-b6") {
+            return jsonResponse(route, { item: draftItem });
+          }
+          if (method === "POST" && pathname === "/api/customer/content/draft-b6/publish") {
+            return jsonResponse(route, {
+              published: true,
+              publication: { url: "https://offcult.in/new-page" },
+              indexing: null,
+              observed_citation: null,
+            });
+          }
+          return route.fulfill({
+            status: 404,
+            contentType: "application/json",
+            body: "{}",
+          });
+        },
+      );
+      await page.route(
+        (url) => url.pathname === "/api/customer/indexnow",
+        (route) => jsonResponse(route, readFixture("b1-no-key.json")),
+      );
+
+      await page.goto(new URL("/portal/content?item=draft-b6", origin).href, {
+        waitUntil: "networkidle",
+      });
+      const urlInput = page.getByLabel("Published page URL");
+      await urlInput.waitFor({ state: "visible", timeout: 15000 });
+      await urlInput.fill("https://offcult.in/new-page");
+      await page.getByRole("button", { name: "Verify publication" }).click();
+      await page
+        .getByText("Tell Bing about this page?")
+        .first()
+        .waitFor({ state: "visible", timeout: 15000 });
+      await page
+        .getByText("to submit pages as you publish them.")
+        .first()
+        .waitFor({ state: "visible", timeout: 10000 });
+      const setupLink = page.getByRole("link", { name: "Set up IndexNow" });
+      await setupLink.first().waitFor({ state: "visible", timeout: 10000 });
+      assert.equal(
+        await setupLink.first().getAttribute("href"),
+        "/portal/settings/indexnow",
+        "B6: setup link targets the settings tab",
+      );
+    } finally {
+      await context.close();
+    }
+  }
+
+  passedCount++;
+  console.log("  ✓ Scenario B6 passed");
+}
+
+// ==========================================
+// Scenario B7: flag off -> settings tab, offer and audit tab absent
+// ==========================================
+if (requestedScenarios.includes("B7")) {
+  console.log("Running Scenario B7...");
+  const offFeatures = { ...FEATURES, indexnow: false };
+
+  // Settings tab absent
+  {
+    const { context, page } = await openPortal(browser, origin, {
+      viewport: { width: 1440, height: 900 },
+      fixtures: { memberships: offcultMembership },
+    });
+    try {
+      await page.route(
+        (url) => url.pathname === "/api/customer/features",
+        (route) =>
+          jsonResponse(route, { brandKey: "offcult.in", features: offFeatures }),
+      );
+      await page.goto(new URL("/portal/settings", origin).href, {
+        waitUntil: "networkidle",
+      });
+      await page.getByText("Workspace settings").first().waitFor({ timeout: 15000 });
+      assert.equal(
+        await page.locator('a[href="/portal/settings/indexnow"]').count(),
+        0,
+        "B7: settings IndexNow tab absent when the flag is off",
+      );
+    } finally {
+      await context.close();
+    }
+  }
+
+  // Audit tab absent
+  {
+    const { context, page } = await openPortal(browser, origin, {
+      viewport: { width: 1440, height: 900 },
+      fixtures: { memberships: offcultMembership },
+    });
+    try {
+      await installAuditApi(page, { features: offFeatures });
+      await page.route(
+        (url) => url.pathname === "/api/customer/indexnow",
+        (route) =>
+          route.fulfill({
+            status: 404,
+            contentType: "application/json",
+            body: JSON.stringify({
+              error: "This page is not available for your workspace yet.",
+              code: "feature_unavailable",
+            }),
+          }),
+      );
+      await page.goto(
+        new URL("/portal/audit/7a2e3d4c-1b5f-4c9a-8d2e-3f4a5b6c7d8e", origin).href,
+        { waitUntil: "networkidle" },
+      );
+      await page.getByRole("tab", { name: /Pages/ }).waitFor({ timeout: 15000 });
+      assert.equal(
+        await page.getByRole("tab", { name: "IndexNow" }).count(),
+        0,
+        "B7: audit IndexNow tab absent when the flag is off",
+      );
+    } finally {
+      await context.close();
+    }
+  }
+
+  // Offer absent after publish
+  {
+    const { context, page } = await openPortal(browser, origin, {
+      viewport: { width: 1440, height: 900 },
+      fixtures: { memberships: offcultMembership },
+    });
+    try {
+      const draftItem = {
+        id: "draft-b6",
+        title: "B6 draft",
+        body_md: "Hello world body content for the IndexNow offer check.",
+        status: "approved",
+        content_version: 3,
+        content_hash: "hash-b6",
+        rubric: { check: { passed: true, content_hash: "hash-b6" } },
+      };
+      await page.route(
+        (url) => url.pathname === "/api/customer/features",
+        (route) =>
+          jsonResponse(route, { brandKey: "offcult.in", features: offFeatures }),
+      );
+      await page.route(
+        (url) => url.pathname.startsWith("/api/customer/content"),
+        async (route) => {
+          const req = route.request();
+          const method = req.method();
+          const pathname = new URL(req.url()).pathname;
+          if (method === "GET" && pathname === "/api/customer/content") {
+            return jsonResponse(route, {
+              items: [{ id: "draft-b6", title: "B6 draft", status: "approved" }],
+              jobs: [],
+            });
+          }
+          if (method === "GET" && pathname === "/api/customer/content/draft-b6") {
+            return jsonResponse(route, { item: draftItem });
+          }
+          if (method === "POST" && pathname === "/api/customer/content/draft-b6/publish") {
+            return jsonResponse(route, {
+              published: true,
+              publication: { url: "https://offcult.in/new-page" },
+              indexing: null,
+              observed_citation: null,
+            });
+          }
+          return route.fulfill({
+            status: 404,
+            contentType: "application/json",
+            body: "{}",
+          });
+        },
+      );
+      await page.route(
+        (url) => url.pathname === "/api/customer/indexnow",
+        (route) =>
+          route.fulfill({
+            status: 404,
+            contentType: "application/json",
+            body: JSON.stringify({
+              error: "This page is not available for your workspace yet.",
+              code: "feature_unavailable",
+            }),
+          }),
+      );
+      await page.goto(new URL("/portal/content?item=draft-b6", origin).href, {
+        waitUntil: "networkidle",
+      });
+      const urlInput = page.getByLabel("Published page URL");
+      await urlInput.waitFor({ state: "visible", timeout: 15000 });
+      await urlInput.fill("https://offcult.in/new-page");
+      await page.getByRole("button", { name: "Verify publication" }).click();
+      await page
+        .getByText("Publication verified and recorded.")
+        .first()
+        .waitFor({ timeout: 15000 });
+      await page.waitForTimeout(1000);
+      assert.equal(
+        await page
+          .getByText("Tell Bing and other IndexNow search engines about this page now?")
+          .count(),
+        0,
+        "B7: ready offer absent when the flag is off",
+      );
+      assert.equal(
+        await page.getByText("Tell Bing about this page?").count(),
+        0,
+        "B7: setup offer absent when the flag is off",
+      );
+    } finally {
+      await context.close();
+    }
+  }
+
+  passedCount++;
+  console.log("  ✓ Scenario B7 passed");
 }
 
 await browser.close();
