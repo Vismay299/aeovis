@@ -29,6 +29,7 @@ import {
   ScanSearch,
   Search,
   Settings,
+  TrendingUp,
   Users,
 } from "lucide-react";
 import type { NavGroup } from "./navModel.ts";
@@ -136,6 +137,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/portal/audit",
         icon: ScanSearch,
         flag: "site_audit",
+      },
+      {
+        id: "rank-tracking",
+        label: "Rank Tracking",
+        href: "/portal/rank-tracking",
+        icon: TrendingUp,
+        flag: "rank_tracking",
       },
       {
         id: "analytics",

@@ -87,6 +87,14 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.siteAudits("acme"),
     keys.siteAuditCapabilities("acme"),
     keys.scanHistory("acme", "scan-history-input"),
+    keys.rankTrackers("acme"),
+    keys.rankTracker("acme", "c1"),
+    keys.rankResults("acme", "c1", "compare-hash"),
+    keys.rankLatestRun("acme", "c1"),
+    keys.rankTrend("acme", "c1", "mobile", 30),
+    keys.rankMatrix("acme", "c1", "mobile"),
+    keys.rankKeywordHistory("acme", "c1", "k1", 30),
+    keys.rankSuggestions("acme", "example.com", 2356),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
