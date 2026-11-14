@@ -312,7 +312,7 @@ async function draftLifecycle(t, request) {
       ["@/components/studio/Markdown", { Markdown: noop }],
       ["./ReviewFindings", review],
     ]),
-    autoNull: ["lucide-react"],
+    autoNull: ["lucide-react", "./IndexNowOffer"],
   });
   const props = { brandKey: "brand-a", itemId: "draft-a", generating: false, onChanged: noop, onUnauthorized: noop, onDirtyChange: noop };
   lifecycle.setRender(() => DraftEditor(props));

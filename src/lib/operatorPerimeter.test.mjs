@@ -278,6 +278,7 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     "/api/customer/backlinks/referring-domains",
     "/api/customer/backlinks/rows",
     "/api/customer/backlinks/top-pages",
+    "/api/customer/backlinks/ahrefs-dr",
     // F04 — the client-visible feature flags. Self-gated like every other
     // customer route: it answers only for a workspace the caller belongs to.
     "/api/customer/features",

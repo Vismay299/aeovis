@@ -501,6 +501,7 @@ SOFTWARE.
 - `src/components/portal/backlinks/hooks/useBacklinksDomainExpansion.ts` (from `src/client/features/backlinks/useBacklinksDomainExpansion.ts`)
 - `src/components/portal/backlinks/hooks/useBacklinksSearchHistory.ts` (from `src/client/hooks/useBacklinksSearchHistory.ts`)
 - `src/components/portal/backlinks/hooks/useBacklinksSearchTabs.ts` (from `src/client/features/backlinks/useBacklinksPageData.ts`)
+- `src/components/portal/backlinks/useAhrefsDomainRatings.ts` (from `src/client/features/backlinks/useAhrefsDomainRatings.ts`)
 - `src/shared/domain.ts` (from `src/types/schemas/domain.ts`, `src/client/features/domain/domainRouteState.ts`, `src/client/features/domain/domainFilterUtils.ts`, `src/client/features/domain/utils.ts`, `src/client/features/domain/types.ts`)
 - `src/components/portal/domain/DomainFilterPanel.tsx` (from `src/client/features/domain/components/DomainFilterPanel.tsx`)
 - `src/components/portal/domain/DomainKeywordsTable.tsx` (from `src/client/features/domain/components/DomainKeywordsTable.tsx`)
@@ -684,3 +685,7 @@ SOFTWARE.
 ### F25 Phase 3 ports
 - `src/components/portal/email/EmailSettings.tsx` (from `src/client/features/settings/PrivacySettings.tsx`)
 - `src/components/portal/email/ProductUpdatesSwitch.tsx` (from `src/client/features/settings/PrivacySettings.tsx`, `src/client/features/onboarding/AnalyticsOnboardingStep.tsx`)
+
+### F16 Phase 4 ports
+- `src/lib/backlinks/ahrefsDomainRating.ts` (from `src/serverFunctions/ahrefs.ts`)
+- `src/app/api/customer/backlinks/ahrefs-dr/route.ts` (from `src/serverFunctions/ahrefs.ts`)

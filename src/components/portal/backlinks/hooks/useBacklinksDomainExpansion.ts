@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 import { keys, stableStringify } from "@/lib/query/keys";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { fetchJson, withBrand } from "@/lib/query/fetchJson";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
 import { paidQueryOptions } from "./useBacklinksPageData";
 import type { BacklinksRow, BacklinksTargetScope } from "@/shared/backlinks";
@@ -91,7 +91,7 @@ export function useBacklinksDomainExpansion({
         staleTime: DOMAIN_LINKS_STALE_TIME_MS,
         queryFn: () =>
           fetchJson<BacklinksRowsApiResponse>(
-            "/api/customer/backlinks/rows",
+            withBrand("/api/customer/backlinks/rows", brandKey),
             {
               method: "POST",
               body: {

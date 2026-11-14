@@ -395,3 +395,150 @@ test("top-pages route returns pages breakdown", async () => {
   assert.equal(data.rows.length, 1);
   assert.equal(data.rows[0].page, "https://example.com/about");
 });
+
+const AHREFS_DR_ROUTE = await import(
+  new URL("../../app/api/customer/backlinks/ahrefs-dr/route.ts", import.meta.url).href
+);
+
+function ahrefsFetch(dr) {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    return new Response(
+      JSON.stringify({ domain_rating: { domain_rating: dr } }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  };
+  return { calls, fetchImpl };
+}
+
+test("ahrefs-dr flag off returns 404 feature_unavailable with zero provider calls", async () => {
+  const store = createMemoryCacheStore();
+  const { calls, fetchImpl } = ahrefsFetch(61);
+  const deps = makeDeps({
+    flagOn: false,
+    serviceDeps: { fetch: fetchImpl, cacheDeps: { store } },
+  });
+
+  const req = makeRequest("/api/customer/backlinks/ahrefs-dr", {
+    domains: ["bewakoof.com"],
+  });
+  const res = await AHREFS_DR_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 404);
+  const data = await res.json();
+  assert.equal(data.code, "feature_unavailable");
+  assert.equal(data.error, "This page is not available for your workspace yet.");
+  assert.equal(calls.length, 0);
+});
+
+test("ahrefs-dr 101 domains returns 400 with zero provider calls", async () => {
+  const store = createMemoryCacheStore();
+  const { calls, fetchImpl } = ahrefsFetch(61);
+  const deps = makeDeps({
+    serviceDeps: { fetch: fetchImpl, cacheDeps: { store } },
+  });
+
+  const domains = Array.from({ length: 101 }, (_, i) => `site-${i + 1}.com`);
+  const req = makeRequest("/api/customer/backlinks/ahrefs-dr", { domains });
+  const res = await AHREFS_DR_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 400);
+  const data = await res.json();
+  assert.equal(data.code, "invalid_request");
+  assert.equal(calls.length, 0);
+});
+
+test("ahrefs-dr unknown field returns 400 invalid_request", async () => {
+  const req = makeRequest("/api/customer/backlinks/ahrefs-dr", {
+    domains: ["bewakoof.com"],
+    unknownField: "not_allowed",
+  });
+  const res = await AHREFS_DR_ROUTE.POST(req, {}, makeDeps());
+  assert.equal(res.status, 400);
+  const data = await res.json();
+  assert.equal(data.code, "invalid_request");
+});
+
+test("ahrefs-dr success returns ratings keyed by raw inputs", async () => {
+  const store = createMemoryCacheStore();
+  const { calls, fetchImpl } = ahrefsFetch(61);
+  const deps = makeDeps({
+    serviceDeps: { fetch: fetchImpl, cacheDeps: { store } },
+  });
+
+  const req = makeRequest("/api/customer/backlinks/ahrefs-dr", {
+    domains: ["www.bewakoof.com", "https://bewakoof.com"],
+  });
+  const res = await AHREFS_DR_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("cache-control"), "no-store");
+  const data = await res.json();
+  assert.deepEqual(data, {
+    ratings: { "www.bewakoof.com": 61, "https://bewakoof.com": 61 },
+  });
+  assert.equal(calls.length, 1);
+  assert.ok(
+    calls[0].startsWith(
+      "https://api.ahrefs.com/v3/public/domain-rating-free?target=",
+    ),
+  );
+});
+
+test("ahrefs-dr single-domain failure returns a null entry with 200", async () => {
+  const store = createMemoryCacheStore();
+  const failingFetch = async () => new Response("boom", { status: 500 });
+  const deps = makeDeps({
+    serviceDeps: { fetch: failingFetch, cacheDeps: { store } },
+  });
+
+  const req = makeRequest("/api/customer/backlinks/ahrefs-dr", {
+    domains: ["bewakoof.com"],
+  });
+  const res = await AHREFS_DR_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.deepEqual(data, { ratings: { "bewakoof.com": null } });
+});
+
+test("ahrefs-dr cache is global: workspace B shares workspace A's entry", async () => {
+  const store = createMemoryCacheStore();
+  const { calls, fetchImpl } = ahrefsFetch(61);
+  const sharedServiceDeps = { fetch: fetchImpl, cacheDeps: { store } };
+
+  const depsA = makeDeps({
+    brandKey: "brand-a",
+    serviceDeps: sharedServiceDeps,
+  });
+  const reqA = makeRequest(
+    "/api/customer/backlinks/ahrefs-dr",
+    { domains: ["bewakoof.com"] },
+    "brand-a",
+  );
+  const resA = await AHREFS_DR_ROUTE.POST(reqA, {}, depsA);
+  assert.equal(resA.status, 200);
+  assert.deepEqual(await resA.json(), { ratings: { "bewakoof.com": 61 } });
+  assert.equal(calls.length, 1);
+
+  const depsB = makeDeps({
+    brandKey: "brand-b",
+    serviceDeps: sharedServiceDeps,
+  });
+  const reqB = makeRequest(
+    "/api/customer/backlinks/ahrefs-dr",
+    { domains: ["bewakoof.com"] },
+    "brand-b",
+  );
+  const resB = await AHREFS_DR_ROUTE.POST(reqB, {}, depsB);
+  assert.equal(resB.status, 200);
+  assert.deepEqual(await resB.json(), { ratings: { "bewakoof.com": 61 } });
+  assert.equal(calls.length, 1);
+
+  const reqB2 = makeRequest(
+    "/api/customer/backlinks/ahrefs-dr",
+    { domains: ["other-example.com"] },
+    "brand-b",
+  );
+  const resB2 = await AHREFS_DR_ROUTE.POST(reqB2, {}, depsB);
+  assert.equal(resB2.status, 200);
+  assert.deepEqual(await resB2.json(), { ratings: { "other-example.com": 61 } });
+  assert.equal(calls.length, 2);
+});
