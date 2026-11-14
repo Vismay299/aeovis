@@ -17,6 +17,7 @@
 import {
   BookOpen,
   Bookmark,
+  ChartColumn,
   Gauge,
   Globe,
   LayoutDashboard,
@@ -135,6 +136,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/portal/audit",
         icon: ScanSearch,
         flag: "site_audit",
+      },
+      {
+        id: "analytics",
+        label: "Analytics",
+        href: "/portal/analytics",
+        icon: ChartColumn,
+        flag: "ga4",
       },
     ],
   },
