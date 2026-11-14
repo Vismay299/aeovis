@@ -466,9 +466,9 @@ F19 appends `{ id: "indexnow", label: "IndexNow", flag: "indexnow", Panel: Index
 
 ### Phase 4 — Content Studio offer
 
-- [ ] **P4.T1 Offer**
-  - [ ] **P4.T1.S1** *Files:* `src/components/portal/content/IndexNowOffer.tsx`, `src/components/portal/content/DraftEditor.jsx`, `src/components/portal/portalRegressions.test.mjs` (`autoNull` gains `"./IndexNowOffer"`). *Do:* §6.6.4. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/components/portal/portalRegressions.test.mjs src/lib/publishRoute.test.mjs src/components/portal/tenantWorkspace.test.mjs` → pass; `npm run build` → exit 0.
-  - [ ] **P4.T1.S2** *Files:* `scripts/qa/check-f19-browser.mjs` (B6–B7). *Do:* B6 publish a fixture draft (`POST /api/customer/content/<id>/publish` fixture returns `publication.url`) → the offer "Tell Bing and other IndexNow search engines about this page now? It's free." → "Submit to IndexNow" → the 202 message; with no key the setup link shows instead; B7 with `features.indexnow = false` the settings tab, the offer and the audit tab are absent. *Verify:* `node scripts/qa/check-f19-browser.mjs --only B6,B7` → "ok 2 scenarios" (F19-AC-13, 14).
+- [x] **P4.T1 Offer**
+  - [x] **P4.T1.S1** *Files:* `src/components/portal/content/IndexNowOffer.tsx`, `src/components/portal/content/DraftEditor.jsx`, `src/components/portal/portalRegressions.test.mjs` (`autoNull` gains `"./IndexNowOffer"`). *Do:* §6.6.4. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/components/portal/portalRegressions.test.mjs src/lib/publishRoute.test.mjs src/components/portal/tenantWorkspace.test.mjs` → pass; `npm run build` → exit 0.
+  - [x] **P4.T1.S2** *Files:* `scripts/qa/check-f19-browser.mjs` (B6–B7). *Do:* B6 publish a fixture draft (`POST /api/customer/content/<id>/publish` fixture returns `publication.url`) → the offer "Tell Bing and other IndexNow search engines about this page now? It's free." → "Submit to IndexNow" → the 202 message; with no key the setup link shows instead; B7 with `features.indexnow = false` the settings tab, the offer and the audit tab are absent. *Verify:* `node scripts/qa/check-f19-browser.mjs --only B6,B7` → "ok 2 scenarios" (F19-AC-13, 14).
 
 **Checkpoint:** full suite, build, `node scripts/qa/check-f19-browser.mjs` → "ok 7 scenarios". Completes F19-AC-13, 14.
 
