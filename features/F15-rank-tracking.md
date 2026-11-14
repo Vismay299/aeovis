@@ -950,11 +950,11 @@ Shown in the row menu for every keyword, and as a button "Track as AI question" 
 
 **Goal:** scheduled checks run on the queue within approvals; history is pruned.
 
-- [ ] **P3.T1 Tick**
-  - [ ] **P3.T1.S1** *Files:* `src/lib/rank-tracking/schedules.ts` (full), `schedules.test.ts`. *Do:* §6.2.11 with F01 memory jobs, F10 `runDueSchedules`, fake F09 quote. Ports of `scheduledRankChecks.test.ts:104` (flag off → `rank_tracking_disabled` advanced), `:147` (claims and starts), `:204` (lost CAS skipped), `:227` (per-config failure contained), `:300` (already running restores the slot), plus `approval_missing`, `price_changed`, `no_keywords`, a missed window runs once, scheduled runs use `queued`. *Verify:* `node --test src/lib/rank-tracking/schedules.test.ts` → pass (F15-AC-11).
-  - [ ] **P3.T1.S2** *Files:* `src/lib/rank-tracking/jobs.ts` (periodics `rank_tracking.schedules`, `rank_tracking.retention`; kinds `rank_tracking.schedules.tick`, `rank_tracking.retention`). *Verify:* `node --test src/lib/jobs/registry.test.ts src/lib/rank-tracking/schedules.test.ts` → pass.
-- [ ] **P3.T2 Retention**
-  - [ ] **P3.T2.S1** *Files:* `src/lib/rank-tracking/retention.ts`, `retention.test.ts`. *Do:* loop of `prune-1`…`prune-20` while 1,000 runs were deleted. *Verify:* `node --test src/lib/rank-tracking/retention.test.ts` → pass; `node scripts/qa/check-f15-db.mjs --only retention` → ok (F15-AC-21).
+- [x] **P3.T1 Tick**
+  - [x] **P3.T1.S1** *Files:* `src/lib/rank-tracking/schedules.ts` (full), `schedules.test.ts`. *Do:* §6.2.11 with F01 memory jobs, F10 `runDueSchedules`, fake F09 quote. Ports of `scheduledRankChecks.test.ts:104` (flag off → `rank_tracking_disabled` advanced), `:147` (claims and starts), `:204` (lost CAS skipped), `:227` (per-config failure contained), `:300` (already running restores the slot), plus `approval_missing`, `price_changed`, `no_keywords`, a missed window runs once, scheduled runs use `queued`. *Verify:* `node --test src/lib/rank-tracking/schedules.test.ts` → pass (F15-AC-11).
+  - [x] **P3.T1.S2** *Files:* `src/lib/rank-tracking/jobs.ts` (periodics `rank_tracking.schedules`, `rank_tracking.retention`; kinds `rank_tracking.schedules.tick`, `rank_tracking.retention`). *Verify:* `node --test src/lib/jobs/registry.test.ts src/lib/rank-tracking/schedules.test.ts` → pass.
+- [x] **P3.T2 Retention**
+  - [x] **P3.T2.S1** *Files:* `src/lib/rank-tracking/retention.ts`, `retention.test.ts`. *Do:* loop of `prune-1`…`prune-20` while 1,000 runs were deleted. *Verify:* `node --test src/lib/rank-tracking/retention.test.ts` → pass; `node scripts/qa/check-f15-db.mjs --only retention` → ok (F15-AC-21).
 
 **Checkpoint:** full suite and build pass. Completes F15-AC-11, 21.
 
