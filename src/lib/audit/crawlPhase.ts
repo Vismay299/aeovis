@@ -25,6 +25,7 @@ import { getOrigin, isSameOrigin } from "./urlUtils.ts";
 import { isCrawlableUrl } from "./urlPolicy.ts";
 import { createCancelProbe } from "./cancel.ts";
 import { AuditPhaseError } from "./errors.ts";
+import { renderPage } from "./renderedPage.ts";
 import type { AuditRow, AuditStore, ClaimedUrl } from "./store.ts";
 import type { CrawledPageResult } from "./types.ts";
 
@@ -42,6 +43,9 @@ export interface CrawlDeps {
   initialIntervalMs?: number;
   now?: () => number;
   createCancelProbe?: typeof createCancelProbe;
+  firecrawlApiKey?: string;
+  firecrawlFetchImpl?: typeof fetch;
+  renderPage?: typeof renderPage;
 }
 
 export interface CrawlChunkInput {
@@ -151,12 +155,36 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
 
   const lookupFn = deps?.lookup ?? defaultLookup;
   const cachedLookup = createCachedLookup(lookupFn);
+  const renderUsage = { attempts: 0, billed: 0 };
+  const baseRenderAttempts = audit.render_attempts ?? 0;
+  const baseRenderBilled = audit.render_billed ?? 0;
+  const renderImpl = deps?.renderPage ?? renderPage;
+  const shouldRender = Boolean(audit.render_javascript) && Boolean(audit.render_hold_id);
+  const firecrawlApiKey =
+    deps?.firecrawlApiKey ?? (typeof process !== "undefined" ? (process.env as any)?.FIRECRAWL_API_KEY : undefined);
+  const renderFn = shouldRender && firecrawlApiKey
+    ? async (url: string) => {
+        const rendered = await renderImpl(url, {
+          apiKey: firecrawlApiKey as string,
+          usage: renderUsage,
+          fetchImpl: deps?.firecrawlFetchImpl,
+          auditId,
+        });
+        return { html: rendered.html, status: rendered.status ?? undefined };
+      }
+    : undefined;
   const fetchOptions: CrawlPageOptions = {
     deps: {
       safeFetch: (deps?.safeFetch as any) ?? safeFetch,
       lookup: cachedLookup,
       now: deps?.now ?? (() => Date.now()),
     },
+    ...(renderFn
+      ? {
+          render: renderFn,
+          renderThrottled: audit.site_platform === "shopify",
+        }
+      : {}),
   };
 
   const parsedRobots = parseAuditRobots(audit.robots_txt);
@@ -174,6 +202,17 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
   let attemptedInChunk = 0;
   let cancelled = false;
   let lastCancelCheck = 0;
+  // A page or persist that rejects is removed from its set inside its own
+  // handler, so nothing may still be awaiting it. Its error is kept here and
+  // rethrown by the loop instead of being dropped as an unhandled rejection.
+  let failure: unknown = null;
+  const failWith = (err: unknown): void => {
+    if (failure === null) {
+      failure = throttle.checkpointFailed
+        ? new AuditPhaseError("db_error", "crawling", "Throttle checkpoint failed to persist")
+        : err;
+    }
+  };
 
   async function flushPersistBatch(batchToPersist: CrawledPageResult[]): Promise<void> {
     if (batchToPersist.length === 0) return;
@@ -228,6 +267,8 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
       pages_crawled: newStats.attempted,
       pages_total: Math.min(newStats.seen, audit!.max_pages),
       pages_seen: newStats.seen,
+      render_attempts: baseRenderAttempts + renderUsage.attempts,
+      render_billed: baseRenderBilled + renderUsage.billed,
     });
 
     ctx?.progress?.(newStats.attempted, Math.min(newStats.seen, audit!.max_pages), "Crawling pages");
@@ -235,94 +276,114 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
     persistedBatches++;
   }
 
-  while (queue.length > 0 && !cancelled && !throttle.stopped && Date.now() < deadline) {
-    const now = Date.now();
-    if (now - lastCancelCheck >= 5_000) {
-      lastCancelCheck = now;
-      if (await probe()) {
-        cancelled = true;
+  // Render counters reach the row with each page batch, but those writes run
+  // concurrently and can land out of order, and a chunk that throws never
+  // flushes its last batch. A rendering chunk is abandoned rather than retried,
+  // so this write is the only record of renders Firecrawl already billed.
+  async function persistRenderUsage(): Promise<void> {
+    if (!renderFn) return;
+    await store.updateAudit(audit!.id, jobId, {
+      render_attempts: baseRenderAttempts + renderUsage.attempts,
+      render_billed: baseRenderBilled + renderUsage.billed,
+    });
+  }
+
+  try {
+    while (queue.length > 0 && !cancelled && !throttle.stopped && Date.now() < deadline && failure === null) {
+      const now = Date.now();
+      if (now - lastCancelCheck >= 5_000) {
+        lastCancelCheck = now;
+        if (await probe()) {
+          cancelled = true;
+          break;
+        }
+      }
+
+      while (inFlight.size >= currentWindow || queuedPersists.length >= MAX_QUEUED_PERSIST_BATCHES) {
+        try {
+          await Promise.race([...inFlight, ...queuedPersists]);
+        } catch (err) {
+          if (throttle.checkpointFailed) {
+            throw new AuditPhaseError("db_error", "crawling", "Throttle checkpoint failed to persist");
+          }
+          throw err;
+        }
+      }
+
+      if (queue.length === 0 || cancelled || throttle.stopped || Date.now() >= deadline || failure !== null) {
         break;
       }
-    }
 
-    while (inFlight.size >= currentWindow || queuedPersists.length >= MAX_QUEUED_PERSIST_BATCHES) {
-      try {
-        await Promise.race([...inFlight, ...queuedPersists]);
-      } catch (err) {
-        if (throttle.checkpointFailed) {
-          throw new AuditPhaseError("db_error", "crawling", "Throttle checkpoint failed to persist");
-        }
-        throw err;
+      const ready = await throttle.ready();
+      if (!ready) {
+        break;
       }
-    }
 
-    if (queue.length === 0 || cancelled || throttle.stopped || Date.now() >= deadline) {
-      break;
-    }
+      const item = queue.shift()!;
+      attemptedInChunk++;
 
-    const ready = await throttle.ready();
-    if (!ready) {
-      break;
-    }
-
-    const item = queue.shift()!;
-    attemptedInChunk++;
-
-    const fetchPromise = crawlPage(
-      item.url,
-      item.depth,
-      item.inSitemap,
-      throttle,
-      fetchOptions,
-    ).then((res) => {
-      inFlight.delete(fetchPromise);
-      if (res) {
-        completedBatch.push(res);
-        const threshold =
-          persistedBatches === 0 ? FIRST_PERSIST_BATCH_SIZE : SUBSEQUENT_PERSIST_BATCH_SIZE;
-        if (completedBatch.length >= threshold) {
-          const batch = completedBatch.splice(0);
-          const persistP = flushPersistBatch(batch).finally(() => {
-            const idx = queuedPersists.indexOf(persistP);
-            if (idx !== -1) queuedPersists.splice(idx, 1);
-          });
-          queuedPersists.push(persistP);
+      const fetchPromise = crawlPage(
+        item.url,
+        item.depth,
+        item.inSitemap,
+        throttle,
+        fetchOptions,
+      ).then((res) => {
+        inFlight.delete(fetchPromise);
+        if (res) {
+          completedBatch.push(res);
+          const threshold =
+            persistedBatches === 0 ? FIRST_PERSIST_BATCH_SIZE : SUBSEQUENT_PERSIST_BATCH_SIZE;
+          if (completedBatch.length >= threshold) {
+            const batch = completedBatch.splice(0);
+            const persistP = flushPersistBatch(batch).catch(failWith).finally(() => {
+              const idx = queuedPersists.indexOf(persistP);
+              if (idx !== -1) queuedPersists.splice(idx, 1);
+            });
+            queuedPersists.push(persistP);
+          }
         }
-      }
-      return res;
-    }).catch((err) => {
-      inFlight.delete(fetchPromise);
+        return res;
+      }).catch((err) => {
+        inFlight.delete(fetchPromise);
+        failWith(err);
+        return null;
+      });
+
+      inFlight.add(fetchPromise);
+    }
+
+    // Wait for all outstanding fetches in flight
+    try {
+      await Promise.all(inFlight);
+    } catch (err) {
       if (throttle.checkpointFailed) {
         throw new AuditPhaseError("db_error", "crawling", "Throttle checkpoint failed to persist");
       }
       throw err;
-    });
-
-    inFlight.add(fetchPromise);
-  }
-
-  // Wait for all outstanding fetches in flight
-  try {
-    await Promise.all(inFlight);
-  } catch (err) {
-    if (throttle.checkpointFailed) {
-      throw new AuditPhaseError("db_error", "crawling", "Throttle checkpoint failed to persist");
     }
+    // Pages already in flight have finished (and any renders they billed are
+    // counted), so the failed chunk can now be abandoned.
+    if (failure !== null) throw failure;
+
+    // Flush remaining completed pages
+    if (completedBatch.length > 0) {
+      const finalBatch = completedBatch.splice(0);
+      const finalPersistP = flushPersistBatch(finalBatch).catch(failWith).finally(() => {
+        const idx = queuedPersists.indexOf(finalPersistP);
+        if (idx !== -1) queuedPersists.splice(idx, 1);
+      });
+      queuedPersists.push(finalPersistP);
+    }
+
+    // Await all queued persists
+    await Promise.all(queuedPersists);
+    if (failure !== null) throw failure;
+  } catch (err) {
+    await persistRenderUsage().catch(() => {});
     throw err;
   }
-
-  // Flush remaining completed pages
-  if (completedBatch.length > 0) {
-    const finalBatch = completedBatch.splice(0);
-    const finalPersistP = flushPersistBatch(finalBatch).finally(() => {
-      const idx = queuedPersists.indexOf(finalPersistP);
-      if (idx !== -1) queuedPersists.splice(idx, 1);
-    });
-    queuedPersists.push(finalPersistP);
-  }
-
-  // Await all queued persists
-  await Promise.all(queuedPersists);
+  await persistRenderUsage();
 
   // Release any unattempted URLs back to pending
   if (queue.length > 0) {
@@ -354,7 +415,7 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
     throttleState: throttle.state,
     resumeAt,
     finishedAt,
-    renderUsage: { attempts: 0, billed: 0 },
+    renderUsage: { ...renderUsage },
     cancelled,
   };
 }

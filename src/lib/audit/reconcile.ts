@@ -12,6 +12,7 @@ import { StepFailedError } from "../jobs/runner.ts";
 import { getSupabaseAdmin } from "../supabase/admin.js";
 import { createSqlAuditStore, type AuditRow, type AuditStore } from "./store.ts";
 import { classifyAuditFailure } from "./errors.ts";
+import { settleRenderHold, type RenderSettleDeps } from "./renderSettle.ts";
 
 const TEN_MINUTES_MS = 10 * 60 * 1000;
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
@@ -21,6 +22,9 @@ export interface ReconcileDeps {
   admin?: any;
   getJobStatus?: (jobId: string) => Promise<JobStatusResult>;
   now?: () => number;
+  settleSpendBatch?: RenderSettleDeps["settleSpendBatch"];
+  firecrawlUnitUsd?: number;
+  env?: Record<string, string | undefined>;
 }
 
 /**
@@ -43,6 +47,20 @@ export async function reconcileRunningAudit(
   const createdAtMs = Date.parse(audit.created_at);
   const ageMs = now - createdAtMs;
 
+  async function settleAfterFlip(flipped: boolean): Promise<void> {
+    if (!flipped) return;
+    try {
+      await settleRenderHold(audit.id, store, deps?.admin ?? null, {
+        settleSpendBatch: deps?.settleSpendBatch,
+        firecrawlUnitUsd: deps?.firecrawlUnitUsd,
+        env: deps?.env,
+      });
+    } catch {
+      // Reconcile never fails the sweep on a settle error; the guarded
+      // `settle-render` step will settle on the next run.
+    }
+  }
+
   // Case 1: job_id is null
   if (!audit.job_id) {
     if (ageMs > TEN_MINUTES_MS) {
@@ -51,6 +69,7 @@ export async function reconcileRunningAudit(
         errorDetail: "Audit was queued but no job was created within 10 minutes.",
         failedPhase: audit.current_phase,
       });
+      await settleAfterFlip(flipped);
       return { flipped, newStatus: flipped ? "failed" : undefined };
     }
     return { flipped: false };
@@ -77,6 +96,7 @@ export async function reconcileRunningAudit(
         errorDetail: "Audit job row was lost or pruned.",
         failedPhase: audit.current_phase,
       });
+      await settleAfterFlip(flipped);
       return { flipped, newStatus: flipped ? "failed" : undefined };
     }
     return { flipped: false };
@@ -92,6 +112,7 @@ export async function reconcileRunningAudit(
       errorDetail: classification.errorDetail,
       failedPhase: audit.current_phase,
     });
+    await settleAfterFlip(flipped);
     return { flipped, newStatus: flipped ? "failed" : undefined };
   }
 
@@ -100,6 +121,7 @@ export async function reconcileRunningAudit(
       errorDetail: "Audit job was cancelled.",
       failedPhase: audit.current_phase,
     });
+    await settleAfterFlip(flipped);
     return { flipped, newStatus: flipped ? "cancelled" : undefined };
   }
 

@@ -689,3 +689,8 @@ SOFTWARE.
 ### F16 Phase 4 ports
 - `src/lib/backlinks/ahrefsDomainRating.ts` (from `src/serverFunctions/ahrefs.ts`)
 - `src/app/api/customer/backlinks/ahrefs-dr/route.ts` (from `src/serverFunctions/ahrefs.ts`)
+
+### F18 Phase 6 ports
+- src/lib/audit/renderedPage.ts (from src/server/lib/audit/rendered-page.ts)
+- src/lib/audit/renderedPage.test.ts (from src/server/lib/audit/rendered-page.test.ts)
+- src/lib/audit/renderSettle.ts (from src/server/lib/audit/rendering-billing.ts)

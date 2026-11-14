@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import { runCrawlChunk, runCrawlPhase } from "./crawlPhase.ts";
 import { createMemoryAuditStore } from "./memoryStore.ts";
 import { AuditPhaseError } from "./errors.ts";
+import { finalizeAudit } from "./phases.ts";
+import { StepFailedError } from "../jobs/runner.ts";
 import type { AuditRow } from "./store.ts";
 import type { SafeFetchResult } from "../http/safeFetch.ts";
 
@@ -272,4 +274,315 @@ test("crawlPhase: runCrawlPhase loop executes and stops on frontier exhaustion",
   assert.equal(outcome.rateLimited, false);
   assert.equal(outcome.cancelled, false);
   assert.ok(executedSteps.includes("crawl-chunk-1"));
+});
+
+test("crawlPhase: render usage is summed in the chunk and persisted without re-billing on retry", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-000000000030";
+  store.seedAudit(
+    makeAudit(auditId, {
+      render_javascript: true,
+      render_hold_id: "hold-1",
+      render_approved_usd: 0.25,
+      site_platform: null,
+    }),
+  );
+  await store.seedStart(auditId, "https://example.com/");
+  await store.seedSitemap(auditId, ["https://example.com/a"]);
+
+  let renderCalls = 0;
+  const output = await runCrawlChunk({
+    auditId,
+    chunkNo: 1,
+    jobId: "job-1",
+    store,
+    deps: {
+      initialIntervalMs: 0,
+      safeFetch: async (u: any) => mockHtml(u.toString()),
+      lookup: async () => ["93.184.216.34"],
+      firecrawlApiKey: "test-key",
+      renderPage: (async (_url: string, opts?: { usage?: { attempts: number; billed: number } }) => {
+        renderCalls += 1;
+        if (opts?.usage) {
+          opts.usage.attempts += 1;
+          opts.usage.billed += 1;
+        }
+        return { html: "<html><head><title>R</title></head><body><h1>R</h1></body></html>", status: 200 };
+      }) as any,
+    },
+  });
+
+  assert.ok(renderCalls > 0, "render is called when the hold is approved");
+  assert.equal(output.renderUsage.attempts, renderCalls);
+  assert.equal(output.renderUsage.billed, renderCalls);
+  const fresh = await store.getAudit(auditId);
+  assert.equal(fresh?.render_attempts, renderCalls);
+  assert.equal(fresh?.render_billed, renderCalls);
+});
+
+test("crawlPhase: renders billed in a chunk that fails still reach render_billed", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-000000000034";
+  store.seedAudit(
+    makeAudit(auditId, {
+      render_javascript: true,
+      render_hold_id: "hold-1",
+      render_approved_usd: 0.25,
+      site_platform: null,
+    }),
+  );
+  await store.seedStart(auditId, "https://example.com/");
+  await store.seedSitemap(auditId, ["https://example.com/a", "https://example.com/b"]);
+
+  let renderCalls = 0;
+  await assert.rejects(
+    runCrawlChunk({
+      auditId,
+      chunkNo: 1,
+      jobId: "job-1",
+      store,
+      deps: {
+        initialIntervalMs: 0,
+        safeFetch: async (u: any) => mockHtml(u.toString()),
+        lookup: async () => ["93.184.216.34"],
+        firecrawlApiKey: "test-key",
+        renderPage: (async (_url: string, opts?: { usage?: { attempts: number; billed: number } }) => {
+          renderCalls += 1;
+          if (opts?.usage) {
+            opts.usage.attempts += 1;
+            opts.usage.billed += 1;
+          }
+          // A billed scrape whose HTML is unusable: Firecrawl charged, the page fails.
+          if (renderCalls === 2) throw new Error("Rendered page is not usable");
+          return { html: "<html><head><title>R</title></head><body><h1>R</h1></body></html>", status: 200 };
+        }) as any,
+      },
+    }),
+    /not usable/,
+  );
+
+  assert.ok(renderCalls >= 2, "the failing render ran");
+  const fresh = await store.getAudit(auditId);
+  assert.equal(fresh?.render_billed, renderCalls, "every billed render is recorded for settlement");
+  assert.equal(fresh?.render_attempts, renderCalls);
+});
+
+test("crawlPhase: a failed rendered chunk is abandoned and the audit finishes partial", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-000000000035";
+  const audit = makeAudit(auditId, {
+    render_javascript: true,
+    render_hold_id: "hold-1",
+    render_approved_usd: 0.25,
+    site_platform: null,
+  });
+  store.seedAudit(audit);
+  await store.seedStart(auditId, "https://example.com/");
+  await store.seedSitemap(auditId, ["https://example.com/a"]);
+
+  // The runner surfaces a step whose retries are spent as StepFailedError.
+  const ctx: any = {
+    jobId: "job-1",
+    step: {
+      do: async (_name: string, opts: any, fn: () => Promise<any>) => {
+        try {
+          return await fn();
+        } catch (err) {
+          if (opts?.retries === 0) throw new StepFailedError("step_failed", (err as Error).message);
+          throw err;
+        }
+      },
+      sleep: async () => {},
+    },
+  };
+  let renderCalls = 0;
+  const outcome = await runCrawlPhase(ctx, {
+    audit,
+    store,
+    admin: null,
+    deps: {
+      initialIntervalMs: 0,
+      safeFetch: async (u: any) => mockHtml(u.toString()),
+      lookup: async () => ["93.184.216.34"],
+      firecrawlApiKey: "test-key",
+      renderPage: (async (_url: string, opts?: { usage?: { attempts: number; billed: number } }) => {
+        renderCalls += 1;
+        if (opts?.usage) {
+          opts.usage.attempts += 1;
+          opts.usage.billed += 1;
+        }
+        throw new Error("Rendered page is not usable");
+      }) as any,
+    },
+  });
+
+  // Two pages were leased; each renders at most once (no step retry re-renders).
+  assert.ok(renderCalls >= 1 && renderCalls <= 2, `renders: ${renderCalls}`);
+  const fresh = await store.getAudit(auditId);
+  assert.ok((fresh?.pages_abandoned ?? 0) > 0, "the chunk's pages are abandoned");
+  assert.equal(fresh?.render_billed, renderCalls, "every billed render is still recorded");
+  const final = await finalizeAudit(fresh!, outcome, store, "job-1");
+  assert.equal(final.status, "partial");
+});
+
+test("crawlPhase: no render call without an approved hold", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-000000000031";
+  store.seedAudit(
+    makeAudit(auditId, { render_javascript: true, render_hold_id: null }),
+  );
+  await store.seedStart(auditId, "https://example.com/");
+
+  let renderCalls = 0;
+  const output = await runCrawlChunk({
+    auditId,
+    chunkNo: 1,
+    jobId: "job-1",
+    store,
+    deps: {
+      initialIntervalMs: 0,
+      safeFetch: async (u: any) => mockHtml(u.toString()),
+      lookup: async () => ["93.184.216.34"],
+      firecrawlApiKey: "test-key",
+      renderPage: (async () => {
+        renderCalls += 1;
+        return { html: "<html></html>", status: 200 };
+      }) as any,
+    },
+  });
+
+  assert.equal(renderCalls, 0, "no render call without an approved hold");
+  assert.deepEqual(output.renderUsage, { attempts: 0, billed: 0 });
+  const pages = await store.listSlimPages(auditId, null, 10);
+  assert.ok(pages.length > 0);
+  const pagesMap = (store as any)._pages as Map<string, { rendered: boolean }> | undefined;
+  const stored = pagesMap ? Array.from(pagesMap.values()) : [];
+  assert.ok(stored.length > 0);
+  assert.equal(stored[0].rendered, false);
+});
+
+test("crawlPhase: throttled Shopify pages are rendered instead of waiting", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-000000000032";
+  store.seedAudit(
+    makeAudit(auditId, {
+      render_javascript: true,
+      render_hold_id: "hold-1",
+      render_approved_usd: 0.25,
+      site_platform: "shopify",
+    }),
+  );
+  await store.seedStart(auditId, "https://example.com/");
+
+  let renderCalls = 0;
+  const startedAt = Date.now();
+  const output = await runCrawlChunk({
+    auditId,
+    chunkNo: 1,
+    jobId: "job-1",
+    store,
+    deps: {
+      initialIntervalMs: 0,
+      safeFetch: async (u: any) => mockRateLimit(u.toString(), "30"),
+      lookup: async () => ["93.184.216.34"],
+      firecrawlApiKey: "test-key",
+      renderPage: (async (_url: string, opts?: { usage?: { attempts: number; billed: number } }) => {
+        renderCalls += 1;
+        if (opts?.usage) {
+          opts.usage.attempts += 1;
+          opts.usage.billed += 1;
+        }
+        return {
+          html: "<!DOCTYPE html><html><head><title>Shop</title></head><body><h1>Shop</h1></body></html>",
+          status: 200,
+        };
+      }) as any,
+    },
+  });
+
+  assert.ok(renderCalls > 0, "throttled Shopify page is rendered");
+  assert.ok(Date.now() - startedAt < 30_000, "rendered instead of waiting 30s");
+  assert.equal(output.rateLimited, false);
+  const pages = await store.listSlimPages(auditId, null, 10);
+  assert.ok(pages.length > 0);
+  assert.equal(pages[0].fetchClass, "ok");
+});
+
+test("crawlPhase: rendered chunks are billed with retries 0 (a retry never re-bills)", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-000000000033";
+  const audit = makeAudit(auditId, {
+    render_javascript: true,
+    render_hold_id: "hold-1",
+    render_approved_usd: 0.25,
+  });
+  store.seedAudit(audit);
+  await store.seedStart(auditId, "https://example.com/");
+
+  const seenOpts: Array<{ name: string; opts: any }> = [];
+  const fakeCtx: any = {
+    jobId: "job-test",
+    step: {
+      do: async (name: string, opts: any, fn: () => Promise<any>) => {
+        seenOpts.push({ name, opts });
+        return fn();
+      },
+      sleep: async () => {},
+    },
+  };
+  await runCrawlPhase(fakeCtx, {
+    audit,
+    store,
+    admin: null,
+    deps: {
+      initialIntervalMs: 0,
+      safeFetch: async (u: any) => mockHtml(u.toString()),
+      lookup: async () => ["93.184.216.34"],
+      firecrawlApiKey: "test-key",
+      renderPage: (async (_url: string, opts?: { usage?: { attempts: number; billed: number } }) => {
+        if (opts?.usage) {
+          opts.usage.attempts += 1;
+          opts.usage.billed += 1;
+        }
+        return {
+          html: "<html><head><title>R</title></head><body><h1>R</h1></body></html>",
+          status: 200,
+        };
+      }) as any,
+    },
+  });
+  const chunkOpt = seenOpts.find((s) => s.name === "crawl-chunk-1")?.opts;
+  assert.ok(chunkOpt, "chunk step ran");
+  assert.equal(chunkOpt.billed, true);
+  assert.equal(chunkOpt.retries, 0);
+
+  // A free audit keeps the retryable chunk.
+  const freeId = "00000000-0000-4000-8000-000000000034";
+  const freeAudit = makeAudit(freeId, { render_javascript: false, render_hold_id: null });
+  const freeStore = createMemoryAuditStore();
+  freeStore.seedAudit(freeAudit);
+  await freeStore.seedStart(freeId, "https://example.com/");
+  const freeOpts: Array<{ name: string; opts: any }> = [];
+  await runCrawlPhase(
+    {
+      jobId: "job-test",
+      step: {
+        do: async (name: string, opts: any, fn: () => Promise<any>) => {
+          freeOpts.push({ name, opts });
+          return fn();
+        },
+        sleep: async () => {},
+      },
+    } as any,
+    {
+      audit: freeAudit,
+      store: freeStore,
+      deps: {
+        initialIntervalMs: 0,
+        safeFetch: async (u: any) => mockHtml(u.toString()),
+        lookup: async () => ["93.184.216.34"],
+      },
+    },
+  );
+  assert.equal(freeOpts.find((s) => s.name === "crawl-chunk-1")?.opts.retries, 1);
 });

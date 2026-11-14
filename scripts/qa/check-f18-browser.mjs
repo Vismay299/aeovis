@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * F18 Phase 4 browser verification (F18-AC-27, F18-AC-28).
+ * F18 Phase 6 browser verification (F18-AC-27, F18-AC-28).
  *
  * Runs the real portal against recorded API responses under
  * `tests/fixtures/site-audit/api/`; no audit is crawled and no provider is
@@ -18,8 +18,9 @@
  *   B09 an injected registry tab and page action render; flag-off entries hide
  *   B10 375 px viewport has no horizontal page scroll
  *   B11 lighthouse detail renders scores and filters by category
+ *   B12 render switch shows the estimate; disabled copy when not configured
  *
- * Output: "F18 browser: 11/11 passed" on pass.
+ * Output: "F18 browser: 12/12 passed" on pass.
  */
 
 import assert from "node:assert/strict";
@@ -59,7 +60,7 @@ assert.ok(
 const port = parseInt(origin.port || "3328", 10);
 const base = origin.href.replace(/\/$/, "");
 
-let requested = ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "B11"];
+let requested = ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "B11", "B12"];
 for (let i = 0; i < process.argv.length; i++) {
   if (process.argv[i].startsWith("--only=")) {
     requested = process.argv[i].split("=")[1].split(",").map((s) => s.trim());
@@ -442,6 +443,33 @@ scenario("B11", async (page) => {
   await page.waitForURL(/category=performance/, { timeout: 10000 });
   await page.getByText("Reduce unused JavaScript").waitFor({ timeout: 10000 });
   assert.equal(await page.getByText("Background and foreground colors do not have a sufficient contrast ratio.").count(), 0);
+});
+
+scenario("B12", async (page) => {
+  await gotoLaunch(page);
+  await page.getByRole("switch", { name: "Render JavaScript" }).waitFor({ timeout: 10000 });
+  await page.getByRole("switch", { name: "Render JavaScript" }).click();
+  await page
+    .getByText("Up to $0.25 for up to 50 pages. Each page is loaded by a browser service; you pay only for pages it loads.")
+    .waitFor({ timeout: 10000 });
+  await page
+    .getByText("Crawling is free. Lighthouse and JavaScript rendering cost money; you'll see the price before the audit starts.")
+    .waitFor();
+
+  const notConfigured = {
+    ...fixture("audit-list.json"),
+    capabilities: {
+      ...fixture("audit-list.json").capabilities,
+      render: false,
+      renderReason: "not_configured",
+    },
+  };
+  await page.unrouteAll({ behavior: "wait" });
+  await installAuditApi(page, { list: notConfigured });
+  await gotoLaunch(page);
+  await page.getByRole("switch", { name: "Render JavaScript" }).waitFor({ timeout: 10000 });
+  assert.equal(await page.getByRole("switch", { name: "Render JavaScript" }).isDisabled(), true);
+  await page.getByText("JavaScript rendering isn't available right now.").waitFor({ timeout: 10000 });
 });
 
 scenario("B10", async (page) => {

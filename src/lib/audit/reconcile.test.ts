@@ -155,3 +155,68 @@ test("reconcile: does not flip on transient read errors", async () => {
   const fresh = await store.getAudit(auditId);
   assert.equal(fresh?.status, "running");
 });
+
+test("reconcile: settles the render hold once at min(billed x unit, approved)", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-000000000025";
+  const audit = makeAudit(auditId, {
+    status: "running",
+    render_javascript: true,
+    render_hold_id: "hold-1",
+    render_approved_usd: 0.1,
+    render_attempts: 4,
+    render_billed: 4,
+  });
+  store.seedAudit(audit);
+
+  const settled: Array<{ holdId: string; costs: any }> = [];
+  const res = await reconcileRunningAudit(
+    { ...audit, job_id: "job-1" },
+    {
+      store,
+      getJobStatus: async () => ({
+        status: "failed",
+        error: { code: "step_timeout", message: "timeout" },
+        progress: null,
+        pollAfterSeconds: null,
+        result: null,
+      }),
+      settleSpendBatch: (async (holdId: string, costs: any) => {
+        settled.push({ holdId, costs });
+      }) as any,
+      firecrawlUnitUsd: 0.005,
+    },
+  );
+
+  assert.equal(res.flipped, true);
+  assert.equal(settled.length, 1);
+  assert.equal(settled[0].holdId, "hold-1");
+  assert.equal(settled[0].costs[0].provider, "firecrawl");
+  assert.equal(settled[0].costs[0].units, 4);
+  assert.equal(settled[0].costs[0].actualUsd, Math.min(4 * 0.005, 0.1));
+  assert.equal(settled[0].costs[0].costSource, "price_table");
+  const fresh = await store.getAudit(auditId);
+  assert.ok(fresh?.render_settled_at, "guard column is set");
+
+  // A second reconcile never settles twice.
+  const settled2: Array<unknown> = [];
+  const res2 = await reconcileRunningAudit(
+    { ...(await store.getAudit(auditId))!, job_id: "job-1" },
+    {
+      store,
+      getJobStatus: async () => ({
+        status: "failed",
+        error: { code: "step_timeout", message: "timeout" },
+        progress: null,
+        pollAfterSeconds: null,
+        result: null,
+      }),
+      settleSpendBatch: (async () => {
+        settled2.push(1);
+      }) as any,
+      firecrawlUnitUsd: 0.005,
+    },
+  );
+  assert.equal(res2.flipped, false);
+  assert.equal(settled2.length, 0);
+});

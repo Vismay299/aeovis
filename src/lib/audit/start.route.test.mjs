@@ -277,3 +277,34 @@ test("actual start route enforces both paid feature flags and render configurati
   assert.equal(unconfiguredResponse.status, 503);
   assert.equal((await unconfiguredResponse.json()).code, "render_unavailable");
 });
+
+test("render refusals happen before any provider call and a retry never re-bills the hold", async () => {
+  const off = actualStartDeps({ disabledFeature: "site_audit_render", renderConfigured: true });
+  const offResponse = await POST(request({ renderJavaScript: true }), undefined, off.depsForRoute);
+  assert.equal(offResponse.status, 403);
+  assert.equal(off.spendCalls.length, 0, "no spend hold without approval");
+  assert.equal(off.enqueued.length, 0, "no job without approval");
+  assert.equal(off.state.calls.some((call) => call[0] === "rpc"), false, "no DB row without approval");
+
+  const unconfigured = actualStartDeps();
+  const unconfiguredResponse = await POST(request({ renderJavaScript: true, maxUsd: 0.25 }), undefined, unconfigured.depsForRoute);
+  assert.equal(unconfiguredResponse.status, 503);
+  assert.equal(unconfigured.spendCalls.length, 0);
+  assert.equal(unconfigured.enqueued.length, 0);
+
+  const tooBig = actualStartDeps({ renderConfigured: true });
+  const tooBigResponse = await POST(request({ renderJavaScript: true, maxPages: 1001, maxUsd: 5 }), undefined, tooBig.depsForRoute);
+  assert.equal(tooBigResponse.status, 422);
+  assert.equal((await tooBigResponse.json()).code, "render_page_limit");
+  assert.equal(tooBig.spendCalls.length, 0);
+  assert.equal(tooBig.enqueued.length, 0);
+
+  // The hold is idempotent per audit: the same idempotency key is reused, so a
+  // retry of the same start never bills twice.
+  const paid = actualStartDeps({ renderConfigured: true });
+  const first = await POST(request({ renderJavaScript: true, maxUsd: 0.25 }), undefined, paid.depsForRoute);
+  assert.equal(first.status, 202);
+  assert.equal(paid.spendCalls.length, 1);
+  assert.equal(paid.spendCalls[0].idempotencyKey, `site_audit:${auditId}:render`);
+  assert.equal(paid.spendCalls[0].ttlSeconds, 86_340);
+});

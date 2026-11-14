@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "data": {
+    "rawHtml": "<!DOCTYPE html><html><head><title>Other URL</title></head><body><h1>Other</h1></body></html>",
+    "metadata": {
+      "statusCode": 200,
+      "url": "https://other.example/rendered"
+    }
+  }
+}
