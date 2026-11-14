@@ -7,6 +7,7 @@ import { Badge, Banner, Button, Skeleton, Tabs, formatRelative } from "../ui";
 import { contentItemStatus } from "../status";
 import { contentRequest, countWords, cx, playbookLabel, readingMinutes } from "./shared";
 import ReviewFindings from "./ReviewFindings";
+import IndexNowOffer from "./IndexNowOffer";
 
 /** Statuses the customer API accepts edits for (PATCH). */
 const EDITABLE_STATUSES = ["draft", "awaiting_approval", "approved", "rejected"];
@@ -32,6 +33,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
   const [message, setMessage] = useState("");
   const [checking, setChecking] = useState(false);
   const [publishUrl, setPublishUrl] = useState("");
+  const [publishedUrl, setPublishedUrl] = useState(null);
   const [publishing, setPublishing] = useState(false);
 
   const applyItem = useCallback((next) => {
@@ -150,6 +152,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
       await refresh(); onChanged();
       setMessage(action === "publish" ? "Publication verified and recorded. Indexing and citations need separate observations." :
         data.check?.passed ? "This saved version passed its evidence check. Review it before approval." : "Check finished with issues. Resolve them before approval.");
+      if (action === "publish") setPublishedUrl(data?.publication?.url ?? null);
     } catch(err) { if(err.status === 401) onUnauthorized(); else setActionError(err.message || "Action could not be completed."); }
     finally { setBusy(false); }
   }
@@ -187,6 +190,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
               <label>Published page URL<input aria-label="Published page URL" type="url" value={publishUrl} onChange={e=>setPublishUrl(e.target.value)} /></label>
               <Button size="sm" disabled={!publishUrl || publishing} onClick={()=>checkedAction("publish")}>{publishing ? "Verifying…" : "Verify publication"}</Button>
             </div> : null}
+            {publishedUrl ? <IndexNowOffer brandKey={brandKey} url={publishedUrl} contentItemId={itemId} /> : null}
           </div>
           <div className="pv-content-editor__head">
             <input
