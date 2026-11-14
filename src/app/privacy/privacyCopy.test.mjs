@@ -62,3 +62,16 @@ test("F26-AC-15 - privacy policy contains Product analytics and error reports se
     `Expected policy page last updated date to equal POLICY_VERSION (${POLICY_VERSION})`
   );
 });
+
+test("F25-AC-15 - privacy policy contains the Loops email paragraph (§6.7, first sentence)", () => {
+  const content = fs.readFileSync(privacyFile, "utf8");
+  const normalized = content.replace(/\s+/g, " ");
+
+  const firstSentence =
+    "We use Loops to send account emails: notifications about your workspace (for example when a scan finishes), a short series of setup tips after you sign up, and product updates only if you opt in.";
+
+  assert.ok(
+    normalized.includes(firstSentence),
+    "Expected privacy policy to contain the F25 Loops email first sentence"
+  );
+});
