@@ -318,6 +318,53 @@ test("crawlPhase: render usage is summed in the chunk and persisted without re-b
   assert.equal(fresh?.render_billed, renderCalls);
 });
 
+test("crawlPhase: renders billed in a chunk that fails still reach render_billed", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-000000000034";
+  store.seedAudit(
+    makeAudit(auditId, {
+      render_javascript: true,
+      render_hold_id: "hold-1",
+      render_approved_usd: 0.25,
+      site_platform: null,
+    }),
+  );
+  await store.seedStart(auditId, "https://example.com/");
+  await store.seedSitemap(auditId, ["https://example.com/a", "https://example.com/b"]);
+
+  let renderCalls = 0;
+  await assert.rejects(
+    runCrawlChunk({
+      auditId,
+      chunkNo: 1,
+      jobId: "job-1",
+      store,
+      deps: {
+        initialIntervalMs: 0,
+        safeFetch: async (u: any) => mockHtml(u.toString()),
+        lookup: async () => ["93.184.216.34"],
+        firecrawlApiKey: "test-key",
+        renderPage: (async (_url: string, opts?: { usage?: { attempts: number; billed: number } }) => {
+          renderCalls += 1;
+          if (opts?.usage) {
+            opts.usage.attempts += 1;
+            opts.usage.billed += 1;
+          }
+          // A billed scrape whose HTML is unusable: Firecrawl charged, the page fails.
+          if (renderCalls === 2) throw new Error("Rendered page is not usable");
+          return { html: "<html><head><title>R</title></head><body><h1>R</h1></body></html>", status: 200 };
+        }) as any,
+      },
+    }),
+    /not usable/,
+  );
+
+  assert.ok(renderCalls >= 2, "the failing render ran");
+  const fresh = await store.getAudit(auditId);
+  assert.equal(fresh?.render_billed, renderCalls, "every billed render is recorded for settlement");
+  assert.equal(fresh?.render_attempts, renderCalls);
+});
+
 test("crawlPhase: no render call without an approved hold", async () => {
   const store = createMemoryAuditStore();
   const auditId = "00000000-0000-4000-8000-000000000031";
