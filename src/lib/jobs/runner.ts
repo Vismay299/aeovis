@@ -1,5 +1,7 @@
 import { AppError } from "../http/errors.ts";
 import { getJobDefinition } from "./registry.ts";
+import { reportServerError } from "../telemetry/reporters.ts";
+import { runWithTelemetryContext } from "../telemetry/context.ts";
 import type { JobStore } from "./store.ts";
 import type { JobContext, JobRow, JobStatus, StepOptions } from "./types.ts";
 
@@ -373,33 +375,39 @@ export async function runJob(job: JobRow, env: RunEnv): Promise<RunOutcome> {
     cancelRequested,
   };
 
-  try {
-    const outcome = await def.handler(ctx);
-    await flushProgress();
-    const status = outcome?.status === "partial" ? "partial" : "completed";
-    const value = outcome?.result ?? null;
-    if (value !== null) {
-      const size = jsonBytes(value);
-      if (!size.ok) {
-        return settle("failed", {
-          status: "failed",
-          errorCode: size.code === "step_output_too_large" ? "result_too_large" : "result_not_json",
-          errorMessage: size.message,
-        });
+  return await runWithTelemetryContext(
+    { userId: job.created_by ?? null, brandKey: job.brand_key ?? null },
+    async () => {
+      try {
+        const outcome = await def.handler(ctx);
+        await flushProgress();
+        const status = outcome?.status === "partial" ? "partial" : "completed";
+        const value = outcome?.result ?? null;
+        if (value !== null) {
+          const size = jsonBytes(value);
+          if (!size.ok) {
+            return settle("failed", {
+              status: "failed",
+              errorCode: size.code === "step_output_too_large" ? "result_too_large" : "result_not_json",
+              errorMessage: size.message,
+            });
+          }
+        }
+        return settle(status, { status, result: value, errorCode: null, errorMessage: null });
+      } catch (err) {
+        if (err instanceof JobYield) return "yielded";
+        if (err instanceof LostLease) return "lost_lease";
+        if (err instanceof JobCancelled) {
+          return settle("cancelled", { status: "cancelled", errorCode: "cancelled", errorMessage: "Cancelled." });
+        }
+        const code =
+          err instanceof AppError || err instanceof StepFailedError
+            ? err.code
+            : "job_failed";
+        const message = redactForLog(err instanceof Error ? err.message : String(err));
+        reportServerError(err, { job_kind: job.kind, error_code: code });
+        return settle("failed", { status: "failed", errorCode: code, errorMessage: message });
       }
-    }
-    return settle(status, { status, result: value, errorCode: null, errorMessage: null });
-  } catch (err) {
-    if (err instanceof JobYield) return "yielded";
-    if (err instanceof LostLease) return "lost_lease";
-    if (err instanceof JobCancelled) {
-      return settle("cancelled", { status: "cancelled", errorCode: "cancelled", errorMessage: "Cancelled." });
-    }
-    const code =
-      err instanceof AppError || err instanceof StepFailedError
-        ? err.code
-        : "job_failed";
-    const message = redactForLog(err instanceof Error ? err.message : String(err));
-    return settle("failed", { status: "failed", errorCode: code, errorMessage: message });
-  }
+    },
+  );
 }

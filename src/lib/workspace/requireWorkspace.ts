@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "../supabase/admin.js";
 import { findCustomerBrand } from "../supabase/customerContext.js";
 import { WorkspaceError } from "../http/errors.ts";
+import { enterTelemetryContext } from "../telemetry/context.ts";
 
 export type CustomerBrand = {
   brandKey: string;
@@ -88,6 +89,8 @@ export async function requireWorkspace(
     throw new WorkspaceError(503, "storage_unavailable", "Workspace storage is unavailable.");
   }
 
+  // Telemetry fallback identity only; auth behaviour unchanged.
+  enterTelemetryContext({ userId: context.user.id, brandKey: brand.brandKey });
   return {
     user: { id: context.user.id, email: context.user.email ?? "" },
     brandKey: brand.brandKey,

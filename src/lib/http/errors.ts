@@ -1,6 +1,7 @@
 import { ZodError } from "zod";
 import { AppError, WorkspaceError, isAppError } from "./appError.ts";
 import { isCallOutcomeError } from "../spend/errors.ts";
+import { reportServerError } from "../telemetry/reporters.ts";
 
 export { AppError, WorkspaceError, isAppError };
 
@@ -62,6 +63,7 @@ export function toErrorResponse(err: unknown): Response {
     const body: Record<string, unknown> = { error: err.message, code: err.code };
     if (err.recovery !== undefined) body.recovery = err.recovery;
     if (err.details !== undefined) body.details = err.details;
+    if (err.status >= 500) reportServerError(err, { error_code: err.code });
     return json(body, err.status);
   }
 
@@ -75,6 +77,7 @@ export function toErrorResponse(err: unknown): Response {
   ) {
     const body: Record<string, unknown> = { error: err.message, code: err.code };
     if (err.details !== undefined) body.details = err.details;
+    if ((err.status as number) >= 500) reportServerError(err, { error_code: err.code });
     return json(body, err.status as number);
   }
 
@@ -98,5 +101,6 @@ export function toErrorResponse(err: unknown): Response {
     "[http] unhandled",
     err instanceof Error ? err.name + ": " + err.message.slice(0, 200) : typeof err
   );
+  reportServerError(err, { error_code: "internal_error" });
   return json({ error: "Something went wrong. Please retry.", code: "internal_error" }, 500);
 }
