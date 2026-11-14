@@ -30,7 +30,8 @@ export type AdmissionResult = {
 };
 
 /** Admit oldest due configs against the per-tick 1,000 task-unit budget. */
-export function admitByUnitBudget(configs: AdmissionConfig[], budget = 1000): AdmissionResult {  const admitted: AdmissionConfig[] = [];
+export function admitByUnitBudget(configs: AdmissionConfig[], budget = 1000): AdmissionResult {
+  const admitted: AdmissionConfig[] = [];
   const deferred: AdmissionConfig[] = [];
   let unitsStarted = 0;
   let started = 0;
