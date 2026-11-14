@@ -1,3 +1,7 @@
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/client/features/dashboard/Ga4Card.tsx:43-180
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
+
 "use client";
 
 import { Area, AreaChart } from "recharts";

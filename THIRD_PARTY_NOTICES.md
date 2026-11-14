@@ -694,3 +694,6 @@ SOFTWARE.
 - src/lib/audit/renderedPage.ts (from src/server/lib/audit/rendered-page.ts)
 - src/lib/audit/renderedPage.test.ts (from src/server/lib/audit/rendered-page.test.ts)
 - src/lib/audit/renderSettle.ts (from src/server/lib/audit/rendering-billing.ts)
+
+### F20 Phase 5 ports
+- `src/components/portal/analytics/OrganicOverviewCard.tsx` (from `openseo:src/client/features/dashboard/Ga4Card.tsx:43-180`)
