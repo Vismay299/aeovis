@@ -10,6 +10,7 @@ import { classifyFetch } from "./classifyFetch.ts";
 import { normalizeUrl } from "./urlUtils.ts";
 import { blockedAiBots } from "./aiAccess.ts";
 import { pathAndQuery } from "./robotsFile.ts";
+import { isIndexableFromDirectives } from "./fetchPage.ts";
 import { R15_TO_F18, expectedF18ForR15 } from "./r15Parity.ts";
 import type { CrawledPageResult } from "./types.ts";
 
@@ -33,8 +34,7 @@ function buildF18Page(input: {
   // an explicitly supplied robots text as found, and absent text as unusable
   // unless the caller says otherwise.
   const robotsUsable = robots != null;
-  const robotsDirectives = [analysis.robotsMeta, xRobotsTag].filter(Boolean).join(",").toLowerCase();
-  const isIndexable = !robotsDirectives.includes("noindex");
+  const isIndexable = isIndexableFromDirectives(analysis.robotsMeta, xRobotsTag);
   const canonicalUrl = analysis.canonical ? (normalizeUrl(analysis.canonical, url) ?? analysis.canonical) : null;
   const headingCount = (level: number): number => analysis.headingOrder.filter((h) => h === level).length;
   const structuredData = analysis.javascriptShell
@@ -126,36 +126,24 @@ test("R15 fixture 1 (combined restrictions, canonical, data-nosnippet) maps to F
   // canonical_other_url → canonicalized-page
   assert.ok(r15.issues.some((i: any) => i.code === "canonical_other_url"));
   assert.ok(types.includes("canonicalized-page"), `expected canonicalized-page in ${types.join(",")}`);
-  // restrictive_directive (x-robots max-snippet:0) → snippet-restricted
+  // restrictive_directive: googlebot "noindex,nosnippet" and x-robots "max-snippet:0".
+  // Every R15 positive must be an F18 positive (§6.2.11), including the
+  // googlebot-only noindex.
   const restrictive = r15.issues.filter((i: any) => i.code === "restrictive_directive");
-  assert.ok(restrictive.length >= 1);
+  assert.equal(restrictive.length, 2);
   for (const r of restrictive) {
-    const expected = expectedF18ForR15("restrictive_directive", { value: String((r.evidence as { value?: string })?.value ?? "") });
-    for (const t of expected) {
-      // googlebot-only noindex is not visible to F18 (it only reads name="robots"):
-      // record the real disagreement instead of forcing a pass.
-      if (t === "noindex-page" && String((r.evidence as { value?: string })?.value ?? "").toLowerCase().includes("googlebot") === false) {
-        // fall through to the assertion below
-      }
-      if (t === "noindex-page") {
-        const directiveSource = String((r.evidence as { source?: string })?.source ?? "");
-        const directiveValue = String((r.evidence as { value?: string })?.value ?? "");
-        // F18 only honours name="robots" + x-robots-tag; a googlebot-only
-        // noindex has no F18 counterpart by design (SPEC GAP, see notes).
-        if (directiveSource.toLowerCase().includes("googlebot")) continue;
-        assert.ok(types.includes(t), `restrictive ${directiveValue} expected ${t} in ${types.join(",")}`);
-      } else {
-        assert.ok(types.includes(t), `restrictive expected ${t} in ${types.join(",")}`);
-      }
+    const value = String((r.evidence as { value?: string })?.value ?? "");
+    for (const t of expectedF18ForR15("restrictive_directive", { value })) {
+      assert.ok(types.includes(t), `restrictive ${value} expected ${t} in ${types.join(",")}`);
     }
   }
-  // insufficient_source_text → thin-content (when R15 fires it)
-  if (r15.issues.some((i: any) => i.code === "insufficient_source_text")) {
-    assert.ok(types.includes("thin-content"));
-  } else {
-    // Fixture text is short; both should agree it is thin.
-    assert.ok(types.includes("thin-content"), `expected thin-content in ${types.join(",")}`);
-  }
+  assert.ok(types.includes("noindex-page"), `expected noindex-page in ${types.join(",")}`);
+  // insufficient_source_text (< 150 chars) → thin-content (< 150 words). F18
+  // (like the upstream port) only reports thin content on indexable pages; this page is
+  // noindex for Googlebot, so F18 reports noindex-page instead.
+  assert.ok(r15.issues.some((i: any) => i.code === "insufficient_source_text"));
+  assert.equal(page.isIndexable, false);
+  assert.ok(!types.includes("thin-content"));
   // Per-bot verdicts agree: R15 GPTBot blocked, OAI-SearchBot open
   assert.equal(r15.robots.find((b: any) => b.name === "GPTBot")?.status, "blocked");
   assert.equal(r15.robots.find((b: any) => b.name === "OAI-SearchBot")?.status, "open");
@@ -179,9 +167,8 @@ test("R15 fixture 2 (unobserved JSON-LD claims) maps to F18 structured-data chec
   // Claim "Unobserved product" is not in visible text → not-visible
   assert.ok(types.includes("structured-data-not-visible"), `expected structured-data-not-visible in ${types.join(",")}`);
   // R15 positive (short source) is also an F18 thin-content positive
-  if (r15.issues.some((i: any) => i.code === "insufficient_source_text")) {
-    assert.ok(types.includes("thin-content"));
-  }
+  assert.ok(r15.issues.some((i: any) => i.code === "insufficient_source_text"));
+  assert.ok(types.includes("thin-content"));
 });
 
 test("R15 status codes map to F18 fetch outcomes", () => {
@@ -213,4 +200,22 @@ test("R15 structured-data invalid JSON maps to F18 invalid", () => {
   const { page } = buildF18Page({ url, html });
   const types = f18Types(page);
   assert.ok(types.includes("structured-data-invalid"));
+});
+
+test("F18 honours googlebot/bingbot metas and the none directive like R15", () => {
+  for (const html of [
+    '<meta name="googlebot" content="noindex"><main>x</main>',
+    '<meta name="bingbot" content="noindex"><main>x</main>',
+    '<meta name="robots" content="none"><main>x</main>',
+  ]) {
+    const url = "https://example.com/p";
+    const r15 = inspectPage({ url, html });
+    assert.ok(r15.issues.some((i: any) => i.code === "restrictive_directive"), html);
+    const { page } = buildF18Page({ url, html });
+    assert.ok(f18Types(page).includes("noindex-page"), html);
+  }
+  // max-image-preview:none is not a noindex.
+  assert.equal(isIndexableFromDirectives("max-image-preview:none", null), true);
+  assert.equal(isIndexableFromDirectives("index, follow", "googlebot: none"), false);
+  assert.equal(isIndexableFromDirectives(null, null), true);
 });

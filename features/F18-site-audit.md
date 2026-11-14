@@ -840,11 +840,11 @@ F18 uses **`site_audit.run`** because Lighthouse is priced by the same action; F
 |---|---|
 | `access_denied` (403) | `blocked-page` |
 | `http_status` (4xx/5xx) | `broken-page` / `server-error` |
-| `restrictive_directive` with `noindex`/`none` | `noindex-page` |
+| `restrictive_directive` with `noindex`/`none` (meta `robots`, `googlebot`, `bingbot` or `X-Robots-Tag`; F18 reads the same three metas) | `noindex-page` |
 | `restrictive_directive` with `nosnippet`/`max-snippet:0` | `snippet-restricted` |
 | `data_nosnippet` | `snippet-restricted` |
 | `canonical_other_url` | `canonicalized-page` |
-| `insufficient_source_text` (< 150 characters) | `thin-content` (< 150 words; every R15 positive is also an F18 positive) |
+| `insufficient_source_text` (< 150 characters) | `thin-content` (< 150 words; every R15 positive on an indexable page is also an F18 positive — F18 reports thin content only on indexable pages, a noindex page gets `noindex-page`) |
 | `structured_data_requires_review` (invalid JSON) | `structured-data-invalid` |
 | `structured_data_requires_review` (claim not visible) | `structured-data-not-visible` |
 | per-bot robots verdicts | `ai-search-crawler-blocked`, `ai-agent-crawler-blocked`, `ai-training-crawler-blocked` |
