@@ -40,16 +40,15 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-function adminOrUnavailable(deps?: UnsubscribeRouteDeps): SupabaseClient {
-  let admin: SupabaseClient | null = null;
+async function adminOrUnavailable(deps?: UnsubscribeRouteDeps): Promise<SupabaseClient> {
+  // Production passes no deps: fall back to the real service-role client, the
+  // same way requireUser does. Tests inject a fake.
+  let admin: SupabaseClient | null;
   if (deps?.getSupabaseAdmin) {
     admin = deps.getSupabaseAdmin();
   } else {
-    throw new AppError(
-      503,
-      "preferences_unavailable",
-      "Email settings are unavailable right now. Please retry.",
-    );
+    const mod = await import("../../../../../lib/supabase/admin.js");
+    admin = mod.getSupabaseAdmin() as SupabaseClient | null;
   }
   if (!admin) {
     throw new AppError(
@@ -104,7 +103,7 @@ export async function POST(request: Request, _ctx?: unknown, deps?: UnsubscribeR
       );
     }
 
-    const admin = adminOrUnavailable(deps);
+    const admin = await adminOrUnavailable(deps);
     const column = COLUMN_FOR_CATEGORY[c];
     let loopsSynced = true;
 
