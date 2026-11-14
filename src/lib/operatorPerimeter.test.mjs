@@ -287,6 +287,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     "/api/customer/ga4/property",
     // F20 phase 3 — reports.
     "/api/customer/ga4/health",
+    // F20 phase 4 — opportunities. Self-gated via requireWorkspace and the ga4 flag.
+    "/api/customer/ga4/opportunities",
     "/api/customer/ga4/overview",
     "/api/customer/ga4/reports/[kind]",
     "/api/customer/gsc",
