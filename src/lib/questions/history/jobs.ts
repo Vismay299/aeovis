@@ -14,7 +14,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
  *
  * Periodic every 300 s → enqueueSystemJob("questions.link", {}, { dedupeKey:
  * "questions.link:" + slot5m }); the job links every active workspace (at
- * most 200) with one DB_STEP step per workspace.
+ * most 200) with a `list` step, then one DB_STEP step per workspace.
  * Periodic daily → enqueueSystemJob("questions.links.retention", {}, {
  * dedupeKey: "questions.links.retention:" + YYYY-MM-DD }); the job prunes
  * links older than 395 days in batches of 5000, up to 20 batches.
@@ -108,7 +108,9 @@ export function registerQuestionLinkJobs(deps: QuestionLinkJobsDeps = {}): void 
       QUESTIONS_LINK_KIND,
       async (ctx) => {
         const admin = activeAdmin();
-        const brands = await listActiveLinkBrands(admin);
+        // Listed inside a step so a replay walks the same brands in the same
+        // order: `link-n` memo entries are keyed by position, not brand.
+        const brands = await ctx.step.do("list", DB_STEP, () => listActiveLinkBrands(admin));
         let linked = 0;
         let n = 0;
         for (const brand of brands) {
