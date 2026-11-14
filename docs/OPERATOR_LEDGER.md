@@ -354,6 +354,8 @@ functions; its tenant isolation is verified by `tests/customer-uat.sql` and
 
 `090_f11_explore_dispatch` and `091_f11_explore_runs` are additive and must be applied in filename order before deploying F11. They add fenced explore observations and the tenant-readable `explore_runs` table, ledger settlement functions, and 395-day run retention. Verify against loopback QA PostgreSQL with `scripts/qa/check-f11-db.mjs` and tenant isolation with `tests/customer-uat.sql`. Both are **NOT applied to production**.
 
+`095_f12_question_answer_links` is additive and must be applied after F08's `075`–`076` (enforced by the migration's own guard) before deploying F12 phase 1. It adds the tenant-readable `question_answer_links` table with RLS plus the service-role-only `link_question_answers` (scan/explore/legacy linking, optional archived `import` creation) and `prune_question_answer_links` (395-day retention) functions. Verified against loopback PostgreSQL by `scripts/qa/check-f12-db.mjs` and `tests/customer-uat.sql`. It is **NOT applied to production**.
+
 
 `040_f01_jobs` is implemented and verified on disposable PostgreSQL — the
 `jobs-enqueue`, `jobs-leases`, `jobs-steps`, `jobs-watchdog`, `jobs-cancel`

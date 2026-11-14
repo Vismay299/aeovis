@@ -230,6 +230,10 @@ export const NEVER_WRITABLE = Object.freeze([
   // F06 phase 3 — migration 065: server export audit rows. Live tests must use
   // the loopback-only check-f06-db.mjs harness, never this production table.
   "export_requests",
+  // F12 phase 1 — migration 095: stable links from collected answers to
+  // workspace questions. Tenant data; live tests use the loopback-only
+  // check-f12-db.mjs harness.
+  "question_answer_links",
 ]);
 
 /**
