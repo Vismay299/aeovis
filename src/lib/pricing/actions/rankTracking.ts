@@ -11,6 +11,15 @@ import {
 import { dataforseoPricing } from "../dataforseo.ts";
 import { fromMicros, toMicros } from "../../spend/money.ts";
 import { DEVICES, RANK_SCHEDULES, devicesCount, devicesLabel, type Devices } from "../../../shared/rank-tracking.ts";
+import {
+  DEFAULT_LOCATION_CODE,
+  formatLocationLabel,
+  getKeywordDataProvider,
+  isLabsLocationCode,
+  resolveKeywordDataLanguage,
+  resolveLabsMarket,
+} from "../../../shared/keyword-locations.ts";
+import { KEYWORD_METRICS_BATCH_SIZE } from "../../providers/dataforseo/keyword-metrics.ts";
 import { estimateRankCheckUsd } from "../../rank-tracking/cost.ts";
 import { normalizeTrackedDomain, resolveTrackerMarket } from "../../rank-tracking/market.ts";
 import { createRankTrackingRepository } from "../../rank-tracking/repository.ts";
@@ -264,4 +273,243 @@ export const rankConfigSaveAction = definePricedAction({
   input: configSaveInput,
   requireApproval: true,
   estimate: (ctx, input) => estimateConfigSave(ctx, input),
+});
+
+export const suggestionsRunInput = z.strictObject({
+  domain: z.string().trim().min(1).max(253),
+  locationCode: z.number().int().positive(),
+  languageCode: z.string().min(2).max(8).optional(),
+});
+
+export const metricsRunInput = z.strictObject({
+  configId: z.string().uuid(),
+});
+
+export const SUGGESTIONS_UNAVAILABLE_MESSAGE =
+  "Ranked-keyword suggestions aren't available for this country. Add the keywords you want to track manually.";
+
+function suggestionsHostname(domain: string): string {
+  try {
+    return normalizeTrackedDomain(domain);
+  } catch {
+    return domain.trim().toLowerCase();
+  }
+}
+
+export async function estimateSuggestionsRun(
+  ctx: PricingContext,
+  input: z.infer<typeof suggestionsRunInput>,
+  deps?: RankTrackingQuoteDeps,
+): Promise<PricedActionEstimateResult> {
+  const market = resolveLabsMarket(
+    { locationCode: input.locationCode, languageCode: input.languageCode },
+    { locationCode: DEFAULT_LOCATION_CODE, languageCode: "en" },
+  );
+  if (!isLabsLocationCode(input.locationCode)) {
+    return {
+      totalUsd: 0,
+      expectedUsd: 0,
+      units: [],
+      lines: [],
+      monthly: null,
+      warnings: [],
+      blocked: { code: "suggestions_unavailable", message: SUGGESTIONS_UNAVAILABLE_MESSAGE },
+    };
+  }
+  const cost = fromMicros(toMicros(dataforseoPricing.domain.rankedKeywords({ limit: 100 })));
+  const warnings: Array<{ code: string; message: string }> = [
+    {
+      code: "cache_note",
+      message: "Looking up the same domain and country again within 24 hours is free.",
+    },
+  ];
+  if (ctx.admin) {
+    try {
+      const findRecent = deps?.findRecentResearch ?? findRecentResearch;
+      const recent = await findRecent(ctx.admin, {
+        brandKey: ctx.brandKey,
+        kind: "rank_tracking.suggestions",
+        researchKey: `${suggestionsHostname(input.domain)}|${market.locationCode}|${market.languageCode}`,
+      });
+      if (recent) {
+        warnings.push({
+          code: "recent_research",
+          message: `You looked this up on ${recent.entryDate}: ${recent.summary}`,
+        });
+      }
+    } catch {
+      // Ignore research log lookup failures in pricing.
+    }
+  }
+  return {
+    totalUsd: cost,
+    expectedUsd: cost,
+    units: [{ key: "keywords", label: "Ranked keywords", count: 100 }],
+    lines: [
+      {
+        label: "Up to 100 keywords this domain ranks for",
+        quantity: 1,
+        unitUsd: cost,
+        totalUsd: cost,
+      },
+    ],
+    monthly: null,
+    warnings,
+    blocked: null,
+  };
+}
+
+function nothingToRefresh(): PricedActionEstimateResult {
+  return {
+    totalUsd: 0,
+    expectedUsd: 0,
+    units: [
+      { key: "fromCache", label: "Fresh keywords", count: 0 },
+      { key: "stale", label: "Stale keywords", count: 0 },
+    ],
+    lines: [],
+    monthly: null,
+    warnings: [],
+    blocked: {
+      code: "nothing_to_refresh",
+      message: "Every keyword's stats were updated in the last 7 days.",
+    },
+  };
+}
+
+export async function estimateMetricsRun(
+  ctx: PricingContext,
+  input: z.infer<typeof metricsRunInput>,
+  deps?: RankTrackingQuoteDeps & { now?: () => Date },
+): Promise<PricedActionEstimateResult> {
+  const config = await loadConfig(ctx, input.configId, deps);
+  if (!config) {
+    return {
+      totalUsd: 0,
+      expectedUsd: 0,
+      units: [],
+      lines: [],
+      monthly: null,
+      warnings: [],
+      blocked: { code: "tracker_not_found", message: "This tracked domain does not exist." },
+    };
+  }
+  const repo = repoFor(ctx, deps);
+  const keywords = await repo.listKeywords(ctx.brandKey, input.configId);
+
+  if ((config as any).location_name != null) {
+    if (keywords.length === 0) return nothingToRefresh();
+    const lines: Array<{ label: string; quantity: number; unitUsd: number; totalUsd: number }> = [];
+    const batches = Math.ceil(keywords.length / KEYWORD_METRICS_BATCH_SIZE);
+    for (let i = 0; i < batches; i++) {
+      const count = Math.min(KEYWORD_METRICS_BATCH_SIZE, keywords.length - i * KEYWORD_METRICS_BATCH_SIZE);
+      const cityUsd = fromMicros(toMicros(dataforseoPricing.keywords.adsSearchVolume({})));
+      const kdUsd = fromMicros(
+        toMicros(dataforseoPricing.labs.keywordOverview({ keywords: new Array(count) })),
+      );
+      lines.push({
+        label: `City volume for ${count} keywords in ${formatLocationLabel((config as any).location_name)}`,
+        quantity: 1,
+        unitUsd: cityUsd,
+        totalUsd: cityUsd,
+      });
+      lines.push({
+        label: `Difficulty for ${count} keywords`,
+        quantity: 1,
+        unitUsd: kdUsd,
+        totalUsd: kdUsd,
+      });
+    }
+    const totalUsd = fromMicros(lines.reduce((sum, line) => sum + toMicros(line.totalUsd), 0));
+    return {
+      totalUsd,
+      expectedUsd: totalUsd,
+      units: [
+        { key: "fromCache", label: "Fresh keywords", count: 0 },
+        { key: "stale", label: "Stale keywords", count: keywords.length },
+      ],
+      lines,
+      monthly: null,
+      warnings: [],
+      blocked: null,
+    };
+  }
+
+  const configRow = config as any;
+  const dataLang = resolveKeywordDataLanguage(configRow.location_code, configRow.language_code);
+  const now = deps?.now?.() ?? new Date();
+  const cutoff = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  let fresh = 0;
+  if (keywords.length > 0 && ctx.admin) {
+    try {
+      const lowered = Array.from(new Set(keywords.map((keyword: any) => String(keyword.keyword).toLowerCase())));
+      const freshKeys = new Set<string>();
+      for (let index = 0; index < lowered.length; index += 100) {
+        const { data, error } = await ctx.admin
+          .from("keyword_metrics")
+          .select("keyword, fetched_at")
+          .eq("location_code", configRow.location_code)
+          .eq("language_code", dataLang)
+          .in("keyword", lowered.slice(index, index + 100));
+        if (error) throw error;
+        for (const row of (data as Array<{ keyword: string; fetched_at: string }> | null) ?? []) {
+          if (Date.parse(row.fetched_at) > Date.parse(cutoff)) freshKeys.add(String(row.keyword).toLowerCase());
+        }
+      }
+      fresh = keywords.filter((keyword: any) => freshKeys.has(String(keyword.keyword).toLowerCase())).length;
+    } catch {
+      // A failed read prices every keyword as stale (never under-quotes).
+      fresh = 0;
+    }
+  }
+  const stale = keywords.length - fresh;
+  if (stale === 0) return nothingToRefresh();
+
+  const provider = getKeywordDataProvider(configRow.location_code);
+  const lines: Array<{ label: string; quantity: number; unitUsd: number; totalUsd: number }> = [];
+  const batches = Math.ceil(stale / KEYWORD_METRICS_BATCH_SIZE);
+  for (let i = 0; i < batches; i++) {
+    const count = Math.min(KEYWORD_METRICS_BATCH_SIZE, stale - i * KEYWORD_METRICS_BATCH_SIZE);
+    const batchUsd =
+      provider === "google_ads"
+        ? fromMicros(toMicros(dataforseoPricing.keywords.adsSearchVolume({})))
+        : fromMicros(
+            toMicros(dataforseoPricing.labs.keywordOverview({ keywords: new Array(count) })),
+          );
+    lines.push({
+      label: `Keyword stats for ${count} keywords`,
+      quantity: 1,
+      unitUsd: batchUsd,
+      totalUsd: batchUsd,
+    });
+  }
+  const totalUsd = fromMicros(lines.reduce((sum, line) => sum + toMicros(line.totalUsd), 0));
+  return {
+    totalUsd,
+    expectedUsd: totalUsd,
+    units: [
+      { key: "fromCache", label: "Fresh keywords", count: fresh },
+      { key: "stale", label: "Stale keywords", count: stale },
+    ],
+    lines,
+    monthly: null,
+    warnings: [],
+    blocked: null,
+  };
+}
+
+export const rankSuggestionsRunAction = definePricedAction({
+  key: "rank_tracking.suggestions.run",
+  feature: "rank_tracking.suggestions",
+  input: suggestionsRunInput,
+  requireApproval: false,
+  estimate: (ctx, input) => estimateSuggestionsRun(ctx, input),
+});
+
+export const rankMetricsRunAction = definePricedAction({
+  key: "rank_tracking.metrics.run",
+  feature: "rank_tracking.metrics",
+  input: metricsRunInput,
+  requireApproval: true,
+  estimate: (ctx, input) => estimateMetricsRun(ctx, input),
 });

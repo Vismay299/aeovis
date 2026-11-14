@@ -1,0 +1,17 @@
+{
+  "connected": true,
+  "configured": true,
+  "canManage": true,
+  "currentUserHasGrant": true,
+  "connectorIsMember": true,
+  "grantStatus": "active",
+  "property": {
+    "id": "properties/123456789",
+    "displayName": "Offcult India",
+    "timeZone": "Asia/Kolkata",
+    "currencyCode": "INR",
+    "accountDisplayName": "Offcult"
+  },
+  "connectedByEmail": "owner@example.com",
+  "connectedAt": "2026-10-22T09:00:00.000Z"
+}

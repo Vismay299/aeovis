@@ -1,0 +1,6 @@
+{
+  "error": "Google Analytics' reporting quota for this property is used up.",
+  "code": "ga4_quota_exhausted",
+  "recovery": "Try again later.",
+  "details": { "retryAfterSeconds": 120 }
+}
