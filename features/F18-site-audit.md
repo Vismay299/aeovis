@@ -840,11 +840,11 @@ F18 uses **`site_audit.run`** because Lighthouse is priced by the same action; F
 |---|---|
 | `access_denied` (403) | `blocked-page` |
 | `http_status` (4xx/5xx) | `broken-page` / `server-error` |
-| `restrictive_directive` with `noindex`/`none` | `noindex-page` |
+| `restrictive_directive` with `noindex`/`none` (meta `robots`, `googlebot`, `bingbot` or `X-Robots-Tag`; F18 reads the same three metas) | `noindex-page` |
 | `restrictive_directive` with `nosnippet`/`max-snippet:0` | `snippet-restricted` |
 | `data_nosnippet` | `snippet-restricted` |
 | `canonical_other_url` | `canonicalized-page` |
-| `insufficient_source_text` (< 150 characters) | `thin-content` (< 150 words; every R15 positive is also an F18 positive) |
+| `insufficient_source_text` (< 150 characters) | `thin-content` (< 150 words; every R15 positive on an indexable page is also an F18 positive — F18 reports thin content only on indexable pages, a noindex page gets `noindex-page`) |
 | `structured_data_requires_review` (invalid JSON) | `structured-data-invalid` |
 | `structured_data_requires_review` (claim not visible) | `structured-data-not-visible` |
 | per-bot robots verdicts | `ai-search-crawler-blocked`, `ai-agent-crawler-blocked`, `ai-training-crawler-blocked` |
@@ -1325,8 +1325,8 @@ Branches `feat/f18-site-audit-p<N>`. Every new COPY/PORT file gets the licence h
 ### Phase 7 — R15 parity and cross-link
 **Goal:** R15 and F18 never disagree; the measurement card points to the full audit.
 
-- [ ] **P7.T1** *Files:* `src/lib/audit/r15Parity.ts`, `r15Parity.test.ts`. *Do:* §6.2.11; for each HTML fixture in `src/lib/repairs/r15-technical-evidence.test.mjs`, run `inspectPage` and F18 `analyzeHtml` + `runPageReporters`, map R15 codes through `R15_TO_F18`, assert every mapped type is present. *Verify:* `NT src/lib/audit/r15Parity.test.ts src/lib/repairs/r15-technical-evidence.test.mjs` → pass (F18-AC-34).
-- [ ] **P7.T2** *Files:* `src/app/portal/measurement/page.jsx`. *Do:* change the "Website technical evidence" card `description` string to "Checks up to six owned-page requests. Search indexing and AI inclusion remain separate facts. For a full crawl with AI-crawler checks, open Site Audit." No other change. *Verify:* `node --test src/components/portal/portalRegressions.test.mjs` → pass.
+- [x] **P7.T1** *Files:* `src/lib/audit/r15Parity.ts`, `r15Parity.test.ts`. *Do:* §6.2.11; for each HTML fixture in `src/lib/repairs/r15-technical-evidence.test.mjs`, run `inspectPage` and F18 `analyzeHtml` + `runPageReporters`, map R15 codes through `R15_TO_F18`, assert every mapped type is present. *Verify:* `NT src/lib/audit/r15Parity.test.ts src/lib/repairs/r15-technical-evidence.test.mjs` → pass (F18-AC-34).
+- [x] **P7.T2** *Files:* `src/app/portal/measurement/page.jsx`. *Do:* change the "Website technical evidence" card `description` string to "Checks up to six owned-page requests. Search indexing and AI inclusion remain separate facts. For a full crawl with AI-crawler checks, open Site Audit." No other change. *Verify:* `node --test src/components/portal/portalRegressions.test.mjs` → pass.
 
 **Checkpoint:** R15 tests unchanged and passing. AC: 34.
 
