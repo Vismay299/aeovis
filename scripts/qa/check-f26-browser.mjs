@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * F26 Phase 2 browser checks (F26-AC-09).
- * Tests scenarios B1, B2, B3, B4, B5, B6, B8 against a local Next.js app.
+ * F26 Phase 2 browser checks (F26-AC-09) + Phase 3 B7 (F26-AC-10 client half).
+ * Tests scenarios B1, B2, B3, B4, B5, B6, B7, B8 against a local Next.js app.
  */
 import assert from "node:assert/strict";
 import http from "node:http";
@@ -61,6 +61,8 @@ if (!isRunning) {
       env: {
         ...process.env,
         NEXT_PUBLIC_POSTHOG_KEY: "phc_qa_placeholder",
+        // F26 B7: /portal/telemetry-check renders only on preview/non-production.
+        VERCEL_ENV: "preview",
         POSTHOG_INGEST_ORIGIN: `http://127.0.0.1:${sinkPort}`,
         NEXT_PUBLIC_SUPABASE_URL: SUPABASE_URL,
         NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key",
@@ -614,10 +616,62 @@ for (const req of recordedIngestRequests) {
 }
 console.log("  ✓ Scenario B8 passed");
 
+// ==========================================
+// Scenario B7: Consented user clicks "Throw test error" → exactly one
+// $exception with a blanked message (F26-AC-10 client half)
+// ==========================================
+console.log("Running Scenario B7...");
+const b7 = await setupPage({ initialChoice: null });
+await signIn(b7.page);
+const shareBtnB7 = b7.page.getByRole("button", { name: "Share analytics" });
+await shareBtnB7.waitFor({ state: "visible", timeout: 5000 });
+await shareBtnB7.click();
+await b7.page.waitForTimeout(1000);
+assert.ok(
+  b7.putCalls.some((c) => c.analytics === true && c.source === "banner"),
+  "B7: PUT /api/customer/privacy called with { analytics: true, source: 'banner' }",
+);
+
+await b7.page.goto(`http://127.0.0.1:${port}/portal/telemetry-check`, { waitUntil: "networkidle" });
+const throwBtn = b7.page.getByRole("button", { name: "Throw test error" });
+await throwBtn.waitFor({ state: "visible", timeout: 5000 });
+await throwBtn.click();
+
+// Flush the posthog queue the same way B2 does, then read the batch.
+const b7Start = Date.now();
+while (Date.now() - b7Start < 15000) {
+  const seen = b7.contextIngest
+    .flatMap((r) => r.events)
+    .filter((e) => e.event === "$exception").length;
+  if (seen > 0) break;
+  await b7.page.evaluate(() => {
+    try {
+      window.posthog?._requestQueue?._poll();
+    } catch {}
+  });
+  await b7.page.waitForTimeout(250);
+}
+
+const b7Exceptions = b7.contextIngest
+  .flatMap((r) => r.events)
+  .filter((e) => e.event === "$exception");
+assert.equal(b7Exceptions.length, 1, "B7: exactly one $exception after clicking Throw test error");
+const b7List = b7Exceptions[0].properties?.$exception_list;
+assert.ok(Array.isArray(b7List) && b7List.length > 0, "B7: $exception carries $exception_list");
+assert.equal(b7List[0].value, "", "B7: $exception_list[0].value is blanked (no content)");
+for (const req of b7.contextIngest) {
+  const bodyStr = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : String(req.body || "");
+  const eventsStr = JSON.stringify(req.events);
+  assert.ok(!bodyStr.includes("secret-content"), "B7: recorded body must not contain secret-content");
+  assert.ok(!eventsStr.includes("secret-content"), "B7: recorded events must not contain secret-content");
+}
+console.log("  ✓ Scenario B7 passed");
+
 // Clean up
 await b1.context.close().catch(() => {});
 await b4.context.close().catch(() => {});
 await b6.context.close().catch(() => {});
+await b7.context.close().catch(() => {});
 await b8.context.close().catch(() => {});
 await browser.close().catch(() => {});
 sinkServer.close();
@@ -625,6 +679,6 @@ killServerChild();
 
 assert.equal(externalRequests.length, 0, "0 requests outside 127.0.0.1");
 
-console.log("ok 7 scenarios");
+console.log("ok 8 scenarios");
 console.log("0 requests outside 127.0.0.1");
 process.exit(0);

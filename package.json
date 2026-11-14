@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/telemetry/upload-sourcemaps.mjs",
+    "sourcemaps:upload": "node scripts/telemetry/upload-sourcemaps.mjs",
     "skills:build": "node scripts/build-assistant-skills.mjs --write",
     "prebuild": "node scripts/build-assistant-skills.mjs --check",
     "start": "next start",
@@ -63,6 +64,7 @@
   },
   "devDependencies": {
     "@babel/parser": "^7.28.5",
+    "@posthog/cli": "0.20.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22.20.5",
     "@types/papaparse": "^5.5.2",
