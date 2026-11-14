@@ -1,7 +1,13 @@
 // Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
 //   src/server/lib/posthog.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
-import { randomUUID } from "node:crypto";
+// NOTE: no `node:` imports in this module. It is reached from
+// `src/instrumentation.ts` (via `wireServerSinks.ts` and `onRequestError`),
+// which Next also compiles for a layer without `node:` scheme support, so a
+// static `node:crypto` import fails the production build with
+// `UnhandledSchemeError` even though nothing here runs on the client.
+// `globalThis.crypto.randomUUID()` is available in Node 22+, Edge and
+// browsers and produces the same UUID format, so behaviour is unchanged.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { keepAlive as defaultKeepAlive } from "../keepAlive.js";
 import { getSupabaseAdmin } from "../supabase/admin.js";
@@ -174,7 +180,7 @@ export async function captureServerEvent<N extends ServerEventName>(
         const tid = await telemetryIdFor(admin ?? undefined, brandKey, deps?.now?.() ?? Date.now());
         if (tid) groups = { workspace: tid };
       } else if (spec.consent === "anonymous") {
-        distinctId = `anon:${randomUUID()}`;
+        distinctId = `anon:${globalThis.crypto.randomUUID()}`;
         properties = { ...properties, $process_person_profile: false };
         groups = undefined;
       } else {
