@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "data": {
+    "rawHtml": "   \n  ",
+    "metadata": {
+      "statusCode": 200,
+      "url": "https://example.com/rendered"
+    }
+  }
+}

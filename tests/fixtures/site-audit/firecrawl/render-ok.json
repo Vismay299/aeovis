@@ -1,0 +1,10 @@
+{
+  "success": true,
+  "data": {
+    "rawHtml": "<!DOCTYPE html><html><head><title>Rendered page</title></head><body><h1>Rendered</h1><p>Browser content.</p></body></html>",
+    "metadata": {
+      "statusCode": 200,
+      "url": "https://example.com/rendered"
+    }
+  }
+}
