@@ -280,7 +280,7 @@ export default function MeasurementPage() {
 
           <Card
             title="Website technical evidence"
-            description="Checks up to six owned-page requests. Search indexing and AI inclusion remain separate facts."
+            description="Checks up to six owned-page requests. Search indexing and AI inclusion remain separate facts. For a full crawl with AI-crawler checks, open Site Audit."
           >
             <div className="space-y-4 p-4">
               <div>

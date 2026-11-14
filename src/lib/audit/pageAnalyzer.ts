@@ -62,7 +62,9 @@ export function analyzeHtml(
   let noscriptDepth = 0;
   let metaDescription: string | null = null;
   let canonical: string | null = null;
-  let robotsMeta: string | null = null;
+  // R15 parity (F18 §6.2.11): technicalAudit.js reads robots, googlebot and
+  // bingbot metas, so F18 must too or a googlebot-only noindex is missed.
+  const robotsMetas: string[] = [];
   let ogTitle: string | null = null;
   let ogDescription: string | null = null;
   let ogImage: string | null = null;
@@ -97,8 +99,9 @@ export function analyzeHtml(
     const metaName = attribs["name"]?.toLowerCase();
     if (metaName === "description") {
       metaDescription ??= content?.trim() ?? "";
-    } else if (metaName === "robots") {
-      robotsMeta ??= content ?? null;
+    } else if (metaName === "robots" || metaName === "googlebot" || metaName === "bingbot") {
+      const value = content?.trim();
+      if (value && !robotsMetas.includes(value)) robotsMetas.push(value);
     } else if (attribs["property"] === "og:title") {
       ogTitle ??= content ?? null;
     } else if (attribs["property"] === "og:description") {
@@ -291,7 +294,7 @@ export function analyzeHtml(
     title: (title ?? "").trim(),
     metaDescription: metaDescription ?? "",
     canonical,
-    robotsMeta,
+    robotsMeta: robotsMetas.length > 0 ? robotsMetas.join(", ") : null,
     ogTitle,
     ogDescription,
     ogImage,
