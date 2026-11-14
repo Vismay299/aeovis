@@ -345,6 +345,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/questions/research/keywords",
       "/api/customer/questions/setup",
       "/api/customer/questions/setup/save",
+      "/api/customer/questions/[questionId]/answers/[answerId]",
+      "/api/customer/questions/[questionId]/history",
       "/api/customer/scan",
       "/api/customer/scan/mock",
       "/api/customer/scan/report/[scan_id]",
