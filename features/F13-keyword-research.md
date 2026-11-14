@@ -1034,9 +1034,9 @@ Search textarea and every icon button have labels; sortable headers expose `aria
 
 **Goal:** bridge keywords into the AI-visibility question library.
 
-- [ ] **P7.T1 Service, route and dialog**
-  - [ ] **P7.T1.S1** *Files:* `src/lib/keywords/trackQuestion.ts`, `trackQuestion.test.ts`, `src/app/api/customer/keywords/track-question/route.ts`, contract. *Do:* §6.2.4; tests with an injected `add`: arguments (`origin "manual"`, `sourceRef`), `created`/`revived` passthrough, `question_limit` passthrough; route: `question_curation` off → 404. *Verify:* `node --test src/lib/keywords/trackQuestion.test.ts src/lib/keywords/keywords.route.test.mjs` → pass (F13-AC-19).
-  - [ ] **P7.T1.S2** *Files:* `src/components/portal/keywords/TrackQuestionDialog.tsx`, `research/OverviewStats.tsx`, `saved/SavedKeywordsTable.tsx`, `scripts/qa/check-f13-browser.mjs` (B14: button hidden when `question_curation` off; created toast with "Open Questions"; existing toast). *Verify:* `node scripts/qa/check-f13-browser.mjs --only B14` → "ok 1 scenario".
+- [x] **P7.T1 Service, route and dialog**
+  - [x] **P7.T1.S1** *Files:* `src/lib/keywords/trackQuestion.ts`, `trackQuestion.test.ts`, `src/app/api/customer/keywords/track-question/route.ts`, contract. *Do:* §6.2.4; tests with an injected `add`: arguments (`origin "manual"`, `sourceRef`), `created`/`revived` passthrough, `question_limit` passthrough; route: `question_curation` off → 404. *Verify:* `node --test src/lib/keywords/trackQuestion.test.ts src/lib/keywords/keywords.route.test.mjs` → pass (F13-AC-19).
+  - [x] **P7.T1.S2** *Files:* `src/components/portal/keywords/TrackQuestionDialog.tsx`, `research/OverviewStats.tsx`, `saved/SavedKeywordsTable.tsx`, `scripts/qa/check-f13-browser.mjs` (B14: button hidden when `question_curation` off; created toast with "Open Questions"; existing toast). *Verify:* `node scripts/qa/check-f13-browser.mjs --only B14` → "ok 1 scenario".
 
 **Checkpoint:** full suite, build, browser B14. Completes F13-AC-19.
 
@@ -1109,9 +1109,9 @@ Fixtures: `tests/fixtures/f13/` as listed in §6.4, synthetic, no live recording
 
 ## 12. Definition of done
 
-- [ ] Phases 1–8 merged; every subtask ticked in this file.
-- [ ] F13-AC-01…24 covered by passing tests (§9).
+- [x] Phases 1–8 merged; every subtask ticked in this file.
+- [x] F13-AC-01…24 covered by passing tests (§9).
 - [ ] `npm test` (widened glob), `npm run typecheck`, `npm run build`, `node scripts/qa/check-f13-db.mjs`, `node scripts/qa/check-f13-browser.mjs` green; CI customer-database job green.
-- [ ] Migration paperwork (README, OPERATOR_LEDGER § C, PROD_MIGRATIONS) and `THIRD_PARTY_NOTICES.md` updated.
-- [ ] `features/README.md` status for F13 updated.
+- [x] Migration paperwork (README, OPERATOR_LEDGER § C, PROD_MIGRATIONS) and `THIRD_PARTY_NOTICES.md` updated.
+- [x] `features/README.md` status for F13 updated.
 - [ ] Owner-run live check result (if run) recorded in the PR or `docs/OPERATOR_LEDGER.md`.
