@@ -674,3 +674,8 @@ SOFTWARE.
 - `src/lib/rank-tracking/jobs.ts` (from `openseo:src/server/features/rank-tracking/jobs`)
 - `src/lib/rank-tracking/service.test.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.test.ts`)
 - `src/lib/rank-tracking/rankTracking.contract.ts` (from `openseo:src/types/schemas/rank-tracking.ts`)
+
+### F18 Phase 6 ports
+- src/lib/audit/renderedPage.ts (from src/server/lib/audit/rendered-page.ts)
+- src/lib/audit/renderedPage.test.ts (from src/server/lib/audit/rendered-page.test.ts)
+- src/lib/audit/renderSettle.ts (from src/server/lib/audit/rendering-billing.ts)
