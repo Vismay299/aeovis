@@ -776,6 +776,62 @@ export const clusterApplyContract = defineRouteContract({
   ],
 });
 
+export const trackQuestionBody = z.strictObject({
+  brand_key: z.string().min(1).max(200).optional(),
+  keyword: z.string().trim().min(1).max(200),
+  text: z.string().trim().min(2).max(1500),
+  topic: z.string().trim().min(1).max(100).optional(),
+  locationCode: z.number().int().positive(),
+  languageCode: z.string().min(2).max(8),
+});
+
+export const trackQuestionResponse = z.looseObject({
+  question: z.looseObject({
+    id: z.string(),
+    text: z.string(),
+    status: z.string(),
+    topic: z.string(),
+  }),
+  created: z.boolean(),
+  revived: z.boolean(),
+});
+
+export const trackQuestionContract = defineRouteContract({
+  id: "customer.keywords.track_question",
+  method: "POST",
+  path: "/api/customer/keywords/track-question",
+  file: "src/app/api/customer/keywords/track-question/route.ts",
+  auth: "workspace",
+  request: trackQuestionBody,
+  response: trackQuestionResponse,
+  errorCodes: [
+    "invalid_request",
+    "invalid_json",
+    "feature_unavailable",
+    "question_limit",
+    "topic_limit",
+    "question_duplicate",
+    "questions_unavailable",
+    "unauthenticated",
+    "unauthorized",
+    "workspace_not_found",
+  ],
+  examples: [
+    {
+      response: {
+        question: {
+          id: "11111111-1111-4111-8111-111111111111",
+          text: "Which brands make the best oversized t-shirts in India?",
+          status: "active",
+          topic: "General",
+        },
+        created: true,
+        revived: false,
+      },
+    },
+  ],
+});
+
 export const contracts: RouteContract[] = [
   keywordResearchContract,
   serpContract,
@@ -790,4 +846,5 @@ export const contracts: RouteContract[] = [
   keywordLocationsContract,
   clusterContract,
   clusterApplyContract,
+  trackQuestionContract,
 ];
