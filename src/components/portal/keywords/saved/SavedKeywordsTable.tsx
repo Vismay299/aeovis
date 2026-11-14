@@ -4,9 +4,9 @@
 
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { Copy, Trash2 } from "lucide-react";
+import { Copy, HelpCircle, Trash2 } from "lucide-react";
 import { EmptyState } from "@/components/app/EmptyState";
 import { RowActionsMenu } from "@/components/app/RowActionsMenu";
 import { SkeletonTableRows } from "@/components/app/SkeletonPresets";
@@ -25,9 +25,11 @@ import {
   type SavedKeywordRow,
   type SavedKeywordTagSummary,
 } from "@/shared/keywords";
+import { usePortal } from "@/components/portal/PortalShell";
 import { SavedKeywordsFilters } from "./SavedKeywordsFilters";
 import { TagChip } from "./TagChip";
 import { IntentBadge } from "../research/IntentBadge";
+import { TrackQuestionDialog } from "../TrackQuestionDialog";
 import type {
   SavedKeywordsPageSize,
   SavedKeywordsSortKey,
@@ -118,6 +120,9 @@ export function SavedKeywordsTable({
   const pageRows = rows;
   const allSelected =
     pageRows.length > 0 && pageRows.every((row) => selectedIds.includes(row.id));
+  const { brandKey: portalBrandKey, features } = usePortal();
+  const curationOn = features?.question_curation === true;
+  const [trackRow, setTrackRow] = useState<SavedKeywordRow | null>(null);
 
   const sortableHeader = (column: (typeof COLUMNS)[number]) => (
     <th
@@ -264,6 +269,12 @@ export function SavedKeywordsTable({
                     </td>
                     <td className="p-3 text-right">
                       <RowActionsMenu label={`Actions for ${row.keyword}`}>
+                        {curationOn && portalBrandKey ? (
+                          <DropdownMenuItem onClick={() => setTrackRow(row)}>
+                            <HelpCircle />
+                            Track as a question
+                          </DropdownMenuItem>
+                        ) : null}
                         <DropdownMenuItem onClick={() => onCopyRow(row)}>
                           <Copy />
                           Copy keyword
@@ -293,6 +304,18 @@ export function SavedKeywordsTable({
           />
         </>
       )}
+      {trackRow && portalBrandKey ? (
+        <TrackQuestionDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setTrackRow(null);
+          }}
+          brandKey={portalBrandKey}
+          keyword={trackRow.keyword}
+          locationCode={trackRow.locationCode}
+          languageCode={trackRow.languageCode}
+        />
+      ) : null}
     </Card>
   );
 }
