@@ -1325,8 +1325,8 @@ Branches `feat/f18-site-audit-p<N>`. Every new COPY/PORT file gets the licence h
 ### Phase 7 — R15 parity and cross-link
 **Goal:** R15 and F18 never disagree; the measurement card points to the full audit.
 
-- [ ] **P7.T1** *Files:* `src/lib/audit/r15Parity.ts`, `r15Parity.test.ts`. *Do:* §6.2.11; for each HTML fixture in `src/lib/repairs/r15-technical-evidence.test.mjs`, run `inspectPage` and F18 `analyzeHtml` + `runPageReporters`, map R15 codes through `R15_TO_F18`, assert every mapped type is present. *Verify:* `NT src/lib/audit/r15Parity.test.ts src/lib/repairs/r15-technical-evidence.test.mjs` → pass (F18-AC-34).
-- [ ] **P7.T2** *Files:* `src/app/portal/measurement/page.jsx`. *Do:* change the "Website technical evidence" card `description` string to "Checks up to six owned-page requests. Search indexing and AI inclusion remain separate facts. For a full crawl with AI-crawler checks, open Site Audit." No other change. *Verify:* `node --test src/components/portal/portalRegressions.test.mjs` → pass.
+- [x] **P7.T1** *Files:* `src/lib/audit/r15Parity.ts`, `r15Parity.test.ts`. *Do:* §6.2.11; for each HTML fixture in `src/lib/repairs/r15-technical-evidence.test.mjs`, run `inspectPage` and F18 `analyzeHtml` + `runPageReporters`, map R15 codes through `R15_TO_F18`, assert every mapped type is present. *Verify:* `NT src/lib/audit/r15Parity.test.ts src/lib/repairs/r15-technical-evidence.test.mjs` → pass (F18-AC-34).
+- [x] **P7.T2** *Files:* `src/app/portal/measurement/page.jsx`. *Do:* change the "Website technical evidence" card `description` string to "Checks up to six owned-page requests. Search indexing and AI inclusion remain separate facts. For a full crawl with AI-crawler checks, open Site Audit." No other change. *Verify:* `node --test src/components/portal/portalRegressions.test.mjs` → pass.
 
 **Checkpoint:** R15 tests unchanged and passing. AC: 34.
 
