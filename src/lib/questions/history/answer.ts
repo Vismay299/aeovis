@@ -7,6 +7,7 @@ import { safeHttpUrl } from "../../../shared/safe-url.ts";
 import { getBrandAliases } from "../../scoring/aliases.js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Workspace } from "../../workspace/requireWorkspace.ts";
+import { engineLabel, toBooleanOrNull, toMethod, toStatus } from "./history.ts";
 
 export type AnswerDeps = {
   trackOpen?: (props: { engine: string; source: string }) => void;
@@ -53,6 +54,20 @@ function normalizeSpan(span: unknown, textLength: number): { start: number; end:
   if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
   if (!(0 <= start && start < end && end <= textLength)) return null;
   return { start, end };
+}
+
+function methodLabelOf(method: string): string {
+  if (method === "consumer_capture") return "Consumer app";
+  if (method === "model_api") return "Model API";
+  if (method === "google_serp") return "Google search";
+  return "Unknown method";
+}
+
+function publicErrorFor(status: string, state: string | null): string | null {
+  if (status === "failed") return "Collection failed. This answer was not measured.";
+  if (status === "blocked") return "Collection was not attempted (blocked before a request).";
+  if (state === "ambiguous") return "The result of this request is unknown; it may have been charged and will be reconciled.";
+  return null;
 }
 
 async function readMaybe<T>(query: unknown): Promise<T | null> {
@@ -114,8 +129,16 @@ export async function getQuestionAnswer(
     const text = String((legacyRow?.answer_text as string | null) ?? "");
     const display = text.length > ANSWER_DISPLAY_LIMIT ? text.slice(0, ANSWER_DISPLAY_LIMIT) : text;
     const truncated = text.length > ANSWER_DISPLAY_LIMIT;
-    const answeredFlag = (legacyRow?.answered as boolean | null) ?? null;
-    const status = answeredFlag === true ? "answered" : "no_answer";
+    const legacyRaw = (legacyRow?.raw ?? {}) as Record<string, unknown>;
+    const legacyError = (legacyRaw.error as string | null) ?? null;
+    const status = toStatus({
+      state: null,
+      answerPresent: null,
+      error: legacyError,
+      source,
+      legacyAnswered: (legacyRow?.answered as boolean | null) ?? null,
+    });
+    const legacyMethod = toMethod(legacyRaw.measurement_method);
     try {
       deps.trackOpen?.({ engine, source });
     } catch {
@@ -126,16 +149,16 @@ export async function getQuestionAnswer(
         answerId: String(linkRow.id),
         source,
         engine,
-        engineLabel: engine,
+        engineLabel: engineLabel(engine),
         collectedAt,
         trigger: "legacy",
         status,
-        ownMentioned: null,
-        ownCited: null,
+        ownMentioned: toBooleanOrNull(legacyRow?.mentioned),
+        ownCited: toBooleanOrNull(legacyRow?.brand_cited),
         askedText,
         scanId: linkRow.scan_id ? String(linkRow.scan_id) : null,
         exploreRunId: null,
-        method: "unknown",
+        method: legacyMethod,
         quality: "legacy_unknown",
       },
       text: display || null,
@@ -144,8 +167,8 @@ export async function getQuestionAnswer(
       citations: [],
       brands: [],
       provenance: {
-        method: "unknown",
-        methodLabel: "Unknown method",
+        method: legacyMethod,
+        methodLabel: methodLabelOf(legacyMethod),
         gateway: null,
         requestedModel: null,
         returnedModel: null,
@@ -153,7 +176,7 @@ export async function getQuestionAnswer(
         searchUsed: "unknown",
       },
       evidence: { state: "legacy_unknown", captures: [] },
-      error: null,
+      error: publicErrorFor(status, null),
     };
   }
 
@@ -173,40 +196,54 @@ export async function getQuestionAnswer(
 
   const state = String(observation.state || "");
   const result = (observation.result ?? {}) as Record<string, unknown>;
-  const text = String((result.text as string | null) ?? "");
-  const markdown = (result.answer_markdown as string | null) ?? null;
+  // Spans index into the plain text; AI Overview rows keep it in `aio_text`.
+  const text = String((result.text as string | null) ?? (result.aio_text as string | null) ?? "");
+  const markdown = typeof result.answer_markdown === "string" && result.answer_markdown ? result.answer_markdown : null;
   const displaySource = markdown ?? text;
   const truncated = displaySource.length > ANSWER_DISPLAY_LIMIT;
-  const displayText = displaySource.length > ANSWER_DISPLAY_LIMIT ? displaySource.slice(0, ANSWER_DISPLAY_LIMIT) : displaySource;
+  const cut = (value: string) => (value.length > ANSWER_DISPLAY_LIMIT ? value.slice(0, ANSWER_DISPLAY_LIMIT) : value);
 
   const errorText = (result.error as string | null) ?? null;
-  let status: string = "unknown";
-  if (state === "blocked") status = "blocked";
-  else if (state === "failed") status = "failed";
-  else if (errorText) status = "failed";
-  else if (state === "ambiguous") status = "unknown";
-  else if (state === "valid_no_aio") status = "no_answer";
-  else if (state === "answered" && text) status = "answered";
-  else if (state === "answered") status = "no_answer";
+  const answerRaw = result.answer_present;
+  const answerPresent = answerRaw === true || answerRaw === "true" ? true : answerRaw === false || answerRaw === "false" ? false : null;
+  // Same rule as the history list, so a row and its detail never disagree.
+  const status = toStatus({ state, answerPresent, error: errorText, source });
+  const publicError = publicErrorFor(status, state);
 
-  let publicError: string | null = null;
-  if (status === "failed") publicError = "Collection failed. This answer was not measured.";
-  else if (status === "blocked") publicError = "Collection was not attempted (blocked before a request).";
-  else if (status === "unknown") publicError = "The result of this request is unknown; it may have been charged and will be reconciled.";
+  let trigger: "manual" | "scheduled" | "explore" = source === "explore" ? "explore" : "manual";
+  if (source !== "explore" && linkRow.scan_job_id) {
+    try {
+      const windowRows = await readAll<Record<string, unknown>>(
+        admin.from("measurement_windows").select("job_id").eq("job_id", String(linkRow.scan_job_id)).limit(1),
+      );
+      if (windowRows.length > 0) trigger = "scheduled";
+    } catch (error) {
+      console.error(`[question-history] read failed history_unavailable`);
+      throw new AppError(503, "history_unavailable", "Question history could not be loaded. Please retry.", { cause: error });
+    }
+  }
 
-  const references = Array.isArray(result.references) ? (result.references as Array<Record<string, unknown>>) : [];
+  // Pipelines store `{ href, title, source, domain }` (enginePipeline.js); AI
+  // Overview rows keep them in `aio_references`.
+  const referenceList = Array.isArray(result.references)
+    ? result.references
+    : Array.isArray(result.aio_references)
+      ? result.aio_references
+      : [];
+  const references = referenceList as Array<Record<string, unknown>>;
   const competitorsCited = Array.isArray(result.competitors_cited) ? (result.competitors_cited as string[]) : [];
   const host = normalizeHost(String(ws.brand.website_host || ""));
   const citations: Array<Record<string, unknown>> = [];
   references.forEach((entry, index) => {
-    const url = safeHttpUrl(typeof entry.url === "string" ? entry.url : null);
+    const rawUrl = typeof entry.href === "string" ? entry.href : typeof entry.url === "string" ? entry.url : null;
+    const url = safeHttpUrl(rawUrl);
     if (!url) return;
     const domain = hostnameOf(url);
     if (!domain) return;
     citations.push({
       url,
       domain,
-      title: typeof entry.title === "string" ? entry.title : null,
+      title: typeof entry.title === "string" && entry.title ? entry.title : null,
       position: index + 1,
       owned: host ? domainMatches(domain, host) : false,
       competitor: competitorForDomain(domain, competitorsCited),
@@ -258,58 +295,58 @@ export async function getQuestionAnswer(
   }
 
   const provenance = (result.provenance ?? {}) as Record<string, unknown>;
-  const methodRaw = String((result.measurement_method as string | null) ?? (provenance.method as string | null) ?? "unknown");
-  const method = methodRaw === "consumer_capture" || methodRaw === "model_api" || methodRaw === "google_serp" ? methodRaw : "unknown";
-  const methodLabel = method === "consumer_capture" ? "Consumer app" : method === "model_api" ? "Model API" : method === "google_serp" ? "Google search" : "Unknown method";
+  const method = toMethod(result.measurement_method ?? provenance.method);
+  const methodLabel = methodLabelOf(method);
   const searchStateRaw = String((provenance.search_state as string | null) ?? "unknown");
   const searchUsed = searchStateRaw === "observed_used" || searchStateRaw === "observed_not_used" ? searchStateRaw : "unknown";
 
-  let evidenceState: string = "incomplete";
+  // Mapped as src/app/api/customer/measurement/route.js (captureView /
+  // evidence_state): withdrawn > expired > any capture not stored > stored.
+  const resultEvidenceState = typeof result.evidence_state === "string" ? result.evidence_state : null;
+  let evidenceState: string = resultEvidenceState === "stored" ? "incomplete" : "none";
   let captures: Array<Record<string, unknown>> = [];
   const attemptToken = (result.attempt_id as string | null) ?? null;
   if (attemptToken) {
+    let rows: Array<Record<string, unknown>> = [];
     try {
-      const rows = await readAll<Record<string, unknown>>(
+      rows = await readAll<Record<string, unknown>>(
         admin
           .from("measurement_evidence")
           .select("observation_id,attempt_token,capture_index,state,expires_at,reason")
           .eq("observation_id", observationId)
           .eq("attempt_token", attemptToken),
       );
-      const now = Date.now();
-      captures = rows.map((capture) => {
-        const index = Number(capture.capture_index ?? 0);
-        const reason = (capture.reason as string | null) ?? null;
-        let captureState = String(capture.state || "incomplete");
-        if (reason === "redaction_retracted") captureState = "withdrawn";
-        else if (captureState === "stored") {
-          const expiresAt = capture.expires_at ? String(capture.expires_at) : null;
-          const remaining = expiresAt ? Date.parse(expiresAt) - now : NaN;
-          if (!expiresAt || !Number.isFinite(remaining) || remaining < 1000) captureState = "expired";
-        }
-        const stored = captureState === "stored";
-        return {
-          index,
-          state: captureState,
-          href: stored
-            ? `/api/customer/measurement/evidence?brand_key=${encodeURIComponent(brandKey)}&observation=${encodeURIComponent(observationId)}&attempt=${encodeURIComponent(attemptToken)}&index=${index}`
-            : null,
-          expiresAt: capture.expires_at ? String(capture.expires_at) : null,
-        };
-      });
-      if (captures.some((capture) => capture.reason === "redaction_retracted" || capture.state === "withdrawn")) {
-        evidenceState = "withdrawn";
-      } else if (captures.some((capture) => capture.state === "expired")) {
-        evidenceState = "expired";
-      } else if (captures.some((capture) => capture.state === "stored")) {
-        evidenceState = "stored";
-      } else {
-        evidenceState = "incomplete";
-      }
     } catch (error) {
       console.error(`[question-history] read failed history_unavailable`);
       throw new AppError(503, "history_unavailable", "Question history could not be loaded. Please retry.", { cause: error });
     }
+    const now = Date.now();
+    const views = rows
+      .map((capture) => {
+        const index = Number(capture.capture_index ?? 0);
+        const reason = (capture.reason as string | null) ?? null;
+        const expiresAt = capture.expires_at ? String(capture.expires_at) : null;
+        let captureState = String(capture.state || "incomplete");
+        if (captureState === "stored" && (!expiresAt || !Number.isFinite(Date.parse(expiresAt)) || Date.parse(expiresAt) <= now)) {
+          captureState = "expired";
+        }
+        if (reason === "redaction_retracted") captureState = "withdrawn";
+        return { index, reason, state: captureState, expiresAt };
+      })
+      .sort((x, y) => x.index - y.index);
+    if (views.some((view) => view.reason === "redaction_retracted")) evidenceState = "withdrawn";
+    else if (views.some((view) => view.state === "expired")) evidenceState = "expired";
+    else if (views.some((view) => view.state !== "stored")) evidenceState = "incomplete";
+    else if (views.length > 0) evidenceState = "stored";
+    captures = views.map((view) => ({
+      index: view.index,
+      state: view.state,
+      href:
+        view.state === "stored"
+          ? `/api/customer/measurement/evidence?brand_key=${encodeURIComponent(brandKey)}&observation=${encodeURIComponent(observationId)}&attempt=${encodeURIComponent(attemptToken)}&index=${view.index}`
+          : null,
+      expiresAt: view.expiresAt,
+    }));
   }
 
   try {
@@ -323,20 +360,20 @@ export async function getQuestionAnswer(
       answerId: String(linkRow.id),
       source,
       engine,
-      engineLabel: engine,
+      engineLabel: engineLabel(engine),
       collectedAt,
-      trigger: source === "explore" ? "explore" : "manual",
+      trigger,
       status,
-      ownMentioned: selfMentioned,
-      ownCited: selfCited,
+      ownMentioned: toBooleanOrNull(result.brand_mentioned_in_text),
+      ownCited: toBooleanOrNull(result.brand_cited),
       askedText,
       scanId: linkRow.scan_id ? String(linkRow.scan_id) : null,
       exploreRunId: linkRow.explore_run_id ? String(linkRow.explore_run_id) : null,
       method,
       quality: "measured",
     },
-    text: displayText || null,
-    markdown: markdown ? (markdown.length > ANSWER_DISPLAY_LIMIT ? markdown.slice(0, ANSWER_DISPLAY_LIMIT) : markdown) : null,
+    text: text ? cut(text) : null,
+    markdown: markdown ? cut(markdown) : null,
     truncated,
     citations,
     brands,

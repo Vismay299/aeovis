@@ -15,11 +15,13 @@ function makeAdmin(options: {
   observation?: Record<string, unknown> | null;
   evidence?: Array<Record<string, unknown>>;
   legacy?: Record<string, unknown> | null;
+  windows?: Array<Record<string, unknown>>;
 }) {
   const builder = (table: string) => {
     const filters: Array<(row: Record<string, unknown>) => boolean> = [];
     const api: Record<string, unknown> = {
       select: () => api,
+      limit: () => api,
       eq: (col: string, value: unknown) => {
         filters.push((row) => String(row[col]) === String(value));
         return api;
@@ -33,6 +35,10 @@ function makeAdmin(options: {
       then: (resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) => {
         if (table === "measurement_evidence") {
           const rows = (options.evidence ?? []).filter((row) => filters.every((fn) => fn(row)));
+          return Promise.resolve({ data: rows, error: null }).then(resolve as never, reject as never);
+        }
+        if (table === "measurement_windows") {
+          const rows = (options.windows ?? []).filter((row) => filters.every((fn) => fn(row)));
           return Promise.resolve({ data: rows, error: null }).then(resolve as never, reject as never);
         }
         return Promise.resolve({ data: [], error: null }).then(resolve as never, reject as never);
@@ -85,11 +91,13 @@ function answeredObservation() {
     reason: null,
     result: {
       text: ANSWER_TEXT,
+      answer_present: true,
+      brand_mentioned_in_text: false,
       answer_markdown: "Popular **oversized** t-shirt brands in India include **Bewakoof** and the Souled Store.",
       attempt_id: ATTEMPT,
       references: [
-        { url: "https://www.bewakoof.com/oversized", title: "Oversized T-shirts" },
-        { url: "javascript:alert(1)", title: "evil" },
+        { href: "https://www.bewakoof.com/oversized", title: "Oversized T-shirts", source: "", domain: "bewakoof.com" },
+        { href: "javascript:alert(1)", title: "evil", source: "", domain: "" },
       ],
       brands: [
         { name: "Offcult", is_self: true, mentioned: false, cited: false, position: null, relationship: null, sentiment_label: null, spans: [] },
@@ -101,7 +109,7 @@ function answeredObservation() {
           position: 1,
           relationship: "recommended",
           sentiment_label: "positive",
-          spans: [{ start: 49, end: 57 }, { start: 5000, end: 5010 }],
+          spans: [{ start: 50, end: 58 }, { start: 5000, end: 5010 }],
         },
       ],
       entity_evidence: { mentioned: false, mention_state: "observed", spans: [], cited: false },
@@ -146,7 +154,7 @@ test("answer returns markdown, safe citations, stored spans and evidence href", 
   assert.equal(citations[0].competitor, "Bewakoof");
   const brands = result.brands as Array<Record<string, unknown>>;
   const rival = brands.find((entry) => entry.name === "Bewakoof") as Record<string, unknown>;
-  assert.deepEqual(rival.spans, [{ start: 49, end: 57 }]);
+  assert.deepEqual(rival.spans, [{ start: 50, end: 58 }]);
   const evidence = result.evidence as Record<string, unknown>;
   assert.equal(evidence.state, "stored");
   const captures = evidence.captures as Array<Record<string, unknown>>;
@@ -222,4 +230,87 @@ test("answer maps withdrawn and expired evidence without an href", async () => {
     const captures = evidence.captures as Array<Record<string, unknown>>;
     assert.equal(captures[0].href, null);
   }
+});
+
+test("answer text stays the plain text the spans index into when markdown exists", async () => {
+  const admin = makeAdmin({ link: answeredLink(), observation: answeredObservation(), evidence: [] });
+  const result = (await getQuestionAnswer(makeWorkspace(admin), QUESTION_ID, ANSWER_ID)) as Record<string, unknown>;
+  assert.equal(result.text, ANSWER_TEXT);
+  assert.ok(String(result.markdown).includes("**Bewakoof**"));
+  const rival = (result.brands as Array<Record<string, unknown>>).find((b) => b.name === "Bewakoof") as Record<string, unknown>;
+  const [span] = rival.spans as Array<{ start: number; end: number }>;
+  assert.equal(String(result.text).slice(span.start, span.end), "Bewakoof");
+  const execution = result.execution as Record<string, unknown>;
+  assert.equal(execution.engineLabel, "ChatGPT");
+  assert.equal(execution.status, "answered");
+  assert.equal(execution.trigger, "manual");
+  assert.equal((result.evidence as Record<string, unknown>).state, "none");
+});
+
+test("answer reads AI Overview rows from aio_text and aio_references", async () => {
+  const base = answeredObservation();
+  const result0 = base.result as Record<string, unknown>;
+  const { text: _t, references: _r, answer_markdown: _m, ...rest } = result0;
+  const admin = makeAdmin({
+    link: { ...answeredLink(), engine: "aio" },
+    observation: {
+      ...base,
+      result: {
+        ...rest,
+        aio_text: ANSWER_TEXT,
+        aio_references: [{ href: "https://bewakoof.com/x", title: "", source: "", domain: "bewakoof.com" }],
+      },
+    },
+    evidence: [],
+  });
+  const result = (await getQuestionAnswer(makeWorkspace(admin), QUESTION_ID, ANSWER_ID)) as Record<string, unknown>;
+  assert.equal(result.text, ANSWER_TEXT);
+  const citations = result.citations as Array<Record<string, unknown>>;
+  assert.equal(citations.length, 1);
+  assert.equal(citations[0].title, null);
+  assert.equal((result.execution as Record<string, unknown>).engineLabel, "Google AI Overviews");
+});
+
+test("answer marks a scheduled scan the same way the history list does", async () => {
+  const admin = makeAdmin({
+    link: answeredLink(),
+    observation: answeredObservation(),
+    evidence: [],
+    windows: [{ job_id: "job-1" }],
+  });
+  const result = (await getQuestionAnswer(makeWorkspace(admin), QUESTION_ID, ANSWER_ID)) as Record<string, unknown>;
+  assert.equal((result.execution as Record<string, unknown>).trigger, "scheduled");
+});
+
+test("only an ambiguous result says it may have been charged", async () => {
+  for (const [state, expected] of [
+    ["ambiguous", "The result of this request is unknown; it may have been charged and will be reconciled."],
+    ["pending", null],
+    ["leased", null],
+  ] as Array<[string, string | null]>) {
+    const admin = makeAdmin({
+      link: answeredLink(),
+      observation: { id: OBS_ID, state, reason: null, result: {} },
+      evidence: [],
+    });
+    const result = (await getQuestionAnswer(makeWorkspace(admin), QUESTION_ID, ANSWER_ID)) as Record<string, unknown>;
+    assert.equal(result.error, expected, state);
+    assert.equal((result.execution as Record<string, unknown>).status, "unknown");
+  }
+});
+
+test("a stored capture next to an incomplete one is incomplete, as on the measurement page", async () => {
+  const admin = makeAdmin({
+    link: answeredLink(),
+    observation: answeredObservation(),
+    evidence: [
+      { observation_id: OBS_ID, attempt_token: ATTEMPT, capture_index: 0, state: "stored", expires_at: "2099-01-01T00:00:00.000Z", reason: null },
+      { observation_id: OBS_ID, attempt_token: ATTEMPT, capture_index: 1, state: "pending", expires_at: null, reason: null },
+    ],
+  });
+  const result = (await getQuestionAnswer(makeWorkspace(admin), QUESTION_ID, ANSWER_ID)) as Record<string, unknown>;
+  const evidence = result.evidence as { state: string; captures: Array<{ href: string | null }> };
+  assert.equal(evidence.state, "incomplete");
+  assert.ok(evidence.captures[0].href);
+  assert.equal(evidence.captures[1].href, null);
 });

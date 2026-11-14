@@ -35,7 +35,7 @@ export function engineLabel(engine: string): string {
   return key.replace(/[_-]+/g, " ").replace(/^\w/, (c) => c.toUpperCase());
 }
 
-function toBooleanOrNull(value: unknown): boolean | null {
+export function toBooleanOrNull(value: unknown): boolean | null {
   if (value === true) return true;
   if (value === false) return false;
   if (value === "true") return true;
@@ -45,7 +45,7 @@ function toBooleanOrNull(value: unknown): boolean | null {
   return null;
 }
 
-function toStatus(input: {
+export function toStatus(input: {
   state: string | null;
   answerPresent: boolean | null;
   error: string | null;
@@ -66,7 +66,7 @@ function toStatus(input: {
   return "unknown";
 }
 
-function toMethod(value: unknown): "consumer_capture" | "model_api" | "google_serp" | "unknown" {
+export function toMethod(value: unknown): "consumer_capture" | "model_api" | "google_serp" | "unknown" {
   if (value === "consumer_capture" || value === "model_api" || value === "google_serp") return value;
   return "unknown";
 }
