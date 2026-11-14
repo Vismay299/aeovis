@@ -364,6 +364,8 @@ describe("SearchOpportunityService port", () => {
   it("maps Search Console failures to reconnect, quota or unavailable", async () => {
     const cases: Array<{ error: Error; code: string; status: number }> = [
       { error: new Error("GSC access denied for acme: ..."), code: "gsc_reconnect_required", status: 409 },
+      { error: new Error("Google authorization was revoked. Please reconnect."), code: "gsc_reconnect_required", status: 409 },
+      { error: new Error("No active Google authorization for this workspace."), code: "gsc_reconnect_required", status: 409 },
       { error: new Error("GSC HTTP 429: quota exceeded"), code: "gsc_quota_exhausted", status: 429 },
       { error: new Error("GSC HTTP 500: boom"), code: "gsc_unavailable", status: 503 },
     ];

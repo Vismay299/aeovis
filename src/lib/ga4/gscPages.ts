@@ -83,7 +83,15 @@ export async function fetchGscPageRows(
     );
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("access denied")) {
+    // 401/403 from the API ("GSC access denied ...") and every token failure
+    // that tells the customer to reconnect (revoked, missing refresh token,
+    // undecryptable credential, no active authorization) need a reconnect,
+    // not a retry.
+    if (
+      msg.includes("access denied") ||
+      /reconnect/i.test(msg) ||
+      msg.includes("No active Google authorization")
+    ) {
       throw new AppError(
         409,
         "gsc_reconnect_required",

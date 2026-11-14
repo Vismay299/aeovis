@@ -343,3 +343,27 @@ test("opportunities requires a signed-in workspace member before any provider ca
   assert.equal((await res.json()).code, "unauthenticated");
   assert.equal(calls, 0);
 });
+
+test("GA4 error classes thrown by the services keep their status and copy (not a 500)", async () => {
+  const { Ga4ReportError, Ga4DataApiError } = await import("./errors.ts");
+  const quota = new Ga4ReportError("ga4_quota_exhausted", "quota", 45);
+  const res = await get(reportsRoute, "/api/customer/ga4/reports/landing_pages?brand_key=acme", deps({ runReport: async () => { throw quota; } }), { kind: "landing_pages" });
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("retry-after"), "45");
+  assert.equal((await res.json()).code, "ga4_quota_exhausted");
+
+  const denied = new Ga4DataApiError(403, "PERMISSION_DENIED");
+  const res2 = await get(overviewRoute, "/api/customer/ga4/overview?brand_key=acme", deps({ getOrganicOverview: async () => { throw denied; } }));
+  assert.equal(res2.status, 409);
+  assert.equal((await res2.json()).code, "ga4_property_inaccessible");
+
+  const gsc = new Ga4ReportError("gsc_reconnect_required", "x");
+  const res3 = await opportunitiesRoute.GET(new Request("https://app.test/api/customer/ga4/opportunities?brand_key=acme"), {}, deps({ getOpportunities: async () => { throw gsc; } }));
+  assert.equal(res3.status, 409);
+  assert.equal((await res3.json()).error, "Search Console access was lost. Reconnect it on the Search Console page.");
+
+  const bug = new Error("internal detail that must not leak");
+  const res4 = await get(reportsRoute, "/api/customer/ga4/reports/landing_pages?brand_key=acme", deps({ runReport: async () => { throw bug; } }), { kind: "landing_pages" });
+  assert.equal(res4.status, 500);
+  assert.ok(!(await res4.text()).includes("internal detail"));
+});

@@ -1,6 +1,6 @@
 import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
 import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
+import { toGa4ErrorResponse } from "../../../../../lib/ga4/errors.ts";
 import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
 import { getOpportunities } from "../../../../../lib/ga4/opportunities.ts";
 import { z } from "zod";
@@ -28,23 +28,6 @@ function json(data: unknown, status = 200): Response {
   });
 }
 
-function toGa4ErrorResponse(err: unknown): Response {
-  const res = toErrorResponse(err);
-  const retryAfter =
-    err instanceof AppError &&
-    err.details &&
-    typeof err.details === "object" &&
-    typeof (err.details as Record<string, unknown>).retryAfterSeconds === "number"
-      ? (err.details as Record<string, unknown>).retryAfterSeconds as number
-      : null;
-  if (res.status === 429 && typeof retryAfter === "number" && Number.isFinite(retryAfter)) {
-    const capped = Math.min(Math.max(Math.ceil(retryAfter), 0), 86400);
-    const headers = new Headers(res.headers);
-    headers.set("Retry-After", String(capped));
-    return new Response(res.body, { status: res.status, headers });
-  }
-  return res;
-}
 
 export async function GET(request: Request, _ctx?: unknown, deps?: Ga4OpportunitiesRouteDeps): Promise<Response> {
   try {
