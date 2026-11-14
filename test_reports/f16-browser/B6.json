@@ -1,8 +1,8 @@
 {
   "case": "B6",
   "suite": "f16-browser",
-  "startedAt": "2026-11-12T18:28:02.664Z",
+  "startedAt": "2026-11-14T05:24:01.304Z",
   "description": "domain expansion with loading state and error handling",
   "outcome": "pass",
-  "endedAt": "2026-11-12T18:28:06.157Z"
+  "endedAt": "2026-11-14T05:24:04.986Z"
 }

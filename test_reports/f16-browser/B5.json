@@ -1,8 +1,8 @@
 {
   "case": "B5",
   "suite": "f16-browser",
-  "startedAt": "2026-11-12T18:28:01.649Z",
+  "startedAt": "2026-11-14T05:23:59.077Z",
   "description": "filters over budget message and hidden table",
   "outcome": "pass",
-  "endedAt": "2026-11-12T18:28:02.663Z"
+  "endedAt": "2026-11-14T05:24:00.953Z"
 }

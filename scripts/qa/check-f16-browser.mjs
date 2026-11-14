@@ -10,9 +10,10 @@
  *   B4: Best links off -> sends hideSpam: false request; One per domain / All links toggles mode.
  *   B5: filters over budget -> warning message, table hidden until conditions removed.
  *   B6: expand domain -> "Loading links…" then links; second domain error shows "Couldn't load this domain's links.".
+ *   B7: Ahrefs DR flag off -> no menu item and no column; on -> menu item, column fills, export gains "Ahrefs DR", failure toast.
  *   B8: 375 px viewport has no horizontal scroll; the 200-row estimate displays $0.04; export CSV includes headers.
  *
- * Output: "ok 8 scenarios" on pass.
+ * Output: "ok 9 scenarios" on pass.
  */
 
 import assert from "node:assert/strict";
@@ -55,7 +56,7 @@ function parseScenarioList(raw) {
   return result;
 }
 
-let requestedScenarios = ["B1", "B2", "B3", "B2A", "B4", "B5", "B6", "B8"];
+let requestedScenarios = ["B1", "B2", "B3", "B2A", "B4", "B5", "B6", "B7", "B8"];
 for (let i = 0; i < process.argv.length; i++) {
   if (process.argv[i].startsWith("--only=")) {
     requestedScenarios = parseScenarioList(process.argv[i].split("=")[1]);
@@ -851,6 +852,235 @@ try {
     assert.ok(await errorText.isVisible(), "Domain error state must show 'Couldn't load this domain's links.'");
   });
 
+  // Scenario B7: Ahrefs DR flag off -> no menu item and no column; on -> menu item, column fills, export, failure toast
+  await recordScenario("B7", "Ahrefs DR flag gating, column fill, export and failure toast", async () => {
+    async function setupAhrefsPage({ ahrefsEnabled, ahrefsStatus }) {
+      const { context, page } = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+      });
+      await page.route(/\/api\/customer\/features/, async (route) => {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            brandKey: "acme",
+            features: {
+              backlinks: true,
+              backlinks_ahrefs_dr: ahrefsEnabled,
+              backlink_snapshots: false,
+            },
+          }),
+        });
+      });
+      await page.route(/\/api\/customer\/price\/estimate/, async (route) => {
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(lookupQuoteFixture),
+        });
+      });
+      const ahrefsRequests = [];
+      await page.route(/\/api\/customer\/backlinks\//, async (route) => {
+        const url = new URL(route.request().url());
+        if (url.pathname === "/api/customer/backlinks/ahrefs-dr") {
+          const postData = route.request().postDataJSON() || {};
+          ahrefsRequests.push(postData);
+          if (ahrefsStatus !== 200) {
+            return route.fulfill({
+              status: ahrefsStatus,
+              contentType: "application/json",
+              body: JSON.stringify({ error: "ahrefs_failed" }),
+            });
+          }
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              ratings: { "partner.com": 61, "competitor.com": null },
+            }),
+          });
+        }
+        if (url.pathname === "/api/customer/backlinks/overview") {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(overviewOkFixture),
+          });
+        }
+        if (url.pathname === "/api/customer/backlinks/rows") {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(rowsOkFixture),
+          });
+        }
+        if (url.pathname === "/api/customer/backlinks/referring-domains") {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(referringDomainsOkFixture),
+          });
+        }
+        if (url.pathname === "/api/customer/backlinks/top-pages") {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify(topPagesOkFixture),
+          });
+        }
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ status: "ok" }),
+        });
+      });
+      return { context, page, ahrefsRequests };
+    }
+
+    // Part 1: flag off -> no menu item and no column.
+    {
+      const { context, page } = await setupAhrefsPage({
+        ahrefsEnabled: false,
+        ahrefsStatus: 200,
+      });
+      try {
+        await page.goto(new URL("/portal/backlinks?target=offcult.in", origin).href);
+        await page.getByText("4,120").waitFor({ state: "visible", timeout: 15000 });
+        await page.getByRole("columnheader", { name: "Source" }).waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+        assert.equal(
+          await page.getByRole("button", { name: "Backlinks table actions" }).count(),
+          0,
+          "Actions menu must be hidden when backlinks_ahrefs_dr is off",
+        );
+        assert.equal(
+          await page.getByRole("columnheader", { name: "Ahrefs DR" }).count(),
+          0,
+          "Ahrefs DR column must be hidden when backlinks_ahrefs_dr is off",
+        );
+      } finally {
+        await context.close().catch(() => {});
+      }
+    }
+
+    // Part 2: flag on -> menu item, column fills, export gains "Ahrefs DR".
+    {
+      const { context, page, ahrefsRequests } = await setupAhrefsPage({
+        ahrefsEnabled: true,
+        ahrefsStatus: 200,
+      });
+      try {
+        await page.goto(new URL("/portal/backlinks?target=offcult.in", origin).href);
+        await page.getByText("4,120").waitFor({ state: "visible", timeout: 15000 });
+        await page.getByRole("columnheader", { name: "Source" }).waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+        assert.equal(
+          await page.getByRole("columnheader", { name: "Ahrefs DR" }).count(),
+          0,
+          "Ahrefs DR column must stay hidden until the user opts in",
+        );
+
+        const actionsButton = page.getByRole("button", { name: "Backlinks table actions" });
+        await actionsButton.waitFor({ state: "visible", timeout: 10000 });
+        await actionsButton.click();
+        const drItem = page.getByRole("menuitem", { name: "Ahrefs DR" });
+        await drItem.waitFor({ state: "visible", timeout: 5000 });
+        assert.equal(
+          await drItem.getAttribute("title"),
+          "Look up Ahrefs Domain Rating for each domain in the table",
+          "Ahrefs DR menu item must carry the spec title",
+        );
+        const ahrefsResponse = page.waitForResponse(
+          (res) => res.url().includes("/api/customer/backlinks/ahrefs-dr"),
+          { timeout: 10000 },
+        );
+        await drItem.click();
+        await ahrefsResponse;
+        assert.ok(ahrefsRequests.length > 0, "Clicking Ahrefs DR must call the ahrefs-dr route");
+        const sentDomains = ahrefsRequests[0].domains;
+        assert.ok(Array.isArray(sentDomains) && sentDomains.length <= 100, "DR request must send at most 100 domains");
+        assert.ok(sentDomains.includes("partner.com"), "DR request must include the table domains");
+
+        await page.getByRole("columnheader", { name: "Ahrefs DR" }).waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+        await page.getByText("61.0").waitFor({ state: "visible", timeout: 5000 });
+        await page.getByText("Domain Rating from Ahrefs' free public lookup.").waitFor({
+          state: "visible",
+          timeout: 5000,
+        });
+
+        // Referring Domains tab gains the column from the same loaded ratings.
+        await page.getByRole("tab", { name: "Referring Domains" }).click();
+        await page.getByRole("columnheader", { name: "Ahrefs DR" }).waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+        await page.getByText("61.0").first().waitFor({ state: "visible", timeout: 5000 });
+
+        // Export gains the "Ahrefs DR" column when ratings are loaded.
+        await page.getByRole("tab", { name: "Backlinks" }).click();
+        await page.getByRole("columnheader", { name: "Source" }).waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+        const exportBtn = page.getByRole("button", { name: /Export/i });
+        await exportBtn.waitFor({ state: "visible", timeout: 5000 });
+        await exportBtn.click();
+        const [download] = await Promise.all([
+          page.waitForEvent("download", { timeout: 10000 }),
+          page.getByRole("menuitem", { name: /CSV/i }).or(page.getByText(/Export CSV/i)).click(),
+        ]);
+        const stream = await download.createReadStream();
+        const chunks = [];
+        for await (const chunk of stream) {
+          chunks.push(chunk);
+        }
+        const csvContent = Buffer.concat(chunks).toString("utf8");
+        assert.ok(csvContent.includes("Ahrefs DR"), 'Exported CSV must include header "Ahrefs DR"');
+      } finally {
+        await context.close().catch(() => {});
+      }
+    }
+
+    // Part 3: failing DR fetch -> failure toast, no column.
+    {
+      const { context, page } = await setupAhrefsPage({
+        ahrefsEnabled: true,
+        ahrefsStatus: 500,
+      });
+      try {
+        await page.goto(new URL("/portal/backlinks?target=offcult.in", origin).href);
+        await page.getByText("4,120").waitFor({ state: "visible", timeout: 15000 });
+        await page.getByRole("columnheader", { name: "Source" }).waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+        const actionsButton = page.getByRole("button", { name: "Backlinks table actions" });
+        await actionsButton.waitFor({ state: "visible", timeout: 10000 });
+        await actionsButton.click();
+        const drItem = page.getByRole("menuitem", { name: "Ahrefs DR" });
+        await drItem.waitFor({ state: "visible", timeout: 5000 });
+        await drItem.click();
+        await page.getByText("Could not load Ahrefs DR.").waitFor({
+          state: "visible",
+          timeout: 10000,
+        });
+        assert.equal(
+          await page.getByRole("columnheader", { name: "Ahrefs DR" }).count(),
+          0,
+          "A failed DR fetch must not add the column",
+        );
+      } finally {
+        await context.close().catch(() => {});
+      }
+    }
+  });
   // Scenario B8: 375 px viewport has no horizontal scroll (scrollWidth <= 375); export CSV includes headers
   await recordScenario("B8", "375 px responsive layout and CSV export verification", async () => {
     await ensureLoadedTarget();
