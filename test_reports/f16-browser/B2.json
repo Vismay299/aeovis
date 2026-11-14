@@ -1,8 +1,8 @@
 {
   "case": "B2",
   "suite": "f16-browser",
-  "startedAt": "2026-11-14T05:23:49.074Z",
+  "startedAt": "2026-11-12T18:27:57.081Z",
   "description": "/portal/backlinks?target=offcult.in cacheOnly and not loaded card",
   "outcome": "pass",
-  "endedAt": "2026-11-14T05:23:50.890Z"
+  "endedAt": "2026-11-12T18:27:58.360Z"
 }

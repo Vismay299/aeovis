@@ -1,8 +1,8 @@
 {
   "case": "B2A",
   "suite": "f16-browser",
-  "startedAt": "2026-11-14T05:23:53.776Z",
+  "startedAt": "2026-11-12T18:27:59.172Z",
   "description": "new target approved lookup is live and shows results",
   "outcome": "pass",
-  "endedAt": "2026-11-14T05:23:55.524Z"
+  "endedAt": "2026-11-12T18:28:00.390Z"
 }

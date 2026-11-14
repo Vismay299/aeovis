@@ -1,8 +1,8 @@
 {
   "case": "B3",
   "suite": "f16-browser",
-  "startedAt": "2026-11-14T05:23:51.197Z",
+  "startedAt": "2026-11-12T18:27:58.361Z",
   "description": "click Run lookup -> metrics table with null as '—' and charts",
   "outcome": "pass",
-  "endedAt": "2026-11-14T05:23:53.361Z"
+  "endedAt": "2026-11-12T18:27:59.171Z"
 }

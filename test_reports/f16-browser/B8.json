@@ -1,8 +1,8 @@
 {
   "case": "B8",
   "suite": "f16-browser",
-  "startedAt": "2026-11-14T05:24:32.646Z",
+  "startedAt": "2026-11-12T18:28:06.157Z",
   "description": "375 px responsive layout and CSV export verification",
   "outcome": "pass",
-  "endedAt": "2026-11-14T05:24:38.218Z"
+  "endedAt": "2026-11-12T18:28:08.005Z"
 }
