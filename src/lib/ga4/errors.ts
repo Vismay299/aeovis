@@ -2,7 +2,7 @@
 //   src/server/lib/ga4Errors.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { AppError } from "../http/errors.ts";
+import { AppError, toErrorResponse } from "../http/errors.ts";
 
 export class Ga4AdminApiError extends Error {
   readonly status: number;
@@ -268,4 +268,38 @@ export function ga4ErrorToAppError(err: unknown): AppError {
   }
 
   return new AppError(500, "internal_error", err instanceof Error ? err.message : "An unexpected error occurred.");
+}
+
+function isGa4Error(err: unknown): boolean {
+  return (
+    err instanceof Ga4ReportError ||
+    err instanceof Ga4TokenError ||
+    err instanceof Ga4AdminApiError ||
+    err instanceof Ga4DataApiError ||
+    err instanceof Ga4MalformedResponseError
+  );
+}
+
+/**
+ * Route error response for every GA4 read route. GA4 error classes carry a
+ * `code` but no HTTP status, so `toErrorResponse` alone turns them into a
+ * generic 500; they are mapped through `ga4ErrorToAppError` first. Anything
+ * else (bugs, storage errors) still reaches `toErrorResponse` untouched, so
+ * its message is logged, never sent. A 429 gains `Retry-After` when known.
+ */
+export function toGa4ErrorResponse(err: unknown): Response {
+  const mapped = isGa4Error(err) ? ga4ErrorToAppError(err) : err;
+  const res = toErrorResponse(mapped);
+  const details =
+    mapped instanceof AppError && mapped.details && typeof mapped.details === "object"
+      ? (mapped.details as Record<string, unknown>)
+      : null;
+  const retryAfter = typeof details?.retryAfterSeconds === "number" ? details.retryAfterSeconds : null;
+  if (res.status === 429 && retryAfter !== null && Number.isFinite(retryAfter)) {
+    const capped = Math.min(Math.max(Math.ceil(retryAfter), 0), 86400);
+    const headers = new Headers(res.headers);
+    headers.set("Retry-After", String(capped));
+    return new Response(res.body, { status: res.status, headers });
+  }
+  return res;
 }

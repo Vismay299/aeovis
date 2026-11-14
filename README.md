@@ -225,6 +225,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `111_f15_rank_tracking_functions` | Atomic keyword add, scheduler claim, run and spend guards, result queries, tracker summaries and pruning. NOT YET APPLIED to production — see docs/PROD_MIGRATIONS.md |
 | `065_f06_exports` | F06 server exports: private `exports` bucket (25 MiB, CSV/JSON only) and `export_requests` audit table with RLS, hourly rate limit and retention indexes. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `066_f06_scan_history_columns` | F06 phase 5: derived `scans` columns (`engines`, `collection_partial`, `started_by`, generated `listed_at`), trigger `scans_derive_history_columns`, functions `scan_engines` / `scan_collection_partial`, constraint `scans_started_by_ck`, indexes `scans_brand_listed_idx` / `scans_brand_visibility_idx` / `scans_engines_gin_idx`. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `095_f12_question_answer_links` | F12 phase 1: `question_answer_links` table with tenant RLS plus service-role `link_question_answers` (scan/explore/legacy linking, optional archived `import` creation) and `prune_question_answer_links` (395-day retention). **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

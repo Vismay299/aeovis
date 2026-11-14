@@ -64,6 +64,7 @@ jobs:
           node scripts/qa/check-f03-db.mjs
           node scripts/qa/check-f09-db.mjs
           node scripts/qa/check-f11-db.mjs
+          node scripts/qa/check-f12-db.mjs
           node scripts/qa/check-f26-db.mjs
           node scripts/qa/check-f24-db.mjs
           node scripts/qa/check-f25-db.mjs
