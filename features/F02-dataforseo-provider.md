@@ -794,9 +794,9 @@ The phase 3 PR sets `DATAFORSEO_APPROVED_ENGINES` to the record's approved list;
 
 **Goal:** the owner can switch engines to DataForSEO safely and switch back.
 
-- [ ] **P5.T1** *Files:* `scripts/qa/check-dataforseo-live.mjs` (`--mode engines`): bounded canaries for the approved engines through `dispatchCanaries` on a loopback `aeovis_live_qa` ledger (same refusals as the bake-off; default `--max-spend-usd 0.10`, `--max-requests 10`). *Verify:* without flags → exit 2.
-- [ ] **P5.T2** *Files:* `docs/vendors/dataforseo.md` (endpoints, credential name, sandbox, error codes, price source = F03, India support = decision record), `docs/runbooks/dataforseo-cutover.md` (§10 steps). *Verify:* doc-status header present.
-- [ ] **P5.T3** *Files:* `features/README.md` (F02 status). *Verify:* status column updated in the same PR.
+- [x] **P5.T1** *Files:* `scripts/qa/check-dataforseo-live.mjs` (`--mode engines`): bounded canaries for the approved engines through `dispatchCanaries` on a loopback `aeovis_live_qa` ledger (same refusals as the bake-off; default `--max-spend-usd 0.10`, `--max-requests 10`). *Verify:* without flags → exit 2.
+- [x] **P5.T2** *Files:* `docs/vendors/dataforseo.md` (endpoints, credential name, sandbox, error codes, price source = F03, India support = decision record), `docs/runbooks/dataforseo-cutover.md` (§10 steps). *Verify:* doc-status header present.
+- [x] **P5.T3** *Files:* `features/README.md` (F02 status). *Verify:* status column updated in the same PR.
 
 **Checkpoint:** docs merged; owner-run results (canary outcomes, no answer text) recorded in the PR description.
 
