@@ -314,6 +314,7 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/keywords/locations",
       "/api/customer/keywords/cluster",
       "/api/customer/keywords/cluster/apply",
+      "/api/customer/keywords/track-question",
       // F17 — local SEO routes. Self-gated via requireWorkspace and the local_seo flag.
       "/api/customer/local/businesses",
       "/api/customer/local/businesses/[businessId]",
