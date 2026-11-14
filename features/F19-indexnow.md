@@ -474,7 +474,7 @@ F19 appends `{ id: "indexnow", label: "IndexNow", flag: "indexnow", Panel: Index
 
 ### Phase 5 — Tool definition for F22
 
-- [ ] **P5.T1.S1** *Files:* `src/lib/indexnow/tools.ts`, `tools.test.ts`. *Do:* §6.2.5; strict input; loose output; handler records `source "tool"`. *Verify:* `node --test src/lib/indexnow/tools.test.ts` → pass (F19-AC-16).
+- [x] **P5.T1.S1** *Files:* `src/lib/indexnow/tools.ts`, `tools.test.ts`. *Do:* §6.2.5; strict input; loose output; handler records `source "tool"`. *Verify:* `node --test src/lib/indexnow/tools.test.ts` → pass (F19-AC-16).
 
 **Checkpoint:** full suite passes. Completes F19-AC-16.
 

@@ -17,6 +17,16 @@ import { assertPublicUrl, SsrfBlockedError } from "../ssrfGuard.js";
 import { safeFetch, type SafeFetchResult } from "../http/safeFetch.ts";
 
 /** Parse `Link: <url>; rel="canonical"` response headers. */
+
+/**
+ * `noindex` and `none` (= noindex, nofollow) both keep a page out of the index;
+ * R15's technicalAudit.js treats both as restrictive (F18 §6.2.11 parity).
+ */
+export function isIndexableFromDirectives(robotsMeta: string | null, xRobotsTag: string | null): boolean {
+  const directives = [robotsMeta, xRobotsTag].filter(Boolean).join(",").toLowerCase();
+  return !/(?:^|[,\s])(?:noindex|none)(?:$|[,\s;])/.test(directives);
+}
+
 export function parseLinkHeaderCanonical(
   linkHeader: string | null,
   pageUrl: string,
@@ -317,11 +327,7 @@ export async function crawlPage(
 
   const analysis = analyzeHtml(body, url, statusCode, responseTimeMs);
   const javascriptShell = analysis.javascriptShell === true;
-  const robotsDirectives = [analysis.robotsMeta, xRobotsTag]
-    .filter(Boolean)
-    .join(",")
-    .toLowerCase();
-  const isIndexable = !robotsDirectives.includes("noindex");
+  const isIndexable = isIndexableFromDirectives(analysis.robotsMeta, xRobotsTag);
   const headingCount = (level: number) =>
     analysis.headingOrder.filter((h) => h === level).length;
 

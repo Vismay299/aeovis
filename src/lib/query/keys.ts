@@ -131,6 +131,15 @@ export const keys = {
     ["siteAuditCompare", base, head] as const,
 } as const;
 
+// F12 §6.2 — question history reads. Workspace data follows
+// [domain, brandKey, ...]: ["question-history", brandKey, questionId, ...].
+export const questionHistoryKeys = {
+  history: (brandKey: string, questionId: string, from?: string, to?: string) =>
+    ["question-history", brandKey, questionId, from ?? "", to ?? ""] as const,
+  answer: (brandKey: string, questionId: string, answerId: string) =>
+    ["question-history", brandKey, questionId, "answer", answerId] as const,
+} as const;
+
 export const privacyKeys = {
   choice: () => ["privacyChoice"] as const,
 } as const;
