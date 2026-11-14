@@ -229,7 +229,7 @@ async function until(check, message, timeoutMs = 8000) {
   throw new Error(message);
 }
 
-async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, serpItemCount = 1, serpDepth100Error = false, priceChanged = false, viewport = { width: 1280, height: 900 }, fixtureRows = rows, researchErrorCode = null, delayedQuoteKeyword = null, savedList = "rows", tagDeleteInUse = false, refreshRunning = false, refreshBlocked = null } = {}) {
+async function makePage({ flag = true, curation = true, cacheMiss = true, serpCacheMiss = false, serpItemCount = 1, serpDepth100Error = false, priceChanged = false, viewport = { width: 1280, height: 900 }, fixtureRows = rows, researchErrorCode = null, delayedQuoteKeyword = null, savedList = "rows", tagDeleteInUse = false, refreshRunning = false, refreshBlocked = null, trackMode = "created" } = {}) {
   const { context, page } = await openPortal(browser, origin, { viewport });
   const researchRequests = [];
   const serpRequests = [];
@@ -241,9 +241,10 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
   const savedTagRequests = [];
   const clusterRequests = [];
   const clusterApplyRequests = [];
+  const trackRequests = [];
   let jobPolls = 0;
   let firstJobPollAt = 0;
-  await page.route("**/api/customer/features*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ brandKey: "acme", features: { keyword_research: flag, price_review: true } }) }));
+  await page.route("**/api/customer/features*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ brandKey: "acme", features: { keyword_research: flag, price_review: true, question_curation: curation } }) }));
   await page.route("**/api/customer/price/estimate*", async (route) => {
     const body = route.request().postDataJSON();
     if (delayedQuoteKeyword && body.input?.keyword === delayedQuoteKeyword) await new Promise((resolve) => setTimeout(resolve, 900));
@@ -379,6 +380,21 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
     clusterRequests.push(body);
     return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ jobId: "job-cluster-1", status: "queued", pollAfterSeconds: 1 }) });
   });
+  await page.route(/\/api\/customer\/keywords\/track-question(\?.*)?$/, (route) => {
+    const body = route.request().postDataJSON();
+    trackRequests.push(body);
+    if (body.text && body.text.length < 2) {
+      return route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "Check request fields and try again.", code: "invalid_request" }) });
+    }
+    if (trackMode === "limit") {
+      return route.fulfill({ status: 409, contentType: "application/json", body: JSON.stringify({ error: "You can track up to 100 questions. Archive unused questions first.", code: "question_limit" }) });
+    }
+    const seen = trackRequests.filter((r) => r.text === body.text).length > 1;
+    if (trackMode === "existing" || seen) {
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ question: { id: "q-existing", text: body.text, status: "active", topic: "General" }, created: false, revived: false }) });
+    }
+    return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ question: { id: "q-1", text: body.text, status: "active", topic: "General" }, created: true, revived: false }) });
+  });
   await page.route(/\/api\/customer\/jobs\/[^/?]+(\?.*)?$/, (route) => {
     jobPolls += 1;
     if (!firstJobPollAt) firstJobPollAt = Date.now();
@@ -403,7 +419,7 @@ async function makePage({ flag = true, cacheMiss = true, serpCacheMiss = false, 
         : { jobId: "job-refresh-1", kind: "keywords.refresh_metrics", trigger: "manual", status: "completed", progress: { done: 2, total: 2, label: "Updating keyword stats" }, pollAfterSeconds: null, result: { updated: 12, requested: 15, skippedFresh: 3, failedBatches: 0, totalBatches: 2 }, error: null }),
     });
   });
-  return { context, page, researchRequests, serpRequests, savedListRequests, savedExportRequests, savedRemoveRequests, savedBulkTagRequests, savedRefreshRequests, savedTagRequests, locationRequests, clusterRequests, clusterApplyRequests };
+  return { context, page, researchRequests, serpRequests, savedListRequests, savedExportRequests, savedRemoveRequests, savedBulkTagRequests, savedRefreshRequests, savedTagRequests, locationRequests, clusterRequests, clusterApplyRequests, trackRequests };
 }
 
 async function openResearch(options, url = "/portal/keywords") {
@@ -905,6 +921,47 @@ try {
       );
       return "the disabled tooltip, priced run, proposal edit, and add-only apply each behaved";
     } finally { await context.close(); }
+  });
+
+  // F13 phase 7 — track as a question. B14 in the spec collided with the
+  // existing B14 (SERP pagination), so the scenario lands as B24 and no
+  // existing id is renumbered.
+  await record("B24", "track as a question: hidden when curation off, created and existing toasts", async () => {
+    const hidden = await openResearch({ cacheMiss: false, curation: false }, "/portal/keywords?q=oversized+t+shirt");
+    try {
+      await hidden.page.getByRole("button", { name: "oversized shirt for men" }).waitFor();
+      assert.equal(await hidden.page.getByRole("button", { name: "Track as a question" }).count(), 0);
+    } finally { await hidden.context.close(); }
+
+    const created = await openResearch({ cacheMiss: false, curation: true }, "/portal/keywords?q=oversized+t+shirt");
+    try {
+      const { page, trackRequests } = created;
+      await page.getByRole("button", { name: "oversized shirt for men" }).waitFor();
+      await page.getByRole("button", { name: "Track as a question" }).first().click();
+      await page.getByRole("dialog").getByText("Track as a question").waitFor();
+      await page.getByRole("button", { name: "Add question" }).click();
+      await page.getByText("Question added. Approve your panel in Questions to start tracking it.").waitFor();
+      await page.getByRole("button", { name: "Open Questions" }).waitFor();
+      await until(() => trackRequests.length === 1, "the track-question request did not arrive");
+      assert.equal(typeof trackRequests[0].keyword, "string");
+      assert.ok(Number.isInteger(trackRequests[0].locationCode) && trackRequests[0].locationCode > 0);
+      assert.equal(typeof trackRequests[0].languageCode, "string");
+    } finally { await created.context.close(); }
+
+    const existing = await openSaved({ trackMode: "existing" });
+    try {
+      const { page, trackRequests } = existing;
+      await page.getByRole("checkbox", { name: "Select oversized t shirt" }).waitFor();
+      await page.getByRole("button", { name: "Actions for oversized t shirt" }).click();
+      await page.getByRole("menuitem", { name: "Track as a question" }).click();
+      await page.getByRole("dialog").getByText("Track as a question").waitFor();
+      await page.getByRole("button", { name: "Add question" }).click();
+      await page.getByText("This question is already in your list.").waitFor();
+      await until(() => trackRequests.length === 1, "the saved track-question request did not arrive");
+      assert.equal(trackRequests[0].keyword, "oversized t shirt");
+    } finally { await existing.context.close(); }
+
+    return "the button hid with curation off and the created/existing toasts showed";
   });
 } finally {
   await browser.close();
