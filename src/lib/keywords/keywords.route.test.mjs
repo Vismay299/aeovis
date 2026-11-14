@@ -16,6 +16,7 @@ import { GET as exportGet } from "../../app/api/customer/keywords/saved/export/r
 import { POST as refreshPost } from "../../app/api/customer/keywords/saved/refresh/route.ts";
 import { POST as clusterPost } from "../../app/api/customer/keywords/cluster/route.ts";
 import { POST as clusterApplyPost } from "../../app/api/customer/keywords/cluster/apply/route.ts";
+import { POST as trackQuestionPost } from "../../app/api/customer/keywords/track-question/route.ts";
 import { createMemorySavedKeywordsRepository } from "./memoryRepository.ts";
 import { AppError } from "../http/appError.ts";
 import { SpendRefused } from "../spend/errors.ts";
@@ -1057,5 +1058,131 @@ test("keywords routes", async (t) => {
     }
     assert.equal(updateCalls[0].p_add[0].name, "Renamed topic");
     assert.equal(updateCalls[1].p_add[0].name, "Topic B");
+  });
+
+  await t.test("track-question: question_curation off -> 404 before any add call (F13-AC-19)", async () => {
+    let adds = 0;
+    const req = new Request("http://localhost/api/customer/keywords/track-question", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        keyword: "oversized t shirt",
+        text: "Which brands make the best oversized t-shirts in India?",
+        locationCode: 2356,
+        languageCode: "en",
+      }),
+    });
+
+    const res = await trackQuestionPost(req, null, {
+      requireWorkspace: async () => makeWorkspace(),
+      isFeatureEnabled: async (name) => name !== "question_curation",
+      add: async () => {
+        adds += 1;
+        throw new Error("must not be called");
+      },
+    });
+
+    assert.equal(res.status, 404);
+    assert.equal((await res.json()).code, "feature_unavailable");
+    assert.equal(adds, 0);
+  });
+
+  await t.test("track-question: unknown body field -> 400 before any add call", async () => {
+    let adds = 0;
+    const req = new Request("http://localhost/api/customer/keywords/track-question", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        keyword: "oversized t shirt",
+        text: "Which brands make the best oversized t-shirts in India?",
+        locationCode: 2356,
+        languageCode: "en",
+        unexpected: "nope",
+      }),
+    });
+
+    const res = await trackQuestionPost(req, null, {
+      requireWorkspace: async () => makeWorkspace(),
+      isFeatureEnabled: async () => true,
+      add: async () => {
+        adds += 1;
+        throw new Error("must not be called");
+      },
+    });
+
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, "invalid_request");
+    assert.equal(adds, 0);
+  });
+
+  await t.test("track-question: created passes through id/text/status/topic (F13-AC-19)", async () => {
+    const req = new Request("http://localhost/api/customer/keywords/track-question", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        keyword: "oversized t shirt",
+        text: "Which brands make the best oversized t-shirts in India?",
+        locationCode: 2356,
+        languageCode: "en",
+      }),
+    });
+
+    const res = await trackQuestionPost(req, null, {
+      requireWorkspace: async () => makeWorkspace(),
+      isFeatureEnabled: async () => true,
+      add: async (admin, input) => {
+        assert.equal(input.brandKey, BRAND_KEY);
+        assert.equal(input.origin, "manual");
+        assert.deepEqual(input.sourceRef, {
+          kind: "keyword",
+          keyword: "oversized t shirt",
+          locationCode: 2356,
+          languageCode: "en",
+        });
+        return {
+          question: {
+            id: "q-1",
+            text: input.text,
+            status: "active",
+            topic: "General",
+          },
+          created: true,
+          revived: false,
+        };
+      },
+    });
+
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.question.id, "q-1");
+    assert.equal(body.created, true);
+    assert.equal(body.revived, false);
+  });
+
+  await t.test("track-question: question_limit passes through with no partial write (F13-AC-19)", async () => {
+    let adds = 0;
+    const req = new Request("http://localhost/api/customer/keywords/track-question", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        keyword: "oversized t shirt",
+        text: "Which brands make the best oversized t-shirts in India?",
+        locationCode: 2356,
+        languageCode: "en",
+      }),
+    });
+
+    const res = await trackQuestionPost(req, null, {
+      requireWorkspace: async () => makeWorkspace(),
+      isFeatureEnabled: async () => true,
+      add: async () => {
+        adds += 1;
+        throw new AppError(409, "question_limit", "You can track up to 100 questions. Archive unused questions first.");
+      },
+    });
+
+    assert.equal(res.status, 409);
+    assert.equal((await res.json()).code, "question_limit");
+    assert.equal(adds, 1);
   });
 });

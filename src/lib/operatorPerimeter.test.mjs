@@ -267,11 +267,18 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     "/api/customer/domain/keywords",
     "/api/customer/domain/overview",
     "/api/customer/domain/pages",
+    // F25 — lifecycle email preferences + token-authenticated unsubscribe.
+    // Self-gated via requireUser (preferences) and the HMAC link token
+    // (unsubscribe); matched by the /api/customer/* regex in
+    // operatorPerimeter.js, which is unchanged.
+    "/api/customer/email/preferences",
+    "/api/customer/email/unsubscribe",
     // F16 — backlinks research routes. Self-gated via requireWorkspace.
     "/api/customer/backlinks/overview",
     "/api/customer/backlinks/referring-domains",
     "/api/customer/backlinks/rows",
     "/api/customer/backlinks/top-pages",
+    "/api/customer/backlinks/ahrefs-dr",
     // F04 — the client-visible feature flags. Self-gated like every other
     // customer route: it answers only for a workspace the caller belongs to.
     "/api/customer/features",
@@ -287,6 +294,8 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     "/api/customer/ga4/property",
     // F20 phase 3 — reports.
     "/api/customer/ga4/health",
+    // F20 phase 4 — opportunities. Self-gated via requireWorkspace and the ga4 flag.
+    "/api/customer/ga4/opportunities",
     "/api/customer/ga4/overview",
     "/api/customer/ga4/reports/[kind]",
     "/api/customer/gsc",
@@ -314,6 +323,7 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/keywords/locations",
       "/api/customer/keywords/cluster",
       "/api/customer/keywords/cluster/apply",
+      "/api/customer/keywords/track-question",
       // F17 — local SEO routes. Self-gated via requireWorkspace and the local_seo flag.
       "/api/customer/local/businesses",
       "/api/customer/local/businesses/[businessId]",

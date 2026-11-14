@@ -501,6 +501,7 @@ SOFTWARE.
 - `src/components/portal/backlinks/hooks/useBacklinksDomainExpansion.ts` (from `src/client/features/backlinks/useBacklinksDomainExpansion.ts`)
 - `src/components/portal/backlinks/hooks/useBacklinksSearchHistory.ts` (from `src/client/hooks/useBacklinksSearchHistory.ts`)
 - `src/components/portal/backlinks/hooks/useBacklinksSearchTabs.ts` (from `src/client/features/backlinks/useBacklinksPageData.ts`)
+- `src/components/portal/backlinks/useAhrefsDomainRatings.ts` (from `src/client/features/backlinks/useAhrefsDomainRatings.ts`)
 - `src/shared/domain.ts` (from `src/types/schemas/domain.ts`, `src/client/features/domain/domainRouteState.ts`, `src/client/features/domain/domainFilterUtils.ts`, `src/client/features/domain/utils.ts`, `src/client/features/domain/types.ts`)
 - `src/components/portal/domain/DomainFilterPanel.tsx` (from `src/client/features/domain/components/DomainFilterPanel.tsx`)
 - `src/components/portal/domain/DomainKeywordsTable.tsx` (from `src/client/features/domain/components/DomainKeywordsTable.tsx`)
@@ -642,6 +643,12 @@ SOFTWARE.
 - `src/lib/ga4/overview.test.ts` (from `openseo:src/server/features/ga4/services/Ga4OrganicOverviewService.test.ts`)
 - `src/lib/ga4/measurementHealth.test.ts` (from `openseo:src/server/features/ga4/services/Ga4MeasurementHealthService.test.ts`)
 
+### F20 Phase 4 ports
+- `src/lib/ga4/gscPages.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.ts` (GSC half))
+- `src/lib/ga4/opportunities.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.ts`)
+- `src/lib/ga4/opportunities.test.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.test.ts:68-202`)
+- `src/app/api/customer/ga4/opportunities/route.ts` (from `openseo:src/serverFunctions/ga4.ts`, `openseo:src/server/features/ga4/services/SearchOpportunityService.ts:246-290`)
+
 ### F13 Phase 6 ports
 - `src/lib/keywords/clustering.ts` (ideas only from `openseo:.agents/skills/keyword-clustering/SKILL.md`)
 - `src/app/api/customer/keywords/cluster/route.ts` (from `openseo:src/serverFunctions/keywords.ts`)
@@ -674,6 +681,14 @@ SOFTWARE.
 - `src/lib/rank-tracking/jobs.ts` (from `openseo:src/server/features/rank-tracking/jobs`)
 - `src/lib/rank-tracking/service.test.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.test.ts`)
 - `src/lib/rank-tracking/rankTracking.contract.ts` (from `openseo:src/types/schemas/rank-tracking.ts`)
+
+### F25 Phase 3 ports
+- `src/components/portal/email/EmailSettings.tsx` (from `src/client/features/settings/PrivacySettings.tsx`)
+- `src/components/portal/email/ProductUpdatesSwitch.tsx` (from `src/client/features/settings/PrivacySettings.tsx`, `src/client/features/onboarding/AnalyticsOnboardingStep.tsx`)
+
+### F16 Phase 4 ports
+- `src/lib/backlinks/ahrefsDomainRating.ts` (from `src/serverFunctions/ahrefs.ts`)
+- `src/app/api/customer/backlinks/ahrefs-dr/route.ts` (from `src/serverFunctions/ahrefs.ts`)
 
 ### F18 Phase 6 ports
 - src/lib/audit/renderedPage.ts (from src/server/lib/audit/rendered-page.ts)

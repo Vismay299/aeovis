@@ -6,6 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   WORKSPACE_DOMAINS,
+  emailKeys,
   invalidateWorkspace,
   isWorkspaceKey,
   keys,
@@ -251,4 +252,10 @@ test("F18 site-audit keys: workspace list is scoped, audit reads are id-addresse
   ]);
   assert.equal(isWorkspaceKey(keys.siteAudit("u1"), "u1"), false);
   assert.equal(isWorkspaceKey(keys.siteAuditIssues("u1", "t", 0), "u1"), false);
+});
+
+test("F25 email preferences key is user-level, never workspace-scoped", () => {
+  assert.deepEqual(emailKeys.preferences(), ["emailPreferences"]);
+  assert.equal(WORKSPACE_DOMAINS.has("emailPreferences"), false);
+  assert.equal(isWorkspaceKey(emailKeys.preferences(), "acme"), false);
 });

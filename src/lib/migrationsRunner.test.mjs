@@ -407,6 +407,9 @@ const FULL_CATALOG = [
   "scan_engines", "scan_collection_partial", "scans_derive_history_columns",
   "scans_started_by_ck", "scans_brand_listed_idx", "scans_brand_visibility_idx",
   "scans_engines_gin_idx",
+  // F12 phase 1 migration 095 — question_answer_links plus the linking and
+  // retention functions.
+  "question_answer_links", "link_question_answers", "prune_question_answer_links",
 ];
 
 function withRegister(dir) {

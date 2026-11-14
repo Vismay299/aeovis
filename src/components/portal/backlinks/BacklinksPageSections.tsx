@@ -4,9 +4,10 @@
 //   src/client/features/backlinks/BacklinksPageSections.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { AlertTriangle, List, Rows3 } from "lucide-react";
 import type { OnChangeFn, SortingState } from "@tanstack/react-table";
+import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,6 +30,7 @@ import {
   buildBacklinksTabFilename,
   type BacklinksRow,
   type BacklinksTab,
+  type BacklinksTabRows,
   type BacklinksTargetScope,
   type ReferringDomainRow,
   type TopPageRow,
@@ -37,7 +39,12 @@ import { BacklinksTable } from "./BacklinksTable";
 import { ReferringDomainsTable } from "./ReferringDomainsTable";
 import { TopPagesTable } from "./TopPagesTable";
 import { BacklinksFilterPanel } from "./BacklinksFilterPanel";
-import { BacklinksBestLinksMenu } from "./BacklinksToolbarMenus";
+import {
+  BacklinksActionsMenu,
+  BacklinksBestLinksMenu,
+} from "./BacklinksToolbarMenus";
+import { useAhrefsDomainRatings } from "./useAhrefsDomainRatings";
+import type { DomainRatings } from "./BacklinksTableColumns";
 import type { BacklinksDomainExpansion } from "./hooks/useBacklinksDomainExpansion";
 import type { BacklinksFiltersState } from "./hooks/useBacklinksFilters";
 import { formatUsd } from "@/shared/pricing";
@@ -112,6 +119,19 @@ export function BacklinksResultsCard({
   onViewChange: (view: "all" | undefined) => void;
 }) {
   const exportRowsHandler = useExportRows();
+  const workspace = useWorkspace();
+  const isAhrefsEnabled = Boolean(
+    workspace?.features?.backlinks_ahrefs_dr,
+  );
+  const {
+    ratings: loadedRatings,
+    isLoading: isLoadingRatings,
+    loadRatings,
+  } = useAhrefsDomainRatings(brandKey);
+  // Flag off (terms-of-use check pending) → no menu item and no column.
+  const domainRatings: DomainRatings | null = isAhrefsEnabled
+    ? loadedRatings
+    : null;
   const activeFilterCount = filters[activeTab].activeFilterCount;
   const pageQuote = usePriceQuote({
     brandKey,
@@ -123,9 +143,25 @@ export function BacklinksResultsCard({
       buildBacklinksTabExport({
         tab: activeTab,
         rows: tabRows,
+        domainRatings,
       }),
-    [activeTab, tabRows],
+    [activeTab, tabRows, domainRatings],
   );
+  // Domains keyed by both tables that the DR column can enrich. Each table
+  // holds the currently loaded page, so this changes as the user paginates.
+  const ratableDomains = useMemo(
+    () => collectRatableDomains(tabRows),
+    [tabRows],
+  );
+  // Once the user has opted in, keep newly loaded domains enriched without a
+  // re-click (e.g. after paging or switching to the Referring Domains tab).
+  useEffect(() => {
+    if (!domainRatings) return;
+    const missing = ratableDomains.filter(
+      (domain) => !Object.hasOwn(domainRatings, domain),
+    );
+    if (missing.length > 0) void loadRatings(missing);
+  }, [domainRatings, ratableDomains, loadRatings]);
 
   const filterState = filters[activeTab];
 
@@ -164,22 +200,31 @@ export function BacklinksResultsCard({
         </DataTableTabs>
         <DataTableToolbar
           actions={
-            <ExportMenu
-              actions={["sheets", "csv"]}
-              scopes={[{ id: "page", label: "Current page · selected view" }]}
-              disabled={exportTable.rows.length === 0}
-              onExport={(format) =>
-                void exportRowsHandler({
-                  format,
-                  feature: `backlinks_${activeTab}`,
-                  ...exportTable,
-                  filename: buildBacklinksTabFilename(
-                    activeTab,
-                    exportTarget,
-                  ),
-                })
-              }
-            />
+            <>
+              <ExportMenu
+                actions={["sheets", "csv"]}
+                scopes={[{ id: "page", label: "Current page · selected view" }]}
+                disabled={exportTable.rows.length === 0}
+                onExport={(format) =>
+                  void exportRowsHandler({
+                    format,
+                    feature: `backlinks_${activeTab}`,
+                    ...exportTable,
+                    filename: buildBacklinksTabFilename(
+                      activeTab,
+                      exportTarget,
+                    ),
+                  })
+                }
+              />
+              {activeTab !== "pages" && isAhrefsEnabled ? (
+                <BacklinksActionsMenu
+                  isLoadingRatings={isLoadingRatings}
+                  loadRatings={loadRatings}
+                  ratableDomains={ratableDomains}
+                />
+              ) : null}
+            </>
           }
         >
           <DataTableFilterToggle
@@ -277,6 +322,7 @@ export function BacklinksResultsCard({
           {activeTab === "backlinks" ? (
             <BacklinksTable
               rows={showTable ? tabRows.backlinks : []}
+              domainRatings={domainRatings}
               sorting={sorting}
               onSortingChange={onSortingChange}
               expansion={view === "all" ? null : domainExpansion}
@@ -286,6 +332,7 @@ export function BacklinksResultsCard({
           {activeTab === "domains" ? (
             <ReferringDomainsTable
               rows={showTable ? tabRows.referringDomains : []}
+              domainRatings={domainRatings}
               sorting={sorting}
               onSortingChange={onSortingChange}
               {...frame}
@@ -299,8 +346,25 @@ export function BacklinksResultsCard({
               {...frame}
             />
           ) : null}
+          {domainRatings ? (
+            <p className="px-4 pb-3 text-xs text-muted-foreground">
+              Domain Rating from Ahrefs&apos; free public lookup.
+            </p>
+          ) : null}
         </>
       )}
     </>
   );
+}
+
+/** Unique domains the DR column keys on, from both the backlinks and referring
+ * domains tables, normalized to match how each table renders its domain. */
+function collectRatableDomains(tabRows: BacklinksTabRows): string[] {
+  const domains = [
+    ...tabRows.backlinks.map((row) => row.domainFrom?.replace(/^www\./, "")),
+    ...tabRows.referringDomains.map((row) => row.domain),
+  ];
+  return [
+    ...new Set(domains.filter((domain): domain is string => Boolean(domain))),
+  ];
 }

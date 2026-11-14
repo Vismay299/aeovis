@@ -135,6 +135,13 @@ export const privacyKeys = {
   choice: () => ["privacyChoice"] as const,
 } as const;
 
+// F25 — per-user lifecycle-email preferences. A user-level key: the data
+// belongs to the person, not a workspace (§6.8 exception to the
+// [domain, brandKey] rule, so NOT in WORKSPACE_DOMAINS).
+export const emailKeys = {
+  preferences: () => ["emailPreferences"] as const,
+} as const;
+
 
 /** Every domain above whose second element is a brandKey. */
 export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([

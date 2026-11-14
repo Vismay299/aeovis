@@ -603,8 +603,8 @@ Branches `feat/f20-ga4-p<N>`. `NT` = `node --import ./src/lib/liveWriteGuardAuto
 ### Phase 4 — Search opportunities
 **Goal:** the GSC × GA4 opportunity table, reading Search Console without changing it.
 
-- [ ] **P4.T1** *Files:* `src/lib/ga4/{gscPages,opportunities}.ts`, `opportunities.test.ts`, fixture `gsc-pages.json`. *Do:* port `SearchOpportunityService.test.ts:68-202` (normalisation, scoring, unmatched unscored, engagement fallback, default range anchored to the property date); add: request body passed to an injected `gscFetchForBrand` exactly as §6.2; service-account connection → `gsc_not_connected`; "access denied" → `gsc_reconnect_required`; truncation flags; time-zone warning. *Verify:* `NT src/lib/ga4/opportunities.test.ts` → pass (F20-AC-17).
-- [ ] **P4.T2** *Files:* `src/app/api/customer/ga4/opportunities/route.ts`, cases in `reports.route.test.mjs`. *Verify:* `NT src/lib/ga4/reports.route.test.mjs` → pass.
+- [x] **P4.T1** *Files:* `src/lib/ga4/{gscPages,opportunities}.ts`, `opportunities.test.ts`, fixture `gsc-pages.json`. *Do:* port `SearchOpportunityService.test.ts:68-202` (normalisation, scoring, unmatched unscored, engagement fallback, default range anchored to the property date); add: request body passed to an injected `gscFetchForBrand` exactly as §6.2; service-account connection → `gsc_not_connected`; "access denied" → `gsc_reconnect_required`; truncation flags; time-zone warning. *Verify:* `NT src/lib/ga4/opportunities.test.ts` → pass (F20-AC-17).
+- [x] **P4.T2** *Files:* `src/app/api/customer/ga4/opportunities/route.ts`, cases in `reports.route.test.mjs`. *Verify:* `NT src/lib/ga4/reports.route.test.mjs` → pass.
 
 **Checkpoint:** tests pass; Search Console guard clean. AC: 17.
 

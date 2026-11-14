@@ -1,0 +1,8 @@
+{
+  "case": "B7",
+  "suite": "f16-browser",
+  "startedAt": "2026-11-14T05:24:13.030Z",
+  "description": "Ahrefs DR flag gating, column fill, export and failure toast",
+  "outcome": "pass",
+  "endedAt": "2026-11-14T05:24:32.331Z"
+}
