@@ -718,3 +718,6 @@ SOFTWARE.
 
 ### F20 Phase 5 ports
 - `src/components/portal/analytics/OrganicOverviewCard.tsx` (from `openseo:src/client/features/dashboard/Ga4Card.tsx:43-180`)
+
+### F20 Phase 6 ports
+- `src/lib/ga4/tools.ts` (from `openseo:src/server/mcp/tools/google-analytics-tools.ts`)
