@@ -93,6 +93,14 @@ export default function PrivacyPage() {
         complete a business transfer after providing any notice required by law. We do not sell
         personal information.
       </p>
+      <p>
+        We use Loops to send account emails: notifications about your workspace (for example when
+        a scan finishes), a short series of setup tips after you sign up, and product updates
+        only if you opt in. Loops receives your email address, name if you provided one, and
+        which setup steps you've completed — never your questions, AI answers or website
+        data. Every notification email has a link to stop it, and you can change all email
+        settings in Settings → Emails.
+      </p>
 
       <h2>Retention and your choices</h2>
       <p>

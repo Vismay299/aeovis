@@ -64,6 +64,7 @@ export const PRIVATE_ROUTE_PREFIXES = Object.freeze([
   "/signup",
   "/auth",
   "/onboarding",
+  "/email",
 ]);
 
 /**
