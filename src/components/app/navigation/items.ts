@@ -17,6 +17,7 @@
 import {
   BookOpen,
   Bookmark,
+  ChartColumn,
   Gauge,
   Globe,
   LayoutDashboard,
@@ -143,6 +144,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/portal/rank-tracking",
         icon: TrendingUp,
         flag: "rank_tracking",
+      },
+      {
+        id: "analytics",
+        label: "Analytics",
+        href: "/portal/analytics",
+        icon: ChartColumn,
+        flag: "ga4",
       },
     ],
   },

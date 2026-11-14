@@ -715,3 +715,6 @@ SOFTWARE.
 - `src/components/portal/rank-tracking/telemetry.ts` (from `openseo:src/client/lib/posthog.ts (rank-tracking event names)`)
 - `src/lib/rank-tracking/suggestions.ts` (from `src/server/features/domain/services/DomainService.ts:122-216`)
 - `src/lib/rank-tracking/metrics.ts` (from `src/server/features/rank-tracking/services/RankTrackingService.ts:328-380`)
+
+### F20 Phase 5 ports
+- `src/components/portal/analytics/OrganicOverviewCard.tsx` (from `openseo:src/client/features/dashboard/Ga4Card.tsx:43-180`)

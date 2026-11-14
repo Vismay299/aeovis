@@ -1,0 +1,32 @@
+{
+  "status": "ok",
+  "source": { "provider": "google_analytics", "propertyId": "properties/123456789", "propertyDisplayName": "Offcult India" },
+  "request": {
+    "resolvedDateRange": { "startDate": "2026-09-24", "endDate": "2026-10-21" },
+    "propertyTimeZone": "Asia/Kolkata",
+    "currencyCode": "INR",
+    "channel": "organic_search",
+    "kind": "site_search",
+    "limit": 100,
+    "offset": 0
+  },
+  "rowCount": 1,
+  "totalRowCount": 1,
+  "rows": [
+    {
+      "searchTerm": "tote bag",
+      "eventCount": 45,
+      "activeUsers": 40,
+      "sessions": 42,
+      "engagedSessions": 30,
+      "engagementRate": 0.714
+    }
+  ],
+  "pageInfo": { "offset": 0, "limit": 100, "hasMore": false, "nextOffset": null },
+  "reportMetadata": { "hasLimitedData": false },
+  "warnings": [],
+  "diagnostics": [],
+  "siteSearchActivity": { "status": "detected" },
+  "dataAsOf": "2026-10-22T09:00:00.000Z",
+  "cached": false
+}

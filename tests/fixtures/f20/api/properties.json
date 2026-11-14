@@ -1,0 +1,18 @@
+{
+  "accounts": [
+    {
+      "grantId": "33333333-3333-4333-8333-333333333333",
+      "email": "owner@example.com",
+      "requiresReconnect": false,
+      "propertiesUnavailable": false,
+      "properties": [
+        {
+          "propertyId": "properties/123456789",
+          "displayName": "Offcult India",
+          "accountDisplayName": "Offcult",
+          "isSelected": false
+        }
+      ]
+    }
+  ]
+}
