@@ -279,3 +279,27 @@ test("every response carries Cache-Control: no-store and JSON", async () => {
   }
   assert.deepEqual(NO_STORE, { "Cache-Control": "no-store" });
 });
+
+// F26-AC-10 (additive): 5xx responses report type/code only; 4xx never reports.
+test("F26-AC-10 toErrorResponse reports 5xx with error_code and never reports 4xx", async () => {
+  const { setServerErrorReporter } = await import("../telemetry/reporters.ts");
+  const calls: Array<{ err: unknown; props: Record<string, string> }> = [];
+  setServerErrorReporter((err, props) => {
+    calls.push({ err, props });
+  });
+  const original = console.error;
+  console.error = () => {};
+  try {
+    assert.equal(toErrorResponse(new AppError(404, "not_found", "Missing.")).status, 404);
+    assert.equal(calls.length, 0);
+    assert.equal(toErrorResponse(new AppError(500, "internal_error", "Broken.")).status, 500);
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0].props, { error_code: "internal_error" });
+    assert.equal(toErrorResponse(new Error("boom")).status, 500);
+    assert.equal(calls.length, 2);
+    assert.deepEqual(calls[1].props, { error_code: "internal_error" });
+  } finally {
+    console.error = original;
+    setServerErrorReporter(null);
+  }
+});
