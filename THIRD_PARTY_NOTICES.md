@@ -642,6 +642,12 @@ SOFTWARE.
 - `src/lib/ga4/overview.test.ts` (from `openseo:src/server/features/ga4/services/Ga4OrganicOverviewService.test.ts`)
 - `src/lib/ga4/measurementHealth.test.ts` (from `openseo:src/server/features/ga4/services/Ga4MeasurementHealthService.test.ts`)
 
+### F20 Phase 4 ports
+- `src/lib/ga4/gscPages.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.ts` (GSC half))
+- `src/lib/ga4/opportunities.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.ts`)
+- `src/lib/ga4/opportunities.test.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.test.ts:68-202`)
+- `src/app/api/customer/ga4/opportunities/route.ts` (from `openseo:src/serverFunctions/ga4.ts`, `openseo:src/server/features/ga4/services/SearchOpportunityService.ts:246-290`)
+
 ### F13 Phase 6 ports
 - `src/lib/keywords/clustering.ts` (ideas only from `openseo:.agents/skills/keyword-clustering/SKILL.md`)
 - `src/app/api/customer/keywords/cluster/route.ts` (from `openseo:src/serverFunctions/keywords.ts`)
