@@ -701,3 +701,17 @@ SOFTWARE.
 - `src/lib/questions/history/history.ts` (from `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts`)
 - `src/lib/questions/history/answer.ts` (from `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts`)
 
+### F15 Phase 4 ports
+- `src/components/portal/rank-tracking/CostEstimateBox.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingConfigModal.tsx:378-412`)
+- `src/components/portal/rank-tracking/DomainListFilters.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingFilters.tsx`)
+- `src/components/portal/rank-tracking/FirstCheckStep.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingConfigModal.tsx (first-check step)`)
+- `src/components/portal/rank-tracking/hooks/useRankTrackers.ts` (from `openseo:src/client/features/rank-tracking/RankTrackingDomainList.tsx`)
+- `src/components/portal/rank-tracking/hooks/useSaveConfigMutations.ts` (from `openseo:src/client/features/rank-tracking/useSaveConfigMutations.ts`)
+- `src/components/portal/rank-tracking/KeywordSuggestionStep.tsx` (from `openseo:src/client/features/rank-tracking/KeywordSuggestionStep.tsx:144-342`)
+- `src/components/portal/rank-tracking/RankTrackingConfigDialog.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingConfigModal.tsx:86-412`)
+- `src/components/portal/rank-tracking/RankTrackingDomainList.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingDomainList.tsx:55-328`)
+- `src/components/portal/rank-tracking/RankTrackingPage.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingDomainList.tsx:55-328`)
+- `src/components/portal/rank-tracking/SearchTargetingField.tsx` (from `openseo:src/client/features/rank-tracking/SearchTargetingField.tsx`)
+- `src/components/portal/rank-tracking/telemetry.ts` (from `openseo:src/client/lib/posthog.ts (rank-tracking event names)`)
+- `src/lib/rank-tracking/suggestions.ts` (from `src/server/features/domain/services/DomainService.ts:122-216`)
+- `src/lib/rank-tracking/metrics.ts` (from `src/server/features/rank-tracking/services/RankTrackingService.ts:328-380`)

@@ -129,6 +129,22 @@ export const keys = {
     ["siteAuditLighthouse", resultId] as const,
   siteAuditCompare: (base: string, head: string) =>
     ["siteAuditCompare", base, head] as const,
+  // F15 — rank tracking. Every tracker read is scoped to its workspace.
+  rankTrackers: (brandKey: string) => ["rankTrackers", brandKey] as const,
+  rankTracker: (brandKey: string, configId: string) =>
+    ["rankTracker", brandKey, configId] as const,
+  rankResults: (brandKey: string, configId: string, compare: string) =>
+    ["rankResults", brandKey, configId, compare] as const,
+  rankLatestRun: (brandKey: string, configId: string) =>
+    ["rankLatestRun", brandKey, configId] as const,
+  rankTrend: (brandKey: string, configId: string, device: string, sinceDays: number) =>
+    ["rankTrend", brandKey, configId, device, sinceDays] as const,
+  rankMatrix: (brandKey: string, configId: string, device: string) =>
+    ["rankMatrix", brandKey, configId, device] as const,
+  rankKeywordHistory: (brandKey: string, configId: string, keywordId: string, sinceDays: number) =>
+    ["rankKeywordHistory", brandKey, configId, keywordId, sinceDays] as const,
+  rankSuggestions: (brandKey: string, domain: string, locationCode: number) =>
+    ["rankSuggestions", brandKey, domain, locationCode] as const,
 } as const;
 
 // F12 §6.2 — question history reads. Workspace data follows
@@ -197,6 +213,14 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "siteAudits",
   "siteAuditCapabilities",
   "scanHistory",
+  "rankTrackers",
+  "rankTracker",
+  "rankResults",
+  "rankLatestRun",
+  "rankTrend",
+  "rankMatrix",
+  "rankKeywordHistory",
+  "rankSuggestions",
 ]);
 
 export function isWorkspaceKey(

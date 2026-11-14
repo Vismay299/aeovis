@@ -231,6 +231,56 @@ export const historyContract = defineRouteContract({
   examples: [{ response: { points: [] } }],
 });
 
+export const suggestionsContract = defineRouteContract({
+  id: "customer.rank-tracking.suggestions",
+  method: "POST",
+  path: "/api/customer/rank-tracking/suggestions",
+  file: "src/app/api/customer/rank-tracking/suggestions/route.ts",
+  auth: "workspace",
+  request: z.strictObject({
+    brand_key: z.string().optional(),
+    domain: z.string().trim().min(1).max(253),
+    locationCode: z.number().int().positive(),
+    languageCode: z.string().min(2).max(8).optional(),
+    cacheOnly: z.boolean().default(false),
+    maxUsd: z.number().positive().max(1000).optional(),
+    requestId: z.string().uuid(),
+  }),
+  response: z.looseObject({
+    keywords: z.array(z.looseObject({
+      keyword: z.string(),
+      position: z.number().nullable(),
+      searchVolume: z.number().nullable(),
+      traffic: z.number().nullable(),
+      cpc: z.number().nullable(),
+      keywordDifficulty: z.number().nullable(),
+    })).nullable(),
+    cached: z.boolean(),
+    fetchedAt: z.string(),
+  }),
+  errorCodes: [...COMMON, "price_changed", "suggestions_unavailable", "rank_suggestions_unavailable", "daily_cap", "workspace_cap"],
+  examples: [
+    { response: { keywords: [{ keyword: "oversized t shirts", position: 7, searchVolume: 12100, traffic: 410.5, cpc: 0.41, keywordDifficulty: 34 }], cached: false, fetchedAt: "2026-10-27T05:12:00.000Z" } },
+    { response: { keywords: null, cached: true, fetchedAt: "2026-10-27T05:12:00.000Z" } },
+  ],
+});
+
+export const metricsRefreshContract = defineRouteContract({
+  id: "customer.rank-tracking.metrics.refresh",
+  method: "POST",
+  path: "/api/customer/rank-tracking/configs/[configId]/metrics/refresh",
+  file: "src/app/api/customer/rank-tracking/configs/[configId]/metrics/refresh/route.ts",
+  auth: "workspace",
+  request: z.strictObject({
+    brand_key: z.string().optional(),
+    maxUsd: z.number().positive().max(1000).optional(),
+    requestId: z.string().uuid(),
+  }),
+  response: z.looseObject({ updated: z.number(), fromCache: z.number(), bought: z.number() }),
+  errorCodes: [...COMMON, "approval_required", "price_changed", "nothing_to_refresh", "rank_metrics_unavailable", "daily_cap", "workspace_cap"],
+  examples: [{ response: { updated: 20, fromCache: 15, bought: 5 } }],
+});
+
 export const contracts: RouteContract[] = [
   listTrackersContract,
   createTrackerContract,
@@ -245,4 +295,6 @@ export const contracts: RouteContract[] = [
   trendContract,
   matrixContract,
   historyContract,
+  suggestionsContract,
+  metricsRefreshContract,
 ];
