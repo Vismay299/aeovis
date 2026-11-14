@@ -999,7 +999,11 @@ try {
           { timeout: 10000 },
         );
         await drItem.click();
-        await ahrefsResponse;
+        const drRes = await ahrefsResponse;
+        assert.ok(
+          new URL(drRes.url()).searchParams.get("brand_key"),
+          "DR request must name the workspace (brand_key) so the flag is checked for it",
+        );
         assert.ok(ahrefsRequests.length > 0, "Clicking Ahrefs DR must call the ahrefs-dr route");
         const sentDomains = ahrefsRequests[0].domains;
         assert.ok(Array.isArray(sentDomains) && sentDomains.length <= 100, "DR request must send at most 100 domains");

@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { fetchJson, withBrand } from "@/lib/query/fetchJson";
 import { keys, stableStringify } from "@/lib/query/keys";
 import { trackBacklinksEvent } from "./telemetry";
 
@@ -65,7 +65,7 @@ export function useAhrefsDomainRatings(brandKey: string) {
       try {
         for (const batch of chunkArray(targets, DOMAINS_PER_REQUEST)) {
           const response = await fetchJson<AhrefsDrResponse>(
-            "/api/customer/backlinks/ahrefs-dr",
+            withBrand("/api/customer/backlinks/ahrefs-dr", brandKey),
             { method: "POST", body: { domains: batch } },
           );
           Object.assign(fetched, response.ratings ?? {});
