@@ -74,6 +74,21 @@ function requestIdOf(ctx: LocalToolContext): string {
   return ctx.requestId ?? crypto.randomUUID();
 }
 
+async function resumeFetch(
+  ctx: LocalToolContext,
+  ws: Parameters<typeof collectFetch>[0],
+  fetchId: string,
+  kind: "reviews" | "updates" | "questions",
+  deps: LocalDeps,
+) {
+  const collect = ctx.deps?.collectFetch ?? collectFetch;
+  const view = await collect(ws, fetchId, deps);
+  if (view.kind !== kind) {
+    throw new AppError(400, "fetch_kind_mismatch", `That fetchId belongs to a ${view.kind} fetch, not ${kind}.`);
+  }
+  return view;
+}
+
 function requireMaxUsd(maxUsd: number | undefined, action: string): number {
   if (maxUsd == null) {
     throw new AppError(
@@ -319,9 +334,7 @@ export const getBusinessReviewsTool = {
     const ws = toolWorkspace(ctx) as Parameters<typeof startFetch>[0];
     const deps = toolDeps(ctx);
     if (input.fetchId) {
-      const collect = ctx.deps?.collectFetch ?? collectFetch;
-      const view = await collect(ws, input.fetchId, deps);
-      return fetchViewOutput.parse(view);
+      return fetchViewOutput.parse(await resumeFetch(ctx, ws, input.fetchId, "reviews", deps));
     }
     const maxUsd = requireMaxUsd(input.maxUsd, "local.reviews.collect");
     if (!input.businessId || input.depth == null) {
@@ -363,9 +376,7 @@ export const getBusinessUpdatesTool = {
     const ws = toolWorkspace(ctx) as Parameters<typeof startFetch>[0];
     const deps = toolDeps(ctx);
     if (input.fetchId) {
-      const collect = ctx.deps?.collectFetch ?? collectFetch;
-      const view = await collect(ws, input.fetchId, deps);
-      return fetchViewOutput.parse(view);
+      return fetchViewOutput.parse(await resumeFetch(ctx, ws, input.fetchId, "updates", deps));
     }
     const maxUsd = requireMaxUsd(input.maxUsd, "local.updates.collect");
     if (!input.businessId || input.depth == null) {
@@ -388,36 +399,19 @@ const getGoogleBusinessQuestionsInput = z.strictObject({
   fetchId: z.string().uuid().optional(),
 });
 
-const questionsOutput = z.looseObject({
-  id: z.string(),
-  kind: z.string(),
-  status: z.enum(["processing", "completed", "failed"]),
-  businessId: z.string().nullable(),
-  params: z.looseObject({ depth: z.number() }),
-  totals: z.looseObject({}).nullable(),
-  items: z.array(z.unknown()).nullable(),
-  itemCount: z.number(),
-  reused: z.boolean(),
-  error: z.looseObject({ code: z.string(), message: z.string() }).nullable(),
-  createdAt: z.string(),
-  completedAt: z.string().nullable(),
-  pollAfterSeconds: z.number().nullable(),
-});
 
 export const getGoogleBusinessQuestionsTool = {
   name: "get_google_business_questions",
   description:
-    "Fetches Google Business Profile questions and answers for one business (by businessName, cid, or placeId) near a coordinate. Run this only when Q&A evidence is needed. Paid: call the price estimate for local.questions.collect first and pass the approved maxUsd.",
+    "Fetches Google Business Profile questions and answers for one saved business (pass its businessId; save it first with get_business_profile, whose full profile also supplies the location the search needs). Run this only when Q&A evidence is needed. Usually completes within this call; a 'processing' response returns a fetchId to call back with in 30-60 seconds at no extra cost. Paid: call the price estimate for local.questions.collect first and pass the approved maxUsd.",
   input: getGoogleBusinessQuestionsInput,
-  output: questionsOutput,
+  output: fetchViewOutput,
   handler: async (ctx: LocalToolContext, rawInput?: unknown) => {
     const input = getGoogleBusinessQuestionsInput.parse(rawInput ?? {});
     const ws = toolWorkspace(ctx) as Parameters<typeof startFetch>[0];
     const deps = toolDeps(ctx);
     if (input.fetchId) {
-      const collect = ctx.deps?.collectFetch ?? collectFetch;
-      const view = await collect(ws, input.fetchId, deps);
-      return questionsOutput.parse(view);
+      return fetchViewOutput.parse(await resumeFetch(ctx, ws, input.fetchId, "questions", deps));
     }
     const maxUsd = requireMaxUsd(input.maxUsd, "local.questions.collect");
     if (!input.businessId || input.depth == null) {
@@ -429,7 +423,7 @@ export const getGoogleBusinessQuestionsTool = {
       { kind: "questions", businessId: input.businessId, depth: input.depth, maxUsd, requestId: requestIdOf(ctx) },
       deps,
     );
-    return questionsOutput.parse(view);
+    return fetchViewOutput.parse(view);
   },
 };
 

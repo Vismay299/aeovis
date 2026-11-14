@@ -307,3 +307,18 @@ test("handlers call services with maxUsd and return parsed views", async () => {
     assert.equal(seenMaxUsd, 0.02);
   }
 });
+
+test("resume refuses a fetchId of another kind", async () => {
+  const ctx = makeContext({
+    deps: { collectFetch: (async () => fetchView({ kind: "reviews" })) as never },
+  });
+  await assert.rejects(
+    getBusinessUpdatesTool.handler(ctx, { fetchId: FETCH_ID }),
+    (err: unknown) => (err as { code?: string }).code === "fetch_kind_mismatch",
+  );
+});
+
+test("questions description names the businessId input it actually accepts", () => {
+  assert.match(getGoogleBusinessQuestionsTool.description, /businessId/);
+  assert.doesNotMatch(getGoogleBusinessQuestionsTool.description, /businessName/);
+});
