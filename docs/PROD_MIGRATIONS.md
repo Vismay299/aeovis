@@ -1818,3 +1818,12 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - **Applied-check:** `select to_regclass('public.scans_derive_history_columns'::regproc);` returns a row; `select count(*) from public.scans where listed_at is null;` returns 0.
 - **Rollback:** leaving 066 in place after reverting the phase-5 code is harmless (unused derived columns). The trigger keeps the columns populated for any future use.
 - **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f06-db.mjs`. Never run that harness against production.
+
+## `095_f12_question_answer_links.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply after F08's `075`–`076` (the migration refuses to apply without them) and before deploying F12 phase 1.
+- **Additive only.** Creates the tenant-readable `question_answer_links` table (RLS enabled; `authenticated` may `SELECT` only its own workspace's rows, `anon` is refused) plus the service-role-only `link_question_answers` (links terminal scan, explore and legacy answers to workspace questions; `p_import_missing` creates archived `import` questions) and `prune_question_answer_links` (395-day retention) functions.
+- **Pre-check:** `select to_regclass('public.question_answer_links');` returns null.
+- **Applied-check:** `select to_regclass('public.question_answer_links');` returns `question_answer_links`; `select count(*) from pg_proc where proname in ('link_question_answers','prune_question_answer_links');` returns 2.
+- **Rollback:** leaving 095 in place after reverting the phase-1 code is harmless (unused table and functions; the periodic stops calling them). `truncate question_answer_links;` is safe — links are rebuilt by the backfill in `docs/runbooks/question-history-backfill.md`.
+- **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f12-db.mjs`. Never run that harness against production.

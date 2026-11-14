@@ -551,6 +551,11 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "settle_finished_explore_holds" },
     { kind: "function", name: "prune_explore_runs" },
   ],
+  "095_f12_question_answer_links.sql": [
+    { kind: "table", name: "question_answer_links" },
+    { kind: "function", name: "link_question_answers" },
+    { kind: "function", name: "prune_question_answer_links" },
+  ],
   "120_f17_local_seo.sql": [
     { kind: "table", name: "local_businesses" },
     { kind: "table", name: "local_fetches" },

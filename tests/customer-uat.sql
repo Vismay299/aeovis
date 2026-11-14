@@ -28,6 +28,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/076_f08_question_backfill.sql
 \ir ../supabase/migrations/080_f09_price_approvals.sql
 \ir ../supabase/migrations/085_f10_customer_schedules.sql
+\ir ../supabase/migrations/095_f12_question_answer_links.sql
 \ir ../supabase/migrations/100_f13_saved_keywords.sql
 \ir ../supabase/migrations/102_f13_saved_keyword_functions.sql
 \ir ../supabase/migrations/110_f15_rank_tracking.sql
@@ -698,5 +699,39 @@ DO $f06p5$ BEGIN
 END $f06p5$;
 RESET ROLE;
 -- End F06 phase 5 tenant check.
+
+-- F12: each member reads only their own workspace's question_answer_links rows.
+-- Customers may read their links but cannot write them directly.
+RESET ROLE;
+INSERT INTO public.prompt_results(id, job_id, brand, query, engine, answered) VALUES
+ ('12000000-0000-0000-0000-000000000001','12000000-0000-0000-0000-000000000011','10000000-0000-0000-0000-000000000001','Which tools suit workspace A buyers?','chatgpt',true),
+ ('12000000-0000-0000-0000-000000000002','12000000-0000-0000-0000-000000000012','10000000-0000-0000-0000-000000000002','Which tools suit workspace B buyers?','chatgpt',true);
+INSERT INTO public.question_answer_links(brand_key, question_id, source, prompt_result_id, scan_job_id, engine, asked_text, collected_at, linked_by) VALUES
+ ('10000000-0000-0000-0000-000000000001','50000000-0000-0000-0000-000000000001','legacy','12000000-0000-0000-0000-000000000001','12000000-0000-0000-0000-000000000011','chatgpt','Which tools suit workspace A buyers?',now(),'backfill'),
+ ('10000000-0000-0000-0000-000000000002','50000000-0000-0000-0000-000000000003','legacy','12000000-0000-0000-0000-000000000002','12000000-0000-0000-0000-000000000012','chatgpt','Which tools suit workspace B buyers?',now(),'backfill');
+GRANT SELECT ON public.question_answer_links TO authenticated;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $f12$ BEGIN
+  IF (SELECT count(*) FROM public.question_answer_links) <> 1
+   OR (SELECT brand_key FROM public.question_answer_links) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F12 links leaked across customer workspaces'; END IF;
+END $f12$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $f12$ BEGIN
+  IF (SELECT count(*) FROM public.question_answer_links) <> 1
+   OR (SELECT brand_key FROM public.question_answer_links) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F12 links leaked across customer workspaces'; END IF;
+END $f12$;
+SET LOCAL ROLE anon;
+DO $f12$ BEGIN
+  BEGIN
+    PERFORM count(*) FROM public.question_answer_links;
+    RAISE EXCEPTION 'F12 anon read of question_answer_links was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $f12$;
+RESET ROLE;
+-- End F12 tenant check.
 ROLLBACK;
 

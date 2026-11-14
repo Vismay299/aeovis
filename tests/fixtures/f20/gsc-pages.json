@@ -1,0 +1,46 @@
+{
+  "rows": [
+    {
+      "keys": ["https://example.com/guides/seo"],
+      "clicks": 12,
+      "impressions": 900,
+      "ctr": 0.0133,
+      "position": 8.4
+    },
+    {
+      "keys": ["https://EXAMPLE.com/High-Value/?ref=gsc"],
+      "clicks": 10,
+      "impressions": 1000,
+      "ctr": 0.01,
+      "position": 6
+    },
+    {
+      "keys": ["https://example.com/other"],
+      "clicks": 5,
+      "impressions": 500,
+      "ctr": 0.01,
+      "position": 12
+    },
+    {
+      "keys": ["https://example.com/no-analytics"],
+      "clicks": 1,
+      "impressions": 2000,
+      "ctr": 0.0005,
+      "position": 8
+    },
+    {
+      "keys": ["https://example.com/top-result"],
+      "clicks": 100,
+      "impressions": 3000,
+      "ctr": 0.0333,
+      "position": 2
+    },
+    {
+      "keys": ["https://example.com/too-deep"],
+      "clicks": 3,
+      "impressions": 400,
+      "ctr": 0.0075,
+      "position": 25
+    }
+  ]
+}
