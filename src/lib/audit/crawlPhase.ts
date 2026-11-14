@@ -25,6 +25,7 @@ import { getOrigin, isSameOrigin } from "./urlUtils.ts";
 import { isCrawlableUrl } from "./urlPolicy.ts";
 import { createCancelProbe } from "./cancel.ts";
 import { AuditPhaseError } from "./errors.ts";
+import { renderPage } from "./renderedPage.ts";
 import type { AuditRow, AuditStore, ClaimedUrl } from "./store.ts";
 import type { CrawledPageResult } from "./types.ts";
 
@@ -42,6 +43,9 @@ export interface CrawlDeps {
   initialIntervalMs?: number;
   now?: () => number;
   createCancelProbe?: typeof createCancelProbe;
+  firecrawlApiKey?: string;
+  firecrawlFetchImpl?: typeof fetch;
+  renderPage?: typeof renderPage;
 }
 
 export interface CrawlChunkInput {
@@ -151,12 +155,36 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
 
   const lookupFn = deps?.lookup ?? defaultLookup;
   const cachedLookup = createCachedLookup(lookupFn);
+  const renderUsage = { attempts: 0, billed: 0 };
+  const baseRenderAttempts = audit.render_attempts ?? 0;
+  const baseRenderBilled = audit.render_billed ?? 0;
+  const renderImpl = deps?.renderPage ?? renderPage;
+  const shouldRender = Boolean(audit.render_javascript) && Boolean(audit.render_hold_id);
+  const firecrawlApiKey =
+    deps?.firecrawlApiKey ?? (typeof process !== "undefined" ? (process.env as any)?.FIRECRAWL_API_KEY : undefined);
+  const renderFn = shouldRender && firecrawlApiKey
+    ? async (url: string) => {
+        const rendered = await renderImpl(url, {
+          apiKey: firecrawlApiKey as string,
+          usage: renderUsage,
+          fetchImpl: deps?.firecrawlFetchImpl,
+          auditId,
+        });
+        return { html: rendered.html, status: rendered.status ?? undefined };
+      }
+    : undefined;
   const fetchOptions: CrawlPageOptions = {
     deps: {
       safeFetch: (deps?.safeFetch as any) ?? safeFetch,
       lookup: cachedLookup,
       now: deps?.now ?? (() => Date.now()),
     },
+    ...(renderFn
+      ? {
+          render: renderFn,
+          renderThrottled: audit.site_platform === "shopify",
+        }
+      : {}),
   };
 
   const parsedRobots = parseAuditRobots(audit.robots_txt);
@@ -228,6 +256,8 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
       pages_crawled: newStats.attempted,
       pages_total: Math.min(newStats.seen, audit!.max_pages),
       pages_seen: newStats.seen,
+      render_attempts: baseRenderAttempts + renderUsage.attempts,
+      render_billed: baseRenderBilled + renderUsage.billed,
     });
 
     ctx?.progress?.(newStats.attempted, Math.min(newStats.seen, audit!.max_pages), "Crawling pages");
@@ -354,7 +384,7 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
     throttleState: throttle.state,
     resumeAt,
     finishedAt,
-    renderUsage: { attempts: 0, billed: 0 },
+    renderUsage: { ...renderUsage },
     cancelled,
   };
 }

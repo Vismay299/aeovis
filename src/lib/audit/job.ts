@@ -14,6 +14,7 @@ import { getSupabaseAdmin } from "../supabase/admin.js";
 import { createSqlAuditStore, type AuditStore, type AuditRow } from "./store.ts";
 import { AuditPhaseError, classifyAuditFailure } from "./errors.ts";
 import { captureAuditEvent } from "./telemetry.ts";
+import { settleRenderHold } from "./renderSettle.ts";
 import {
   resolveAuditStart,
   runDiscoveryPhase,
@@ -29,6 +30,9 @@ import type { DetectedIssue } from "./issues/pageReporters.ts";
 export interface JobDeps extends PhaseDeps, CrawlDeps {
   store?: AuditStore;
   admin?: any;
+  settleSpendBatch?: import("./renderSettle.ts").RenderSettleDeps["settleSpendBatch"];
+  firecrawlUnitUsd?: number;
+  env?: Record<string, string | undefined>;
 }
 
 let boundStore: AuditStore | null = null;
@@ -69,6 +73,8 @@ export const AUDIT_STEPS = {
 export const siteAuditPayloadSchema = z.strictObject({
   auditId: z.string().uuid(),
 });
+
+export { settleRenderHold } from "./renderSettle.ts";
 
 export function registerSiteAuditJob(): void {
   if (getJobDefinition("site_audit.run")) return;
@@ -230,7 +236,7 @@ export function registerSiteAuditJob(): void {
         // 9. settle-render
         if (freshForCrawl.render_hold_id) {
           await ctx.step.do("settle-render", AUDIT_STEPS.settleRender, async () => {
-            return { settled: false };
+            return settleRenderHold(auditId, store, admin, { ...deps, jobId: ctx.jobId });
           });
         }
 
@@ -282,7 +288,7 @@ export function registerSiteAuditJob(): void {
 
           if (audit.render_hold_id) {
             await ctx.step.do("settle-render", AUDIT_STEPS.settleRender, async () => {
-              return { settled: false };
+              return settleRenderHold(auditId, store, admin, { ...deps, jobId: ctx.jobId });
             });
           }
 
