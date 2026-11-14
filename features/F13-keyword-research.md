@@ -1011,9 +1011,9 @@ Search textarea and every icon button have labels; sortable headers expose `aria
 
 **Goal:** `/portal/keywords/saved` with tags, bulk actions, export and refresh.
 
-- [ ] **P5.T1 Page**
+- [x] **P5.T1 Page**
   - [x] **P5.T1.S1** *Files:* `src/app/portal/keywords/saved/page.tsx`, `src/components/portal/keywords/saved/{SavedKeywordsPage,SavedKeywordsHeader,SavedKeywordsTable,SavedKeywordsFilters,SavedKeywordsFilterPanel,SavedKeywordsTagFilter,ManageTagRow,TagChip,SavedKeywordsBulkActionBar,SavedKeywordsBulkTagsModal,SavedKeywordsModals,RefreshStatsStatus}.tsx`, `saved/hooks/{useSavedKeywordsQuery,useSavedKeywordsExport,useTagManage,useRefreshStats}.ts`, `src/styles/app-theme.css` (eight `.tag-chip-<color>` rules from OpenSEO's stylesheet, light and dark). *Do:* §6.6.3. *Verify:* `npm run build` → exit 0.
-- [ ] **P5.T2 Browser checks**
+- [x] **P5.T2 Browser checks**
   - [x] **P5.T2.S1** *Files:* `scripts/qa/check-f13-browser.mjs` (B19–B22; B9–B17 belong to phase 4 and B18 to phase 8). B19 typing "tee" in Include Terms updates the URL once after 350 ms (two keystrokes inside the window → one navigation); B20 bulk tag add/remove toasts; delete confirm and toast; B21 refresh: dialog → `202` → progress text → finish toast; B22 tag delete `409` toast copy and empty/filtered-empty states. *Verify:* `node scripts/qa/check-f13-browser.mjs --only B19-B22` → "ok 4 scenarios" (F13-AC-21).
 
 **Checkpoint:** full suite, build, `check-f13-browser.mjs`. Completes F13-AC-21.
@@ -1036,7 +1036,7 @@ Search textarea and every icon button have labels; sortable headers expose `aria
 
 - [x] **P7.T1 Service, route and dialog**
   - [x] **P7.T1.S1** *Files:* `src/lib/keywords/trackQuestion.ts`, `trackQuestion.test.ts`, `src/app/api/customer/keywords/track-question/route.ts`, contract. *Do:* §6.2.4; tests with an injected `add`: arguments (`origin "manual"`, `sourceRef`), `created`/`revived` passthrough, `question_limit` passthrough; route: `question_curation` off → 404. *Verify:* `node --test src/lib/keywords/trackQuestion.test.ts src/lib/keywords/keywords.route.test.mjs` → pass (F13-AC-19).
-  - [x] **P7.T1.S2** *Files:* `src/components/portal/keywords/TrackQuestionDialog.tsx`, `research/OverviewStats.tsx`, `saved/SavedKeywordsTable.tsx`, `scripts/qa/check-f13-browser.mjs` (B14: button hidden when `question_curation` off; created toast with "Open Questions"; existing toast). *Verify:* `node scripts/qa/check-f13-browser.mjs --only B14` → "ok 1 scenario".
+  - [x] **P7.T1.S2** *Files:* `src/components/portal/keywords/TrackQuestionDialog.tsx`, `research/OverviewStats.tsx`, `saved/SavedKeywordsTable.tsx`, `scripts/qa/check-f13-browser.mjs` (B24 — the spec first said B14, which phase 4 already uses for SERP pagination: button hidden when `question_curation` off; created toast with "Open Questions"; existing toast). *Verify:* `node scripts/qa/check-f13-browser.mjs --only B24` → "ok 1 scenario".
 
 **Checkpoint:** full suite, build, browser B14. Completes F13-AC-19.
 
