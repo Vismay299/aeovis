@@ -1,0 +1,61 @@
+{
+  "observations": [
+    {
+      "id": "obs-answered-1",
+      "purpose": "scan",
+      "state": "answered",
+      "reason": null,
+      "observed_at": "2026-10-20T10:12:04.000Z",
+      "answer_present": true,
+      "aio_present": false,
+      "serp_state": null,
+      "error": null,
+      "mention_state": "observed",
+      "own_mentioned": true,
+      "own_cited": false,
+      "brands": [
+        { "name": "Offcult", "is_self": true, "mentioned": true },
+        { "name": "Bewakoof", "is_self": false, "mentioned": true }
+      ],
+      "competitors_cited": ["Bewakoof"],
+      "method": "model_api",
+      "is_branded": false
+    },
+    {
+      "id": "obs-no-aio-1",
+      "purpose": "scan",
+      "state": "valid_no_aio",
+      "reason": null,
+      "observed_at": "2026-10-20T10:14:41.000Z",
+      "answer_present": false,
+      "aio_present": false,
+      "serp_state": "no_overview",
+      "error": null,
+      "mention_state": null,
+      "own_mentioned": null,
+      "own_cited": null,
+      "brands": [],
+      "competitors_cited": [],
+      "method": "google_serp",
+      "is_branded": false
+    },
+    {
+      "id": "obs-failed-1",
+      "purpose": "scan",
+      "state": "failed",
+      "reason": "provider_error",
+      "observed_at": "2026-10-19T09:00:00.000Z",
+      "answer_present": false,
+      "aio_present": false,
+      "serp_state": null,
+      "error": "provider exploded",
+      "mention_state": null,
+      "own_mentioned": null,
+      "own_cited": null,
+      "brands": [],
+      "competitors_cited": [],
+      "method": "model_api",
+      "is_branded": false
+    }
+  ]
+}
