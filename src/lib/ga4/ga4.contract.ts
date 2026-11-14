@@ -99,6 +99,41 @@ export const ga4DisconnectResponse = z.looseObject({
   connected: z.boolean(),
 });
 
+export const ga4OpportunitiesQuery = z.strictObject({
+  brand_key: z.string().optional(),
+  range: z.enum(["last_7_days", "last_28_days", "last_90_days"]).optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  limit: z.number().optional(),
+});
+
+export const ga4OpportunityRowSchema = z.looseObject({
+  page: z.string(),
+  normalizedPage: z.string().nullable(),
+  clicks: z.number(),
+  impressions: z.number(),
+  ctr: z.number(),
+  position: z.number(),
+  joinStatus: z.enum(["joined", "gsc_only"]),
+  ga4: z.looseObject({}).nullable(),
+  score: z.number().nullable(),
+  scoreComponents: z.looseObject({}).nullable(),
+});
+
+export const ga4OpportunitiesResponse = z.looseObject({
+  status: z.string(),
+  rows: z.array(ga4OpportunityRowSchema),
+  rowCount: z.number(),
+  totalCandidateRows: z.number(),
+  scoring: z.looseObject({}),
+  coverage: z.looseObject({}),
+  truncated: z.looseObject({}),
+  warnings: z.array(z.string()),
+  request: z.looseObject({}),
+  source: z.looseObject({}),
+  dataAsOf: z.string(),
+  cached: z.boolean(),
+});
 export const contracts = [
   defineRouteContract({
     id: "customer.ga4.status.get",
@@ -333,5 +368,47 @@ export const contracts = [
     response: z.looseObject({}),
     errorCodes: ["unauthenticated", "feature_unavailable", "ga4_not_connected"],
     examples: [{ response: { status: "ok" } }],
+  }),
+  defineRouteContract({
+    id: "customer.ga4.opportunities.get",
+    method: "GET",
+    path: "/api/customer/ga4/opportunities",
+    file: "src/app/api/customer/ga4/opportunities/route.ts",
+    auth: "workspace",
+    query: ga4OpportunitiesQuery,
+    response: ga4OpportunitiesResponse,
+    errorCodes: [
+      "unauthenticated",
+      "feature_unavailable",
+      "invalid_request",
+      "ga4_not_connected",
+      "ga4_reconnect_required",
+      "ga4_property_inaccessible",
+      "ga4_quota_exhausted",
+      "ga4_upstream_unavailable",
+      "ga4_malformed_response",
+      "gsc_not_connected",
+      "gsc_reconnect_required",
+      "gsc_quota_exhausted",
+      "gsc_unavailable",
+    ],
+    examples: [
+      {
+        response: {
+          status: "ok",
+          rows: [],
+          rowCount: 0,
+          totalCandidateRows: 0,
+          scoring: {},
+          coverage: {},
+          truncated: {},
+          warnings: [],
+          request: {},
+          source: {},
+          dataAsOf: "2026-10-22T09:00:00.000Z",
+          cached: false,
+        },
+      },
+    ],
   }),
 ];
