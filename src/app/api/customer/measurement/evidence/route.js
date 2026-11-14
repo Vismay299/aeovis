@@ -16,11 +16,23 @@ export async function GET(request) {
     .eq("scan_jobs.brand_key", ctx.brand.brandKey)
     .maybeSingle();
   if (error) return fail("Could not read evidence ownership", 503);
-  if (!observation) return fail("Evidence unavailable", 404);
+  let observationId = observation?.id || null;
+  if (!observationId) {
+    const { data: exploreObservation, error: exploreError } = await admin
+      .from("probe_observations")
+      .select("id")
+      .eq("id", params.get("observation"))
+      .eq("purpose", "explore")
+      .eq("brand_key", ctx.brand.brandKey)
+      .maybeSingle();
+    if (exploreError) return fail("Could not read evidence ownership", 503);
+    if (!exploreObservation) return fail("Evidence unavailable", 404);
+    observationId = exploreObservation.id;
+  }
   const { data: capture, error: readError } = await admin
     .from("measurement_evidence")
     .select("*")
-    .eq("observation_id", observation.id)
+    .eq("observation_id", observationId)
     .eq("attempt_token", params.get("attempt"))
     .eq("capture_index", Number(params.get("index") || 0))
     .maybeSingle();
