@@ -126,7 +126,7 @@ test("F26-AC-10 job throw reports with job_kind", async () => {
 test("F26-AC-10 onRequestError passes only routePath sliced to 64", async () => {
   const here = dirname(fileURLToPath(import.meta.url));
   const src = readFileSync(join(here, "../../instrumentation.ts"), "utf8");
-  assert.match(src, /route:\s*context\.routePath\.slice\(0,\s*64\)/);
+  assert.match(src, /route:\s*String\(context\?\.routePath \?\? "unknown"\)\.slice\(0,\s*64\)/);
   // The request (path, headers) is never read: no property access on the request arg.
   assert.equal(/_request\./.test(src), false);
   assert.equal(/request\.headers/.test(src), false);
