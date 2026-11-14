@@ -209,6 +209,7 @@ jobs:
           node scripts/qa/check-f03-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f08-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f19-browser.mjs http://127.0.0.1:3328
+          node scripts/qa/check-f25-browser.mjs http://127.0.0.1:3328
           npx playwright install --with-deps chromium
           npm run qa:public-browser -- http://127.0.0.1:3328 test_reports/public-browser
 

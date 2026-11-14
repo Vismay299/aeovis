@@ -674,3 +674,7 @@ SOFTWARE.
 - `src/lib/rank-tracking/jobs.ts` (from `openseo:src/server/features/rank-tracking/jobs`)
 - `src/lib/rank-tracking/service.test.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.test.ts`)
 - `src/lib/rank-tracking/rankTracking.contract.ts` (from `openseo:src/types/schemas/rank-tracking.ts`)
+
+### F25 Phase 3 ports
+- `src/components/portal/email/EmailSettings.tsx` (from `src/client/features/settings/PrivacySettings.tsx`)
+- `src/components/portal/email/ProductUpdatesSwitch.tsx` (from `src/client/features/settings/PrivacySettings.tsx`, `src/client/features/onboarding/AnalyticsOnboardingStep.tsx`)
