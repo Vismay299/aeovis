@@ -777,6 +777,17 @@ SOFTWARE.
 - `src/lib/onboarding/steps.ts` (from `openseo:src/serverFunctions/onboarding.ts:77-136`)
 - `src/lib/onboarding/setup.ts` (from `openseo:src/server/features/dashboard/services/DashboardService.ts:52-98`, `openseo:src/serverFunctions/dashboard.ts:55-66`)
 
+### F11 Phase 3 ports
+- `src/components/portal/explore/ExplorePage.tsx` (from `openseo:src/client/features/ai-search/PromptExplorerPage.tsx`)
+- `src/components/portal/explore/ExploreForm.tsx` (from `openseo:src/client/features/ai-search/components/PromptExplorerForm.tsx`)
+- `src/components/portal/explore/ExploreResults.tsx` (from `openseo:src/client/features/ai-search/components/PromptExplorerResults.tsx`)
+- `src/components/portal/explore/ExploreLoadingState.tsx` (from `openseo:src/client/features/ai-search/components/PromptExplorerLoadingState.tsx`)
+- `src/components/portal/explore/RecentQuestions.tsx` (from `openseo:src/client/features/ai-search/PromptExplorerPage.tsx`)
+- `src/components/portal/explore/TrackQuestionButton.tsx` (from `openseo:src/client/features/ai-search/PromptExplorerPage.tsx`)
+- `src/components/portal/explore/engineAccents.ts` (from `openseo:src/client/features/ai-search/platformLabels.ts:13-35`)
+- `src/components/portal/explore/hooks/useExplore.ts` (from `openseo:src/client/features/ai-search/promptExplorerQuery.ts`)
+- `src/app/portal/explore/page.tsx` (from `openseo:src/routes/_app/p/$projectId/prompt-explorer.tsx`)
+
 ### F27 Phase 2 ports
 - `src/components/portal/onboarding/OnboardingShell.tsx` (from `src/client/features/onboarding/PostSignupOnboarding.tsx:22-69`, `src/client/features/onboarding/OnboardingCard.tsx:8-51`)
 - `src/components/portal/onboarding/WizardFooter.tsx` (from `src/client/features/onboarding/WizardFooter.tsx`)

@@ -767,12 +767,12 @@ Body: country line ("Country hint sent: {Country}. This is not a verified search
 
 **Goal:** customers use Prompt Explorer in the portal and can track a question.
 
-- [ ] **P3.T1 Track**
-  - [ ] **P3.T1.S1** *Files:* `src/app/api/customer/explore/[runId]/track/route.ts` (calls `trackExploreQuestion`), `service.ts`. *Verify:* route test cases: created true then false on repeat; `question_id` stored; F08 error passthrough (F11-AC-16).
-- [ ] **P3.T2 UI**
-  - [ ] **P3.T2.S1** *Files:* `src/components/app/markdown/MarkdownAnswer.tsx`, `src/components/app/ExpandableList.tsx` (if F04 lacks it). *Verify:* `npm run build` → exit 0.
-  - [ ] **P3.T2.S2** *Files:* `src/components/portal/explore/*` (§6.6), `src/app/portal/explore/page.tsx`, `src/lib/query/keys.ts`, `src/components/app/navigation/items.ts`, `src/app/api/customer/overview/route.js` (`features.prompt_explorer`). *Verify:* `npm run build` → exit 0.
-  - [ ] **P3.T2.S3** *Files:* `scripts/qa/check-f11-browser.mjs` (Playwright from `worker/node_modules/playwright`; local app with fixture API responses for estimate, start, run polling, list, track). Scenarios: disabled state; empty state copy; validation messages; price dialog before any POST to `/api/customer/explore` (network log asserts order); running skeletons named per model; completed cards with tokens, web search, brand badges, "+N more" citations, fan-out, unreported fan-out note, skipped Gemini card copy, error card charge copy; partial banner; 429 countdown; track → "Tracked" + "View history" link; loading `?run=` makes no POST; phone viewport 390 px has no horizontal scroll. *Verify:* `node scripts/qa/check-f11-browser.mjs` → "14 passed" (F11-AC-17, 19 UI half).
+- [x] **P3.T1 Track**
+  - [x] **P3.T1.S1** *Files:* `src/app/api/customer/explore/[runId]/track/route.ts` (calls `trackExploreQuestion`), `service.ts`. *Verify:* route test cases: created true then false on repeat; `question_id` stored; F08 error passthrough (F11-AC-16).
+- [x] **P3.T2 UI**
+  - [x] **P3.T2.S1** *Files:* `src/components/app/markdown/MarkdownAnswer.tsx`, `src/components/app/ExpandableList.tsx` (if F04 lacks it). *Verify:* `npm run build` → exit 0.
+  - [x] **P3.T2.S2** *Files:* `src/components/portal/explore/*` (§6.6), `src/app/portal/explore/page.tsx`, `src/lib/query/keys.ts`, `src/components/app/navigation/items.ts`, `src/app/api/customer/overview/route.js` (`features.prompt_explorer`). *Verify:* `npm run build` → exit 0.
+  - [x] **P3.T2.S3** *Files:* `scripts/qa/check-f11-browser.mjs` (Playwright from `worker/node_modules/playwright`; local app with fixture API responses for estimate, start, run polling, list, track). Scenarios: disabled state; empty state copy; validation messages; price dialog before any POST to `/api/customer/explore` (network log asserts order); running skeletons named per model; completed cards with tokens, web search, brand badges, "+N more" citations, fan-out, unreported fan-out note, skipped Gemini card copy, error card charge copy; partial banner; 429 countdown; track → "Tracked" + "View history" link; loading `?run=` makes no POST; phone viewport 390 px has no horizontal scroll. *Verify:* `node scripts/qa/check-f11-browser.mjs` → "14 passed" (F11-AC-17, 19 UI half).
 
 **Checkpoint:** full suite, build, browser check. Completes F11-AC-16, 17, 19.
 

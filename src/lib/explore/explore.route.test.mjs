@@ -679,19 +679,166 @@ test("GET /api/customer/explore/[runId]: fetching run details (F11-AC-15)", asyn
   });
 });
 
-test("POST /api/customer/explore/[runId]/track: phase 2 stub (F11-AC-19 API half)", async (t) => {
-  await t.test("returns 501 not_available with descriptive message", async () => {
-    const deps = makeDeps();
-    const req = new Request("https://app.test/api/customer/explore/run-1/track", {
+test("POST /api/customer/explore/[runId]/track: tracking explored question (F11-AC-16)", async (t) => {
+  function seedRun(store, runId, brandKey = BRAND_KEY) {
+    store.seedRun({
+      id: runId,
+      brand_key: brandKey,
+      created_by: USER.id,
+      prompt: "what is perceev",
+      prompt_hash: "hash-perceev",
+      highlight_brand: null,
+      models: ["chatgpt"],
+      web_search: true,
+      country: null,
+      status: "completed",
+      approved_max_usd: "0.10",
+      job_id: null,
+      question_id: null,
+      plan: [],
+      quote: {},
+      created_at: NOW.toISOString(),
+      finished_at: NOW.toISOString(),
+    });
+  }
+
+  await t.test("tracks question successfully on first call (created: true) and stores question_id", async () => {
+    const store = createMemoryExploreStore();
+    seedRun(store, "run-track-1");
+    let addedInput = null;
+
+    const deps = makeDeps({
+      store,
+      addWorkspaceQuestion: async (admin, input) => {
+        addedInput = input;
+        return {
+          question: { id: "q-new-1", status: "active" },
+          created: true,
+          revived: false,
+        };
+      },
+    });
+
+    const req = new Request("https://app.test/api/customer/explore/run-track-1/track", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({}),
     });
-    const res = await trackRoute.POST(req, { params: Promise.resolve({ runId: "run-1" }) }, deps);
-    assert.equal(res.status, 501);
+    const res = await trackRoute.POST(req, { params: Promise.resolve({ runId: "run-track-1" }) }, deps);
+    assert.equal(res.status, 200);
     const body = await res.json();
-    assert.equal(body.code, "not_available");
-    assert.equal(body.error, "Tracking explore questions will be available in Phase 3.");
+    assert.equal(body.questionId, "q-new-1");
+    assert.equal(body.created, true);
+    assert.equal(body.status, "active");
+
+    assert.equal(addedInput.brandKey, BRAND_KEY);
+    assert.equal(addedInput.text, "what is perceev");
+    assert.equal(addedInput.origin, "manual");
+    assert.equal(addedInput.createdBy, USER.id);
+    assert.deepEqual(addedInput.sourceRef, { kind: "explore_run", id: "run-track-1" });
+
+    // Verify question_id was stored on run
+    const updated = await store.getRun(BRAND_KEY, "run-track-1");
+    assert.equal(updated.question_id, "q-new-1");
+  });
+
+  await t.test("repeat track call is idempotent (created: false) and preserves question_id", async () => {
+    const store = createMemoryExploreStore();
+    seedRun(store, "run-track-repeat");
+
+    const deps = makeDeps({
+      store,
+      addWorkspaceQuestion: async () => ({
+        question: { id: "q-existing-1", status: "active" },
+        created: false,
+        revived: false,
+      }),
+    });
+
+    // First call
+    const req1 = new Request("https://app.test/api/customer/explore/run-track-repeat/track", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const res1 = await trackRoute.POST(req1, { params: Promise.resolve({ runId: "run-track-repeat" }) }, deps);
+    assert.equal(res1.status, 200);
+    const body1 = await res1.json();
+    assert.equal(body1.created, false);
+    assert.equal(body1.questionId, "q-existing-1");
+
+    // Second call
+    const req2 = new Request("https://app.test/api/customer/explore/run-track-repeat/track", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const res2 = await trackRoute.POST(req2, { params: Promise.resolve({ runId: "run-track-repeat" }) }, deps);
+    assert.equal(res2.status, 200);
+    const body2 = await res2.json();
+    assert.equal(body2.created, false);
+    assert.equal(body2.questionId, "q-existing-1");
+
+    const run = await store.getRun(BRAND_KEY, "run-track-repeat");
+    assert.equal(run.question_id, "q-existing-1");
+  });
+
+  await t.test("F08 error passes through unchanged", async () => {
+    const store = createMemoryExploreStore();
+    seedRun(store, "run-track-err");
+
+    const deps = makeDeps({
+      store,
+      addWorkspaceQuestion: async () => {
+        throw new AppError(400, "question_limit", "Workspace has reached the maximum of 100 questions.");
+      },
+    });
+
+    const req = new Request("https://app.test/api/customer/explore/run-track-err/track", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const res = await trackRoute.POST(req, { params: Promise.resolve({ runId: "run-track-err" }) }, deps);
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.equal(body.code, "question_limit");
+    assert.equal(body.error, "Workspace has reached the maximum of 100 questions.");
+
+    // question_id should NOT be set
+    const run = await store.getRun(BRAND_KEY, "run-track-err");
+    assert.equal(run.question_id, null);
+  });
+
+  await t.test("run from another workspace returns 404 explore_run_not_found", async () => {
+    const store = createMemoryExploreStore();
+    seedRun(store, "run-other-ws", OTHER_BRAND_KEY);
+
+    const deps = makeDeps({ store });
+    const req = new Request("https://app.test/api/customer/explore/run-other-ws/track", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const res = await trackRoute.POST(req, { params: Promise.resolve({ runId: "run-other-ws" }) }, deps);
+    assert.equal(res.status, 404);
+    const body = await res.json();
+    assert.equal(body.code, "explore_run_not_found");
+    assert.equal(body.error, "This question does not exist in this workspace.");
+  });
+
+  await t.test("non-existent run returns 404 explore_run_not_found", async () => {
+    const store = createMemoryExploreStore();
+    const deps = makeDeps({ store });
+    const req = new Request("https://app.test/api/customer/explore/missing-run-id/track", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const res = await trackRoute.POST(req, { params: Promise.resolve({ runId: "missing-run-id" }) }, deps);
+    assert.equal(res.status, 404);
+    const body = await res.json();
+    assert.equal(body.code, "explore_run_not_found");
   });
 
   await t.test("unexpected field in body returns 400 invalid_request", async () => {
