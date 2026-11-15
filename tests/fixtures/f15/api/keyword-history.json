@@ -1,0 +1,19 @@
+{
+  "points": [
+    {
+      "device": "mobile",
+      "checkedAt": "2026-10-30T05:12:00.000Z",
+      "position": 5
+    },
+    {
+      "device": "mobile",
+      "checkedAt": "2026-11-06T05:12:00.000Z",
+      "position": 2
+    },
+    {
+      "device": "mobile",
+      "checkedAt": "2026-11-13T05:12:00.000Z",
+      "position": 1
+    }
+  ]
+}

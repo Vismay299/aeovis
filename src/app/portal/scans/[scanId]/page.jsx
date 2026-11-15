@@ -335,6 +335,8 @@ export default function ScanReportPage() {
           <QuestionsCard
             results={results}
             planned={scan?.planned_questions}
+            questionIdByQuery={report?.questionIdByQuery}
+            scanId={scanId}
             filters={{ view: filters.view, search, engine: filters.engine }}
             onFiltersChange={(p) => {
               if ("search" in p) setSearch(p.search);

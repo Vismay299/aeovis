@@ -14,6 +14,7 @@ import {
   readEngineScores,
   engineMetricReading,
 } from "./reportData";
+import { QuestionHistoryLink } from "@/components/portal/questions/history/QuestionHistoryLink";
 import "./scans.css";
 
 /** One row per engine with its measured visibility. */
@@ -143,11 +144,13 @@ function EngineBadges({ rows }) {
   });
 }
 
-function QuestionRow({ question, engine }) {
+function QuestionRow({ question, engine, questionIdByQuery, scanId }) {
   const [open, setOpen] = useState(false);
   const id = useId();
   const rows = engine === "all" ? question.rows : question.rows.filter((row) => row.engine === engine);
   const missing = (question.missing || []).filter((name) => engine === "all" || name === engine);
+  const normalizedKey = (question.query || "").trim().toLowerCase();
+  const linkedQuestionId = questionIdByQuery ? questionIdByQuery[normalizedKey] : undefined;
 
   return (
     <li className="rounded-lg border border-border bg-card overflow-hidden pv-scans-q">
@@ -167,6 +170,11 @@ function QuestionRow({ question, engine }) {
       </button>
       {open ? (
         <div id={id} className="space-y-3 border-t border-border p-4 bg-card pv-scans-q__answers">
+          {linkedQuestionId ? (
+            <div className="pv-scans-q__history">
+              <QuestionHistoryLink questionId={linkedQuestionId} fromScan={scanId} />
+            </div>
+          ) : null}
           {rows.some((row) => row.answered === true && !row.raw?.error && row.mentioned === false && row.brand_cited !== true) ? <a href={`/portal/content?new=1&topic=${encodeURIComponent(question.query)}`} className="inline-flex text-xs font-medium text-primary hover:underline">Create content for this gap &rarr;</a> : null}
           {rows.map((row, index) => (
             <AnswerBlock key={`${row.id || row.engine || "row"}-${index}`} row={row} />
@@ -179,7 +187,7 @@ function QuestionRow({ question, engine }) {
 }
 
 /** Questions grouped by text, with tabs, search and an engine filter. */
-export function QuestionsCard({ results, planned, filters: externalFilters, onFiltersChange }) {
+export function QuestionsCard({ results, planned, filters: externalFilters, onFiltersChange, questionIdByQuery, scanId }) {
   const [internalView, setInternalView] = useState("all");
   const [internalSearch, setInternalSearch] = useState("");
   const [internalEngine, setInternalEngine] = useState("all");
@@ -288,7 +296,13 @@ export function QuestionsCard({ results, planned, filters: externalFilters, onFi
           ) : (
             <ul className="pv-scans-qlist">
               {visible.map((question) => (
-                <QuestionRow key={question.query} question={question} engine={engine} />
+                <QuestionRow
+                  key={question.query}
+                  question={question}
+                  engine={engine}
+                  questionIdByQuery={questionIdByQuery}
+                  scanId={scanId}
+                />
               ))}
             </ul>
           )}
