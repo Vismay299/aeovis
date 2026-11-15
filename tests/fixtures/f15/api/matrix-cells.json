@@ -1,0 +1,28 @@
+{
+  "cells": [
+    {
+      "runId": "run-002",
+      "checkedAt": "2026-11-06T05:12:00.000Z",
+      "trackingKeywordId": "kw-01",
+      "position": 2
+    },
+    {
+      "runId": "run-002",
+      "checkedAt": "2026-11-06T05:12:00.000Z",
+      "trackingKeywordId": "kw-02",
+      "position": 3
+    },
+    {
+      "runId": "run-003",
+      "checkedAt": "2026-11-13T05:12:00.000Z",
+      "trackingKeywordId": "kw-01",
+      "position": 1
+    },
+    {
+      "runId": "run-003",
+      "checkedAt": "2026-11-13T05:12:00.000Z",
+      "trackingKeywordId": "kw-02",
+      "position": 2
+    }
+  ]
+}

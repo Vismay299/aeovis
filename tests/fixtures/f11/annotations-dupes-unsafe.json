@@ -1,0 +1,28 @@
+{
+  "model_name": "gpt-5.6-luna",
+  "web_search": true,
+  "output_tokens": 120,
+  "items": [
+    {
+      "type": "message",
+      "sections": [
+        {
+          "type": "text",
+          "text": "Here are some recommendations.",
+          "annotations": [
+            { "title": "A", "url": "https://example.com/a" },
+            { "title": "A dup", "url": "https://example.com/a" },
+            { "title": "evil", "url": "javascript:alert(1)" },
+            { "title": "no url" },
+            { "title": "Town & Country", "url": "https://www.townandcountrymag.com/x" },
+            { "title": "Stylevana", "url": "https://www.stylevana.com/y" }
+          ]
+        }
+      ]
+    }
+  ],
+  "fan_out_queries": [
+    "best recommendations",
+    "top style guide"
+  ]
+}

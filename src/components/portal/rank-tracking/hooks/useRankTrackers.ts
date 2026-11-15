@@ -48,6 +48,21 @@ export function useRankTrackers(brandKey: string) {
   return useQuery(rankTrackersQueryOptions(brandKey));
 }
 
+export function useRankTracker(brandKey: string, configId: string) {
+  return useQuery({
+    queryKey: keys.rankTracker(brandKey, configId),
+    queryFn: ({ signal }: { signal?: AbortSignal } = {}) =>
+      fetchJson<{ tracker: RankTrackerSummary }>(
+        withBrand(
+          `/api/customer/rank-tracking/configs/${encodeURIComponent(configId)}`,
+          brandKey,
+        ),
+        { signal },
+      ),
+    enabled: Boolean(brandKey && configId),
+  });
+}
+
 export function useArchiveRankTracker(brandKey: string) {
   const client = useQueryClient();
   return useMutation({
@@ -64,3 +79,4 @@ export function useArchiveRankTracker(brandKey: string) {
     },
   });
 }
+

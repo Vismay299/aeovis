@@ -21,6 +21,7 @@ export const SPEND_FEATURES = [
   "rank_tracking.check",
   "rank_tracking.suggestions",
   "rank_tracking.metrics",
+  "ai_visibility.explore",
 ] as const;
 
 export type SpendFeature = (typeof SPEND_FEATURES)[number];
@@ -60,6 +61,7 @@ export const SPEND_FEATURE_LABELS: Record<string, string> = {
   "rank_tracking.check": "Rank checks",
   "rank_tracking.suggestions": "Rank tracking keyword suggestions",
   "rank_tracking.metrics": "Rank tracking keyword stats",
+  "ai_visibility.explore": "Prompt Explorer questions",
 };
 
 /** The label for a ledger feature; an unknown key is "Other", never an empty string. */

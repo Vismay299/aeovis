@@ -1,0 +1,345 @@
+{
+  "run": {
+    "id": "run-11111111-0000-4000-8000-000000000000",
+    "lastCheckedAt": "2026-11-13T05:12:00.000Z",
+    "status": "completed",
+    "trigger": "scheduled",
+    "method": "live",
+    "phase": null,
+    "keywordsTotal": 19,
+    "keywordsChecked": 19,
+    "isSubsetRun": false,
+    "errorCode": null,
+    "errorMessage": null,
+    "startedAt": "2026-11-13T05:12:00.000Z",
+    "completedAt": "2026-11-13T05:15:00.000Z",
+    "maybeStale": false,
+    "staleReason": null,
+    "pollAfterSeconds": null
+  },
+  "rows": [
+    {
+      "trackingKeywordId": "kw-01",
+      "keyword": "acme coffee beans",
+      "matchCase": false,
+      "searchVolume": 1200,
+      "cpc": 1.50,
+      "keywordDifficulty": 35,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 1,
+        "previousPosition": 2,
+        "rankingUrl": "https://acme.example/coffee",
+        "serpFeatures": ["ai_overview", "featured_snippet"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-02",
+      "keyword": "best espresso blend",
+      "matchCase": false,
+      "searchVolume": 2400,
+      "cpc": 2.10,
+      "keywordDifficulty": 45,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 2,
+        "previousPosition": 3,
+        "rankingUrl": "https://acme.example/espresso",
+        "serpFeatures": ["ai_overview"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-03",
+      "keyword": "organic dark roast",
+      "matchCase": true,
+      "searchVolume": 850,
+      "cpc": 1.25,
+      "keywordDifficulty": 28,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 3,
+        "previousPosition": 1,
+        "rankingUrl": "https://acme.example/dark-roast",
+        "serpFeatures": ["ai_overview", "people_also_ask"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-04",
+      "keyword": "cold brew ground coffee",
+      "matchCase": false,
+      "searchVolume": 3100,
+      "cpc": 1.80,
+      "keywordDifficulty": 50,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 5,
+        "previousPosition": 4,
+        "rankingUrl": "https://acme.example/cold-brew",
+        "serpFeatures": ["ai_overview"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-05",
+      "keyword": "french press roast",
+      "matchCase": false,
+      "searchVolume": 1600,
+      "cpc": 1.40,
+      "keywordDifficulty": 38,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 7,
+        "previousPosition": 8,
+        "rankingUrl": "https://acme.example/french-press",
+        "serpFeatures": ["ai_overview"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-06",
+      "keyword": "single origin colombian",
+      "matchCase": false,
+      "searchVolume": 950,
+      "cpc": 2.50,
+      "keywordDifficulty": 42,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 9,
+        "previousPosition": 10,
+        "rankingUrl": "https://acme.example/colombian",
+        "serpFeatures": ["ai_overview"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-07",
+      "keyword": "ethiopian yirgacheffe beans",
+      "matchCase": false,
+      "searchVolume": 700,
+      "cpc": 2.20,
+      "keywordDifficulty": 33,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 11,
+        "previousPosition": 12,
+        "rankingUrl": "https://acme.example/ethiopian",
+        "serpFeatures": ["featured_snippet"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-08",
+      "keyword": "whole bean decaf",
+      "matchCase": false,
+      "searchVolume": 1100,
+      "cpc": 1.10,
+      "keywordDifficulty": 25,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 14,
+        "previousPosition": 13,
+        "rankingUrl": "https://acme.example/decaf",
+        "serpFeatures": ["people_also_ask"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-09",
+      "keyword": "light roast coffee subscription",
+      "matchCase": false,
+      "searchVolume": 1800,
+      "cpc": 3.40,
+      "keywordDifficulty": 55,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 16,
+        "previousPosition": 18,
+        "rankingUrl": "https://acme.example/subscription",
+        "serpFeatures": ["people_also_ask"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-10",
+      "keyword": "pour over coffee filters",
+      "matchCase": false,
+      "searchVolume": 2200,
+      "cpc": 0.90,
+      "keywordDifficulty": 20,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 19,
+        "previousPosition": null,
+        "rankingUrl": "https://acme.example/filters",
+        "serpFeatures": []
+      }
+    },
+    {
+      "trackingKeywordId": "kw-11",
+      "keyword": "fresh roasted coffee online",
+      "matchCase": false,
+      "searchVolume": 3500,
+      "cpc": 2.80,
+      "keywordDifficulty": 60,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 22,
+        "previousPosition": 25,
+        "rankingUrl": "https://acme.example/fresh",
+        "serpFeatures": ["featured_snippet"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-12",
+      "keyword": "burr coffee grinder electric",
+      "matchCase": false,
+      "searchVolume": 4200,
+      "cpc": 1.70,
+      "keywordDifficulty": 62,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 26,
+        "previousPosition": 24,
+        "rankingUrl": "https://acme.example/grinder",
+        "serpFeatures": ["local_pack"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-13",
+      "keyword": "espresso tamper 58mm",
+      "matchCase": false,
+      "searchVolume": 1300,
+      "cpc": 0.85,
+      "keywordDifficulty": 18,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 30,
+        "previousPosition": 35,
+        "rankingUrl": "https://acme.example/tamper",
+        "serpFeatures": []
+      }
+    },
+    {
+      "trackingKeywordId": "kw-14",
+      "keyword": "aeropress coffee maker",
+      "matchCase": false,
+      "searchVolume": 5400,
+      "cpc": 1.20,
+      "keywordDifficulty": 40,
+      "pinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 35,
+        "previousPosition": 31,
+        "rankingUrl": "https://acme.example/aeropress",
+        "serpFeatures": []
+      }
+    },
+    {
+      "trackingKeywordId": "kw-15",
+      "keyword": "moka pot espresso",
+      "matchCase": false,
+      "searchVolume": 2900,
+      "cpc": 1.05,
+      "keywordDifficulty": 30,
+      "isPinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": null,
+        "previousPosition": 15,
+        "rankingUrl": null,
+        "serpFeatures": []
+      }
+    },
+    {
+      "trackingKeywordId": "kw-16",
+      "keyword": "specialty coffee gift set",
+      "matchCase": false,
+      "searchVolume": 1500,
+      "cpc": 2.30,
+      "keywordDifficulty": 44,
+      "isPinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 4,
+        "previousPosition": 4,
+        "rankingUrl": "https://acme.example/gift-set",
+        "serpFeatures": ["people_also_ask"]
+      }
+    },
+    {
+      "trackingKeywordId": "kw-17",
+      "keyword": "guatemalan antigua coffee",
+      "matchCase": false,
+      "searchVolume": 600,
+      "cpc": 1.95,
+      "keywordDifficulty": 29,
+      "isPinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 6,
+        "previousPosition": 7,
+        "rankingUrl": "https://acme.example/guatemalan",
+        "serpFeatures": []
+      }
+    },
+    {
+      "trackingKeywordId": "kw-18",
+      "keyword": "sumatra mandheling dark",
+      "matchCase": false,
+      "searchVolume": 750,
+      "cpc": 2.05,
+      "keywordDifficulty": 31,
+      "isPinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 12,
+        "previousPosition": 15,
+        "rankingUrl": "https://acme.example/sumatra",
+        "serpFeatures": []
+      }
+    },
+    {
+      "trackingKeywordId": "kw-19",
+      "keyword": "fair trade organic coffee",
+      "matchCase": false,
+      "searchVolume": 2000,
+      "cpc": 1.65,
+      "keywordDifficulty": 48,
+      "isPinned": false,
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
+      "mobile": {
+        "checkedAt": "2026-11-13T05:12:00.000Z",
+        "position": 18,
+        "previousPosition": 20,
+        "rankingUrl": "https://acme.example/fair-trade",
+        "serpFeatures": []
+      }
+    }
+  ]
+}

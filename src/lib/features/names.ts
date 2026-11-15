@@ -60,6 +60,8 @@ export const FEATURES = {
   rank_tracking: { spend: ["rank_tracking.check", "rank_tracking.suggestions", "rank_tracking.metrics"] as const },
   // F15: "Track as AI question" action and the AI-visibility column.
   rank_tracking_ai_questions: { spend: [] as const },
+  // F11: Prompt Explorer
+  prompt_explorer: { spend: ["ai_visibility.explore"] as const },
   // F27: onboarding wizard and setup checklist
   onboarding_wizard: { spend: [] as const },
 } as const;

@@ -45,7 +45,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F09](./F09-price-before-running.md) | Price before running | Price before running | 1 | F03 | 080–084 | Merged |
 | [F10](./F10-customer-scheduling.md) | Customer scheduling | Scheduling | 1 | F01, F09 | 085–089 | In progress |
 | [F11](./F11-prompt-explorer.md) | Prompt Explorer (ask one question now) | Ask one question now | 1 | F02, F03, F04, F05, F08, F09 | 090–094 | In progress |
-| [F12](./F12-question-detail-history.md) | Question detail and answer history | Answer detail view | 1 | F05, F08 | 095–099 | In progress |
+| [F12](./F12-question-detail-history.md) | Question detail and answer history | Answer detail view | 1 | F05, F08 | 095–099 | Merged |
 | [F13](./F13-keyword-research.md) | Keyword research and saved keywords | Keyword research | 2 | F01, F02, F03, F06, F07 phase 1 | 100–104 | Merged |
 | [F14](./F14-domain-overview.md) | Domain overview and competitor research | Domain and competitor research | 2 | F07 phase 1, F13 | 105–109 | Merged |
 | [F15](./F15-rank-tracking.md) | Rank tracking with AI Overview presence | Rank tracking | 2 | F01, F02, F03, F06, F07 phase 1, F09, F10, F13, F14 (phase 1); F08 + F12 for phase 6 | 110–114 | In progress |
@@ -53,7 +53,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F17](./F17-local-seo.md) | Local SEO | Local SEO | 2 | F02, F07, F09, F13 | 120–124 | Merged |
 | [F18](./F18-site-audit.md) | Site audit crawler (plus Perceev's AEO checks) | Site audit | 3 | F01, F02, F06, F08 (Firecrawl price), F09 | 125–129 | In progress |
 | [F19](./F19-indexnow.md) | IndexNow | IndexNow | 3 | F01, F04, F05; F18 for phase 3 | 130–134 | Merged |
-| [F20](./F20-ga4-and-opportunities.md) | Google Analytics 4 and search opportunities | Google Analytics 4 | 3 | F01, F04, F05 | 135–139 | In progress |
+| [F20](./F20-ga4-and-opportunities.md) | Google Analytics 4 and search opportunities | Google Analytics 4 | 3 | F01, F04, F05 | 135–139 | Merged |
 | [F21](./F21-agent-skills.md) | Agent skills library | Agent skills | 4 | F01 | 140–144 | Merged |
 | [F22](./F22-in-app-assistant.md) | In-app assistant (chat over our tools) | In-app chat agent | 4 | F01, F03, F04, F05, F07–F20, F21 | 145–149 | Spec ✓ |
 | [F23](./F23-reports-and-sharing.md) | Reports and public sharing | Reports and sharing | 4 | F21, F22 | 150–154 | Spec ✓ |

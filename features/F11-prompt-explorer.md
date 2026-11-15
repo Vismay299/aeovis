@@ -747,19 +747,19 @@ Body: country line ("Country hint sent: {Country}. This is not a verified search
 
 **Goal:** the API can quote, start, run, read and list explore questions.
 
-- [ ] **P2.T1 Shared and shaping**
-  - [ ] **P2.T1.S1** *Files:* `src/shared/explore.ts`, `src/shared/explore.test.ts`. *Verify:* `node --test src/shared/explore.test.ts` → pass (schema edges: 500/501 chars, 4/5 models, duplicate models collapsed).
-  - [ ] **P2.T1.S2** *Files:* `src/lib/explore/shape.ts`, `shape.test.ts`, fixtures `tests/fixtures/f11/*.json`. *Verify:* pass (F11-AC-14).
-- [ ] **P2.T2 Routing and price**
-  - [ ] **P2.T2.S1** *Files:* `src/lib/explore/routes.ts`, `routes.test.ts`. Cases: DataForSEO chosen when flag on/key set/circuit closed; OpenRouter fallback; country skip for Gemini and for Claude with an unsupported country; `NOT_AVAILABLE`; invalid reserve env. *Verify:* pass.
-  - [ ] **P2.T2.S2** *Files:* `src/lib/pricing/actions/exploreRun.ts`, `exploreRun.test.ts`, `src/lib/pricing/actions/index.ts` (one import). *Verify:* `node --test src/lib/pricing/actions/exploreRun.test.ts` → pass (F11-AC-07; 0.09 + 0.18 = 0.27 exactly via micros; reused line $0; blocked copy exact).
-- [ ] **P2.T3 Service, job, limits**
-  - [ ] **P2.T3.S1** *Files:* `src/lib/explore/rateLimit.ts`, `rateLimit.test.ts`. *Verify:* pass (F11-AC-09).
-  - [ ] **P2.T3.S2** *Files:* `src/lib/explore/service.ts`, `service.test.ts` (memory stores for spend, jobs, explore). Cases: order of refusals with nothing created; all-reused run completes without hold or job; single-active conflict releases the hold and deletes the run; reuse keyed exactly; `fresh` bypasses reuse; no text in logs/telemetry. *Verify:* pass (F11-AC-13, 18).
-  - [ ] **P2.T3.S3** *Files:* `src/lib/explore/job.ts`, `job.test.ts`, `src/lib/explore/jobs.ts`, `src/lib/jobs/kinds.ts` (one import line), `src/lib/engines/openRouterProbe.js` (`webSearch` option). Cases: one claim and one call per model; a transient failure is finished `failed`, not retried; claim refusal makes no call; crash during `ask` → `partial` after finalize/settle; expired lease touched to `ambiguous`; `ask` step declared billed with retries 0. *Verify:* `node --test src/lib/explore/job.test.ts` → pass (F11-AC-10).
-- [ ] **P2.T4 Routes**
-  - [ ] **P2.T4.S1** *Files:* `src/app/api/customer/explore/route.ts` (POST, GET), `src/app/api/customer/explore/[runId]/route.ts` (GET), `src/app/api/customer/explore/[runId]/track/route.ts` (POST, returns 501 `not_available` until phase 3), `src/lib/explore/explore.contract.ts`, `src/lib/explore/explore.route.test.mjs` (hook pattern `src/lib/customerRoutes.test.hooks.mjs`). *Verify:* `node --test src/lib/explore/explore.route.test.mjs src/lib/http/routeContract.test.ts` → pass (F11-AC-08, 15, 19 API half).
-  - [ ] **P2.T4.S2** *Files:* `src/lib/features/names.ts`, `.env.example` (`FEATURE_PROMPT_EXPLORER=off`, `EXPLORE_MAX_RUNS_PER_USER_HOUR=10`, `EXPLORE_MAX_RUNS_PER_WORKSPACE_DAY=30`, `EXPLORE_OPENROUTER_RESERVE_USD=0.10`, `EXPLORE_REUSE_DAYS=7`), `src/lib/telemetry/events.ts`, `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/features/flags.test.ts src/lib/platform/thirdPartyNotices.test.mjs` → pass.
+- [x] **P2.T1 Shared and shaping**
+  - [x] **P2.T1.S1** *Files:* `src/shared/explore.ts`, `src/shared/explore.test.ts`. *Verify:* `node --test src/shared/explore.test.ts` → pass (schema edges: 500/501 chars, 4/5 models, duplicate models collapsed).
+  - [x] **P2.T1.S2** *Files:* `src/lib/explore/shape.ts`, `shape.test.ts`, fixtures `tests/fixtures/f11/*.json`. *Verify:* pass (F11-AC-14).
+- [x] **P2.T2 Routing and price**
+  - [x] **P2.T2.S1** *Files:* `src/lib/explore/routes.ts`, `routes.test.ts`. Cases: DataForSEO chosen when flag on/key set/circuit closed; OpenRouter fallback; country skip for Gemini and for Claude with an unsupported country; `NOT_AVAILABLE`; invalid reserve env. *Verify:* pass.
+  - [x] **P2.T2.S2** *Files:* `src/lib/pricing/actions/exploreRun.ts`, `exploreRun.test.ts`, `src/lib/pricing/actions/index.ts` (one import). *Verify:* `node --test src/lib/pricing/actions/exploreRun.test.ts` → pass (F11-AC-07; 0.09 + 0.18 = 0.27 exactly via micros; reused line $0; blocked copy exact).
+- [x] **P2.T3 Service, job, limits**
+  - [x] **P2.T3.S1** *Files:* `src/lib/explore/rateLimit.ts`, `rateLimit.test.ts`. *Verify:* pass (F11-AC-09).
+  - [x] **P2.T3.S2** *Files:* `src/lib/explore/service.ts`, `service.test.ts` (memory stores for spend, jobs, explore). Cases: order of refusals with nothing created; all-reused run completes without hold or job; single-active conflict releases the hold and deletes the run; reuse keyed exactly; `fresh` bypasses reuse; no text in logs/telemetry. *Verify:* pass (F11-AC-13, 18).
+  - [x] **P2.T3.S3** *Files:* `src/lib/explore/job.ts`, `job.test.ts`, `src/lib/explore/jobs.ts`, `src/lib/jobs/kinds.ts` (one import line), `src/lib/engines/openRouterProbe.js` (`webSearch` option). Cases: one claim and one call per model; a transient failure is finished `failed`, not retried; claim refusal makes no call; crash during `ask` → `partial` after finalize/settle; expired lease touched to `ambiguous`; `ask` step declared billed with retries 0. *Verify:* `node --test src/lib/explore/job.test.ts` → pass (F11-AC-10).
+- [x] **P2.T4 Routes**
+  - [x] **P2.T4.S1** *Files:* `src/app/api/customer/explore/route.ts` (POST, GET), `src/app/api/customer/explore/[runId]/route.ts` (GET), `src/app/api/customer/explore/[runId]/track/route.ts` (POST, returns 501 `not_available` until phase 3), `src/lib/explore/explore.contract.ts`, `src/lib/explore/explore.route.test.mjs` (hook pattern `src/lib/customerRoutes.test.hooks.mjs`). *Verify:* `node --test src/lib/explore/explore.route.test.mjs src/lib/http/routeContract.test.ts` → pass (F11-AC-08, 15, 19 API half).
+  - [x] **P2.T4.S2** *Files:* `src/lib/features/names.ts`, `.env.example` (`FEATURE_PROMPT_EXPLORER=off`, `EXPLORE_MAX_RUNS_PER_USER_HOUR=10`, `EXPLORE_MAX_RUNS_PER_WORKSPACE_DAY=30`, `EXPLORE_OPENROUTER_RESERVE_USD=0.10`, `EXPLORE_REUSE_DAYS=7`), `src/lib/telemetry/events.ts`, `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/features/flags.test.ts src/lib/platform/thirdPartyNotices.test.mjs` → pass.
 
 **Checkpoint:** full suite, typecheck, build, contract test. Completes F11-AC-07…10, 13–15, 18.
 
