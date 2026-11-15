@@ -44,9 +44,9 @@ Spend: about USD 7 reserved for the full run, plus a few dollars from an acciden
 
 ## Production Offcult demo — next steps
 
-The demo tenant was re-registered with **vismayrathod299@gmail.com** (an earlier invented plus-address was wrong and is unused). Its password is in the private credential file below — read it from the file, never print it.
+The demo tenant was re-registered with **the owner's personal email address** (an earlier invented plus-address was wrong and is unused). Its password is in the private credential file below — read it from the file, never print it.
 
-1. **Owner:** click the verification email perceev sent to vismayrathod299@gmail.com.
+1. **Owner:** click the verification email perceev sent to the owner's personal email address.
 2. **Setup (no provider calls):** `node ~/.aeovis-private/scripts/demo-prod.mjs setup https://perceev.xyz ~/.aeovis-private/demo/offcult-cred.json ~/.aeovis-private/demo/offcult-panel.json ~/.aeovis-private/demo/offcult-prod-state.json` — logs in, creates the Offcult workspace, saves and approves the 30-question panel, prints the workspace key.
 3. **Owner-authorised dispatch:** production dispatch is paused with an empty allowlist (last set by QA cleanup; re-read before acting). Allow only this workspace: `select set_probe_rollout(true, true, array['<workspace key>']);` (service role only; the allowlist holds at most one brand).
 4. **Paid scan:** same script with `scan`, then `report`. The report phase checks that all 30 planned questions appear on the portal page with every engine, counts AI Overviews and capture modes, and saves a full-page screenshot.
@@ -67,7 +67,7 @@ Kept outside Google Drive so credentials are not synced to the cloud. Directory 
 
 | Path | Purpose |
 |---|---|
-| `~/.aeovis-private/demo/offcult-cred.json` | Demo tenant login (vismayrathod299@gmail.com) |
+| `~/.aeovis-private/demo/offcult-cred.json` | Demo tenant login (the owner's personal email address) |
 | `~/.aeovis-private/demo/offcult-panel.json` | The approved 30 + 2 question panel payload (not secret) |
 | `~/.aeovis-private/demo/offcult-local-run.json` | Full local real-provider run record and observations |
 | `~/.aeovis-private/scripts/` | Demo, report-render and Bright Data diagnostic scripts used this session |
