@@ -138,6 +138,14 @@ export const exploreTrackResponseSchema = z.looseObject({
   status: z.string(),
 });
 
+export type ExploreStartResponse = z.infer<typeof exploreStartResponseSchema>;
+export type ExploreListResponse = z.infer<typeof exploreListResponseSchema>;
+export type ExploreGetResponse = z.infer<typeof exploreGetResponseSchema>;
+export type ExploreTrackResponse = z.infer<typeof exploreTrackResponseSchema>;
+export type ExploreModelResult = z.infer<typeof exploreModelResultSchema>;
+export type ExploreSuccessResult = z.infer<typeof exploreSuccessResultSchema>;
+export type ExploreErrorResult = z.infer<typeof exploreErrorResultSchema>;
+
 export const startContract: RouteContract = defineRouteContract({
   id: "explore.start",
   method: "POST",
