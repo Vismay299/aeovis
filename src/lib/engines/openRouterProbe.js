@@ -200,8 +200,18 @@ function addStats(stats, usage, cost) {
  * Ask an OpenRouter model with its provider-native search enabled. This keeps
  * ChatGPT and Perplexity model calls behind the single LLM_API_KEY used by the
  * utility/content LLM, while retaining engine-specific model ids and citations.
+ * @param {object} options
+ * @param {string} options.engine
+ * @param {string} options.query
+ * @param {object} [options.stats]
+ * @param {string} [options.model]
+ * @param {boolean} [options.durableDispatch]
+ * @param {number | null} [options.deadlineAt]
+ * @param {{ country?: string; language?: string } | null} [options.measurementContext]
+ * @param {Function | null} [options.captureEvidence]
+ * @param {boolean} [options.webSearch]
  */
-export async function probeOpenRouterEngine({ engine, query, stats, model = getOpenRouterEngineModel(engine), durableDispatch = false, deadlineAt = null, measurementContext = null, captureEvidence = null }) {
+export async function probeOpenRouterEngine({ engine, query, stats, model = getOpenRouterEngineModel(engine), durableDispatch = false, deadlineAt = null, measurementContext = null, captureEvidence = null, webSearch = true }) {
   const apiKey = getLlmApiKey();
   const baseUrl = getLlmBaseUrl();
   const provider = getLlmProvider(baseUrl);
@@ -238,7 +248,7 @@ export async function probeOpenRouterEngine({ engine, query, stats, model = getO
         body: JSON.stringify({
           model,
           messages: [{ role: "user", content: query }],
-          ...(nativeSonar ? {} : { tools: [
+          ...(nativeSonar || !webSearch ? {} : { tools: [
             {
               type: WEB_SEARCH_TOOL,
               parameters: {
