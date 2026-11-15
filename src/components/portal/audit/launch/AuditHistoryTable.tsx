@@ -7,12 +7,14 @@
 // F18 phase 4 — "Previous audits": date, URL, status, pages, issues, the
 // Lighthouse marker and the row actions.
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ScanSearch } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/app/ConfirmDialog";
 import { EmptyState } from "@/components/app/EmptyState";
@@ -21,7 +23,7 @@ import { RowActionsMenu } from "@/components/app/RowActionsMenu";
 import { DataTable, useDataTable } from "@/components/app/table/DataTable";
 import type { AuditListRow } from "../hooks/useAuditList";
 import type { LaunchController } from "./useLaunchController";
-import { StatusBadge, formatAuditDate } from "../shared";
+import { StatusBadge, formatAuditDate, hostOf } from "../shared";
 
 const ACTIVE = new Set(["queued", "running"]);
 
@@ -36,8 +38,56 @@ export function AuditHistoryTable({
 }: {
   controller: LaunchController;
 }) {
+  const router = useRouter();
   const { audits, list, deleteAudit, deleting } = controller;
   const [deleteTarget, setDeleteTarget] = useState<AuditListRow | null>(null);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+
+  const selectedAudits = useMemo(
+    () => compareIds.flatMap((id) => audits.filter((audit) => audit.id === id)),
+    [audits, compareIds],
+  );
+  const selectedHost = selectedAudits[0]
+    ? hostOf(selectedAudits[0].startUrl)
+    : "";
+
+  useEffect(() => {
+    setCompareIds((current) => {
+      if (current.every((id) => audits.some((audit) => audit.id === id))) {
+        return current;
+      }
+      return current.filter((id) => audits.some((audit) => audit.id === id));
+    });
+  }, [audits]);
+  const compareHref =
+    selectedAudits.length === 2
+      ? (() => {
+          const [first, second] = selectedAudits;
+          const [older, newer] =
+            Date.parse(first.createdAt) <= Date.parse(second.createdAt)
+              ? [first, second]
+              : [second, first];
+          const params = new URLSearchParams({
+            base: older.id,
+            head: newer.id,
+          });
+          return `/portal/audit/compare?${params.toString()}`;
+        })()
+      : null;
+
+  function setCompareSelection(row: AuditListRow, checked: boolean) {
+    setCompareIds((current) => {
+      if (!checked) return current.filter((id) => id !== row.id);
+      if (current.includes(row.id) || current.length >= 2) return current;
+      const currentHost = current
+        .map((id) => audits.find((audit) => audit.id === id))
+        .find((audit): audit is AuditListRow => Boolean(audit));
+      if (currentHost && hostOf(currentHost.startUrl) !== hostOf(row.startUrl)) {
+        return current;
+      }
+      return [...current, row.id];
+    });
+  }
 
   const columns: ColumnDef<AuditListRow>[] = [
     {
@@ -105,6 +155,32 @@ export function AuditHistoryTable({
         ),
     },
     {
+      id: "compare",
+      header: "Compare",
+      cell: ({ row }) => {
+        const audit = row.original;
+        const checked = compareIds.includes(audit.id);
+        const host = hostOf(audit.startUrl);
+        const disabled =
+          ACTIVE.has(audit.status) ||
+          (!checked && compareIds.length >= 2) ||
+          (!checked && Boolean(selectedHost) && selectedHost !== host);
+        return (
+          <label className="inline-flex min-h-8 items-center gap-2 whitespace-nowrap text-sm">
+            <Checkbox
+              aria-label="Compare"
+              checked={checked}
+              disabled={disabled}
+              onCheckedChange={(value) =>
+                setCompareSelection(audit, value === true)
+              }
+            />
+            <span>Compare</span>
+          </label>
+        );
+      },
+    },
+    {
       id: "actions",
       header: "",
       cell: ({ row }) => (
@@ -144,7 +220,17 @@ export function AuditHistoryTable({
 
   return (
     <section className="space-y-2">
-      <h2 className="text-base font-semibold">Previous audits</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-semibold">Previous audits</h2>
+        <Button
+          disabled={!compareHref}
+          onClick={() => {
+            if (compareHref) router.push(compareHref);
+          }}
+        >
+          Compare 2 audits
+        </Button>
+      </div>
       {list.isError ? (
         <QueryError
           error={list.error}
