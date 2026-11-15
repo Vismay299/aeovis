@@ -281,6 +281,44 @@ export const metricsRefreshContract = defineRouteContract({
   examples: [{ response: { updated: 20, fromCache: 15, bought: 5 } }],
 });
 
+export const trackAiQuestionContract = defineRouteContract({
+  id: "customer.rank-tracking.keywords.ai-question",
+  method: "POST",
+  path: "/api/customer/rank-tracking/configs/[configId]/keywords/[keywordId]/ai-question",
+  file: "src/app/api/customer/rank-tracking/configs/[configId]/keywords/[keywordId]/ai-question/route.ts",
+  auth: "workspace",
+  request: z.strictObject({
+    brand_key: z.string().optional(),
+    text: z.string().trim().min(2).max(1500),
+    topic: z.string().trim().max(120).optional(),
+  }),
+  response: z.looseObject({
+    questionId: z.string().uuid(),
+    created: z.boolean(),
+    revived: z.boolean(),
+    linked: z.boolean(),
+  }),
+  errorCodes: [
+    ...COMMON,
+    "feature_unavailable",
+    "keyword_not_found",
+    "question_limit",
+    "topic_limit",
+    "question_duplicate",
+    "questions_unavailable",
+  ],
+  examples: [
+    {
+      response: {
+        questionId: "50000000-0000-4000-8000-000000000001",
+        created: true,
+        revived: false,
+        linked: true,
+      },
+    },
+  ],
+});
+
 export const contracts: RouteContract[] = [
   listTrackersContract,
   createTrackerContract,
@@ -297,4 +335,5 @@ export const contracts: RouteContract[] = [
   historyContract,
   suggestionsContract,
   metricsRefreshContract,
+  trackAiQuestionContract,
 ];

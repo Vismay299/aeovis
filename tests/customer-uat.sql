@@ -33,6 +33,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/102_f13_saved_keyword_functions.sql
 \ir ../supabase/migrations/110_f15_rank_tracking.sql
 \ir ../supabase/migrations/111_f15_rank_tracking_functions.sql
+\ir ../supabase/migrations/112_f15_rank_keyword_questions.sql
 \ir ../supabase/migrations/120_f17_local_seo.sql
 \ir ../supabase/migrations/121_f17_local_seo_functions.sql
 \ir ../supabase/migrations/125_f18_site_audit.sql
@@ -562,6 +563,9 @@ INSERT INTO public.rank_snapshots(brand_key,run_id,tracking_keyword_id,keyword,d
 INSERT INTO public.rank_check_tasks(brand_key,run_id,round,tracking_keyword_id,keyword,device) VALUES
  ('10000000-0000-0000-0000-000000000001','15000000-0000-0000-0000-000000000021',0,'15000000-0000-0000-0000-000000000011','alpha','mobile'),
  ('10000000-0000-0000-0000-000000000002','15000000-0000-0000-0000-000000000022',0,'15000000-0000-0000-0000-000000000012','beta','mobile');
+INSERT INTO public.rank_keyword_questions(brand_key,tracking_keyword_id,question_id,created_by) VALUES
+ ('10000000-0000-0000-0000-000000000001','15000000-0000-0000-0000-000000000011','50000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','15000000-0000-0000-0000-000000000012','50000000-0000-0000-0000-000000000003','00000000-0000-0000-0000-000000000002');
 DO $f15$ BEGIN
   BEGIN
     INSERT INTO public.rank_check_tasks(brand_key,run_id,round,tracking_keyword_id,keyword,device)
@@ -578,6 +582,7 @@ DO $f15$ BEGIN
    OR (SELECT count(*) FROM public.rank_check_runs) <> 1
    OR (SELECT count(*) FROM public.rank_snapshots) <> 1
    OR (SELECT count(*) FROM public.rank_check_tasks) <> 1
+   OR (SELECT count(*) FROM public.rank_keyword_questions) <> 1
   THEN RAISE EXCEPTION 'F15 rank tracking rows leaked across customer workspaces'; END IF;
 END $f15$;
 SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
@@ -587,6 +592,7 @@ DO $f15$ BEGIN
    OR (SELECT count(*) FROM public.rank_check_runs) <> 1
    OR (SELECT count(*) FROM public.rank_snapshots) <> 1
    OR (SELECT count(*) FROM public.rank_check_tasks) <> 1
+   OR (SELECT count(*) FROM public.rank_keyword_questions) <> 1
   THEN RAISE EXCEPTION 'F15 rank tracking rows leaked across customer workspaces'; END IF;
 END $f15$;
 RESET ROLE;
