@@ -7,6 +7,12 @@
 > own `prompt_set_id`. Frozen: do not regenerate, a baseline that moves is not
 > a baseline.
 
+> **The three archive files are no longer in the working tree.** They were removed
+> ahead of making the repository public, because they hold raw scan results for
+> real third-party brands. They are unchanged in git history: restore any of them
+> with `git show 02a1d55d:test_reports/baseline-2026-08/<file>.json`. Keep restored
+> copies out of commits. Everything below describes the corpus as archived.
+
 ## Why this exists
 
 The R0–R6 rebuild changes how scores are computed. Without a frozen record of
