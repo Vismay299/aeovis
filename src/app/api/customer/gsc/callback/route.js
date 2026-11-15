@@ -49,6 +49,10 @@ export async function GET(request) {
       admin,
     });
 
+    if (result.returnPath === "/onboarding") {
+      return NextResponse.redirect(`${appUrl}/onboarding?step=search_console&gsc_connected=true&brand_key=${encodeURIComponent(result.brandKey)}&gsc_attempt=${encodeURIComponent(result.attemptId)}`);
+    }
+
     // Redirect to the portal with the brand key so the UI can show the property picker.
     return NextResponse.redirect(`${portalUrl}?gsc_connected=true&brand_key=${encodeURIComponent(result.brandKey)}&gsc_attempt=${encodeURIComponent(result.attemptId)}`);
   } catch (callbackError) {

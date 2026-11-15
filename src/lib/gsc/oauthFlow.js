@@ -35,7 +35,11 @@ export function isGscOAuthConfigured() {
  * @param {object} params.admin - Supabase admin client
  * @returns {Promise<{ authorizationUrl: string, state: string }>}
  */
-export async function createOAuthAttempt({ userId, brandKey, sessionTokenHash, admin }) {
+export async function createOAuthAttempt({ userId, brandKey, sessionTokenHash, admin, returnPath = "/portal/search-console" }) {
+  if (returnPath !== "/portal/search-console" && returnPath !== "/onboarding") {
+    throw new Error(`Invalid return path: ${returnPath}`);
+  }
+
   const config = getConfig();
   if (!config) throw new Error("GSC OAuth is not configured on this deployment.");
 
@@ -54,6 +58,7 @@ export async function createOAuthAttempt({ userId, brandKey, sessionTokenHash, a
     session_token_hash: sessionTokenHash || null,
     encrypted_code_verifier: JSON.stringify(encryptedVerifier),
     expires_at: new Date(Date.now() + ATTEMPT_TTL_MS).toISOString(),
+    return_path: returnPath,
   });
   if (error) throw new Error(`Failed to create OAuth attempt: ${error.message}`);
 
@@ -177,8 +182,12 @@ export async function handleOAuthCallback({ state, code, sessionTokenHash, userI
       access_token_expires_at: expiresAt,
     }) }).eq("id", attempt.id);
   if (grantError) throw new Error("Could not save the pending Google authorization.");
-  return { brandKey: attempt.brand_key, userId: attempt.user_id, attemptId: attempt.id };
-
+  return {
+    brandKey: attempt.brand_key,
+    userId: attempt.user_id,
+    attemptId: attempt.id,
+    returnPath: attempt.return_path || "/portal/search-console",
+  };
 }
 
 /**

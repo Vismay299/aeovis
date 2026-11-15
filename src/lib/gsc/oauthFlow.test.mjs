@@ -78,3 +78,102 @@ test("sync worker refuses an invalid bearer and accepts the cron helper's boolea
   const authorized = await syncWorker.GET(new Request(url, { headers: { authorization: "Bearer TEST_CRON_SECRET" } }));
   assert.equal(authorized.status, 503, "authorized requests reach the missing database check instead of throwing or returning 401");
 });
+
+const { createOAuthAttempt } = await import("./oauthFlow.js");
+
+test("createOAuthAttempt stores default return path when omitted, stores /onboarding, and throws on other values", async () => {
+  let inserted = null;
+  const admin = {
+    from(table) {
+      assert.equal(table, "gsc_oauth_attempts");
+      return {
+        insert: async (row) => {
+          inserted = row;
+          return { error: null };
+        },
+      };
+    },
+  };
+
+  // 1. Default return path stored when omitted
+  await createOAuthAttempt({
+    userId: "user-a",
+    brandKey: "workspace-a",
+    sessionTokenHash: "session-hash-1",
+    admin,
+  });
+  assert.equal(inserted.return_path, "/portal/search-console");
+
+  // 2. /onboarding stored
+  await createOAuthAttempt({
+    userId: "user-a",
+    brandKey: "workspace-a",
+    sessionTokenHash: "session-hash-1",
+    admin,
+    returnPath: "/onboarding",
+  });
+  assert.equal(inserted.return_path, "/onboarding");
+
+  // 3. Other value throws
+  await assert.rejects(
+    createOAuthAttempt({
+      userId: "user-a",
+      brandKey: "workspace-a",
+      sessionTokenHash: "session-hash-1",
+      admin,
+      returnPath: "/unsupported/path",
+    }),
+    /Invalid return path/,
+  );
+});
+
+test("handleOAuthCallback includes returnPath in result", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => {
+    return Response.json({ access_token: "TEST_ACCESS_TOKEN", refresh_token: "TEST_REFRESH_TOKEN", expires_in: 3600 });
+  });
+
+  function adminWithReturnPath(returnPath) {
+    const attempt = {
+      id: "attempt-1",
+      brand_key: "workspace-a",
+      user_id: "user-a",
+      session_token_hash: "session-a",
+      return_path: returnPath,
+      encrypted_code_verifier: JSON.stringify(encryptToken("TEST_PKCE_VERIFIER", "workspace-a:verifier")),
+    };
+    return {
+      from(table) {
+        return {
+          select() { return this; },
+          eq() { return this; },
+          is() { return this; },
+          gt() { return this; },
+          update() { return this; },
+          limit: async () => ({ data: [attempt], error: null }),
+          maybeSingle: async () => ({
+            data: table === "customer_brand_memberships" ? { role: "owner" } : { id: attempt.id },
+            error: null,
+          }),
+        };
+      },
+    };
+  }
+
+  const resultOnboarding = await handleOAuthCallback({
+    state: "test-state",
+    code: "test-code",
+    sessionTokenHash: "session-a",
+    userId: "user-a",
+    admin: adminWithReturnPath("/onboarding"),
+  });
+  assert.equal(resultOnboarding.returnPath, "/onboarding");
+
+  const resultDefault = await handleOAuthCallback({
+    state: "test-state",
+    code: "test-code",
+    sessionTokenHash: "session-a",
+    userId: "user-a",
+    admin: adminWithReturnPath(null),
+  });
+  assert.equal(resultDefault.returnPath, "/portal/search-console");
+});
