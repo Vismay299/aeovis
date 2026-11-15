@@ -147,9 +147,9 @@ test("GET /api/customer/setup - computes each row from data sources", async () =
     scans: [{ brand_key: "brand-1", id: "scan-1" }],
     gsc_connections: [{ brand_key: "brand-1", enabled: true }],
     site_audits: [{ brand_key: "brand-1", id: "audit-1" }],
-    scan_schedules: [{ brand_key: "brand-1", managed_by: "customer", enabled: true }],
+    scan_schedules: [{ brand: "brand-1", managed_by: "customer", enabled: true }],
     ga4_connections: [{ brand_key: "brand-1" }],
-    content_items: [{ brand_key: "brand-1", id: "item-1" }],
+    content_items: [{ brand: "brand-1", id: "item-1" }],
     customer_brand_memberships: [
       { brand_key: "brand-1", user_id: "u-1" },
       { brand_key: "brand-1", user_id: "u-2" },

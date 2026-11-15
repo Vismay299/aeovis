@@ -34,6 +34,74 @@ const fixtureScan = JSON.parse(
   fs.readFileSync(path.join(ROOT, "tests/fixtures/f27/free-scan-row.json"), "utf8"),
 );
 
+const { importFreeScanQuestions } = await import("../../src/lib/onboarding/freeScanHandoff.ts");
+
+/**
+ * Minimal service-role Supabase stand-in over one pg client: the
+ * from().select().eq().maybeSingle()/single() reads and rpc() calls the
+ * free-scan import makes. Runs as the connecting superuser (service role).
+ */
+function pgAdmin(client) {
+  const ident = (name) => {
+    if (!/^[a-z_][a-z0-9_]*$/.test(name)) throw new Error(`unsafe identifier ${name}`);
+    return `"${name}"`;
+  };
+  const param = (v) =>
+    v !== null && typeof v === "object" && !Array.isArray(v) ? JSON.stringify(v) : v;
+  return {
+    from(table) {
+      const filters = [];
+      let columns = "*";
+      const run = async (mode) => {
+        const values = filters.map(([, v]) => v);
+        const where = filters.length
+          ? " WHERE " + filters.map(([c], i) => `${ident(c)} = $${i + 1}`).join(" AND ")
+          : "";
+        const cols =
+          columns === "*" ? "*" : columns.split(",").map((c) => ident(c.trim())).join(", ");
+        try {
+          const { rows } = await client.query(
+            `SELECT ${cols} FROM public.${ident(table)}${where} LIMIT 2`,
+            values,
+          );
+          if (mode === "single" && rows.length !== 1) {
+            return { data: null, error: { message: `expected one row, got ${rows.length}` } };
+          }
+          if (rows.length > 1) return { data: null, error: { message: "multiple rows" } };
+          return { data: rows[0] ?? null, error: null };
+        } catch (error) {
+          return { data: null, error };
+        }
+      };
+      const builder = {
+        select(cols = "*") {
+          columns = cols;
+          return builder;
+        },
+        eq(col, val) {
+          filters.push([col, val]);
+          return builder;
+        },
+        maybeSingle: () => run("maybe"),
+        single: () => run("single"),
+      };
+      return builder;
+    },
+    async rpc(name, args = {}) {
+      const keys = Object.keys(args);
+      const sql = `SELECT public.${ident(name)}(${keys
+        .map((k, i) => `${ident(k)} => $${i + 1}`)
+        .join(", ")}) AS result`;
+      try {
+        const { rows } = await client.query(sql, keys.map((k) => param(args[k])));
+        return { data: rows[0]?.result ?? null, error: null };
+      } catch (error) {
+        return { data: null, error };
+      }
+    },
+  };
+}
+
 async function apply170() {
   const sql = fs.readFileSync(
     path.join(ROOT, "supabase/migrations/170_f27_onboarding.sql"),
@@ -106,7 +174,7 @@ try {
       websiteHost,
       userId,
       idempotencyKey,
-      JSON.stringify([]),
+      [],
     ];
 
     const rpc1 = await client.query(rpcSql, rpcParams);
@@ -177,38 +245,13 @@ try {
       [scanId, fixtureScan.brand, fixtureScan.url, JSON.stringify(fixtureScan.raw_results)],
     );
 
-    // Filter questions: 8-300 chars, non-control, non-branded, normalized whitespace
-    const seen = new Set();
-    const questions = [];
-    for (const r of fixtureScan.raw_results.results || []) {
-      if (r.is_control || r.is_branded_query) continue;
-      const qText = String(r.query || "").trim().replace(/\s+/g, " ");
-      if (qText.length < 8 || qText.length > 300) continue;
-      const lower = qText.toLowerCase();
-      if (seen.has(lower)) continue;
-      seen.add(lower);
-      questions.push(qText);
-      if (questions.length >= 30) break;
-    }
-    assert.equal(questions.length, 24, "24 distinct eligible questions in fixture");
-
-    // Import function logic
-    async function doImport() {
-      for (const qText of questions) {
-        const questionId = id();
-        await client.query(
-          `INSERT INTO public.workspace_questions (
-             id, brand_key, question, status, origin, topic, source_ref, created_at, updated_at
-           ) VALUES (
-             $1, $2, $3, 'paused', 'promptgen', 'From your free scan', $4, now(), now()
-           ) ON CONFLICT DO NOTHING`,
-          [questionId, brandKey, qText, JSON.stringify({ kind: "free_scan", id: scanId })],
-        );
-      }
-    }
-
-    // Run import
-    await doImport();
+    // Run the real import (freeScanHandoff -> addWorkspaceQuestion ->
+    // add_workspace_question) through a service-role admin backed by this
+    // transaction, so the check exercises production code and SQL.
+    const admin = pgAdmin(client);
+    const ws = { brandKey, brand: { brand_key: brandKey, website_host: websiteHost } };
+    const first = await importFreeScanQuestions(admin, ws, scanId, userId);
+    assert.deepEqual(first, { imported: 24, reason: "ok" }, "First import adds 24 questions");
     const count1 = (
       await client.query(
         "SELECT count(*) FROM public.workspace_questions WHERE brand_key = $1 AND status = 'paused'",
@@ -216,12 +259,19 @@ try {
       )
     ).rows[0].count;
     assert.equal(Number(count1), 24, "First import inserts 24 paused questions");
+    const origins = (
+      await client.query(
+        "SELECT DISTINCT origin, topic FROM public.workspace_questions WHERE brand_key = $1",
+        [brandKey],
+      )
+    ).rows;
+    assert.deepEqual(origins, [{ origin: "promptgen", topic: "From your free scan" }]);
 
-    // Run again
-    await doImport();
+    // Run again: the questions already exist, nothing new is created.
+    await importFreeScanQuestions(admin, ws, scanId, userId);
     const count2 = (
       await client.query(
-        "SELECT count(*) FROM public.workspace_questions WHERE brand_key = $1 AND status = 'paused'",
+        "SELECT count(*) FROM public.workspace_questions WHERE brand_key = $1",
         [brandKey],
       )
     ).rows[0].count;
@@ -234,7 +284,7 @@ try {
     const userB = await createUser(client, "user-b");
     const brandKey = `qa-f27-${id()}`;
 
-    // Create workspace with userA as owner, userB as member
+    // Create workspace with userB as owner and userA as a member who can leave
     await client.query(
       `INSERT INTO public.customer_brands (brand_key, display_name, website, website_host)
        VALUES ($1, 'Acme Dismiss', 'https://acme-dismiss.example', 'acme-dismiss.example')`,
@@ -242,7 +292,7 @@ try {
     );
     await client.query(
       `INSERT INTO public.customer_brand_memberships (user_id, brand_key, role)
-       VALUES ($1, $3, 'owner'), ($2, $3, 'member')`,
+       VALUES ($1, $3, 'member'), ($2, $3, 'owner')`,
       [userA, userB, brandKey],
     );
 

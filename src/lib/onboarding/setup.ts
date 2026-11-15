@@ -99,7 +99,8 @@ export async function getSetupActivation(
       const { data } = await admin
         .from("scan_schedules")
         .select("enabled, managed_by")
-        .or(`brand_key.eq.${brandKey},brand.eq.${brandKey}`)
+        // scan_schedules keys the workspace by `brand` (it has no brand_key column).
+        .eq("brand", brandKey)
         .eq("managed_by", "customer")
         .eq("enabled", true)
         .limit(1)
@@ -123,7 +124,8 @@ export async function getSetupActivation(
       const { data } = await admin
         .from("content_items")
         .select("id")
-        .eq("brand_key", brandKey)
+        // content_items keys the workspace by `brand` (it has no brand_key column).
+        .eq("brand", brandKey)
         .limit(1)
         .maybeSingle();
       return Boolean(data);
