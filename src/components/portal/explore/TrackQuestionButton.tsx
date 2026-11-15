@@ -23,17 +23,15 @@ export function TrackQuestionButton({ runId, questionId, brandKey }: Props) {
   const isTracked = Boolean(questionId || trackMutation.isSuccess);
   const effectiveQuestionId = questionId ?? trackMutation.data?.questionId ?? null;
 
-  const handleTrack = () => {
+  const handleTrack = async () => {
     if (isTracked || trackMutation.isPending) return;
-    trackMutation.mutate(runId, {
-      onSuccess: () => {
-        trackEvent("prompt_explorer:question_tracked", {});
-        toast.success("Added to your questions. Review them before your next scan.");
-      },
-      onError: (err: any) => {
-        toast.error(err?.message || "Could not track question.");
-      },
-    });
+    try {
+      await trackMutation.mutateAsync(runId);
+      trackEvent("prompt_explorer:question_tracked", {});
+      toast.success("Added to your questions. Review them before your next scan.");
+    } catch (err: any) {
+      toast.error(err?.message || "Could not track question.");
+    }
   };
 
   if (isTracked && effectiveQuestionId) {

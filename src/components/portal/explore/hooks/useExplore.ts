@@ -76,6 +76,8 @@ export function useStartExploreRun(brandKey: string) {
           brand_key: brandKey,
         },
       }),
+    // ExplorePage shows price-changed, rate-limit and dialog errors itself.
+    meta: { errorToast: false },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: exploreKeys.runs(brandKey) });
     },
@@ -96,6 +98,8 @@ export function useTrackExploreQuestion(brandKey: string) {
           },
         },
       ),
+    // TrackQuestionButton shows its own error toast.
+    meta: { errorToast: false },
     onSuccess: (_data, runId) => {
       queryClient.invalidateQueries({ queryKey: exploreKeys.run(brandKey, runId) });
     },

@@ -144,15 +144,11 @@ export function ExplorePage() {
         maxUsd,
       };
 
-      startMutation.mutate(body, {
-        onSuccess: (res) => {
-          setDialogOpen(false);
-          setPriceChanged(null);
-          setDialogError(null);
-          setPendingValues(null);
-          router.replace(`/portal/explore?run=${encodeURIComponent(res.runId)}`);
-        },
-        onError: (err: any) => {
+      void (async () => {
+        let res: Awaited<ReturnType<typeof startMutation.mutateAsync>>;
+        try {
+          res = await startMutation.mutateAsync(body);
+        } catch (err: any) {
           if (err?.status === 409 && err?.code === "price_changed" && err?.details) {
             setPriceChanged({
               approvedMaxUsd: err.details.approvedMaxUsd,
@@ -171,8 +167,14 @@ export function ExplorePage() {
             return;
           }
           setDialogError(err?.message || "Could not start question run.");
-        },
-      });
+          return;
+        }
+        setDialogOpen(false);
+        setPriceChanged(null);
+        setDialogError(null);
+        setPendingValues(null);
+        router.replace(`/portal/explore?run=${encodeURIComponent(res.runId)}`);
+      })();
     },
     [pendingValues, startMutation, router],
   );
