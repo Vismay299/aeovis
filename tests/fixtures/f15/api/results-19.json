@@ -26,12 +26,12 @@
       "cpc": 1.50,
       "keywordDifficulty": 35,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 1,
         "previousPosition": 2,
-        "url": "https://acme.example/coffee",
+        "rankingUrl": "https://acme.example/coffee",
         "serpFeatures": ["ai_overview", "featured_snippet"]
       }
     },
@@ -43,12 +43,12 @@
       "cpc": 2.10,
       "keywordDifficulty": 45,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 2,
         "previousPosition": 3,
-        "url": "https://acme.example/espresso",
+        "rankingUrl": "https://acme.example/espresso",
         "serpFeatures": ["ai_overview"]
       }
     },
@@ -60,12 +60,12 @@
       "cpc": 1.25,
       "keywordDifficulty": 28,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 3,
         "previousPosition": 1,
-        "url": "https://acme.example/dark-roast",
+        "rankingUrl": "https://acme.example/dark-roast",
         "serpFeatures": ["ai_overview", "people_also_ask"]
       }
     },
@@ -77,12 +77,12 @@
       "cpc": 1.80,
       "keywordDifficulty": 50,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 5,
         "previousPosition": 4,
-        "url": "https://acme.example/cold-brew",
+        "rankingUrl": "https://acme.example/cold-brew",
         "serpFeatures": ["ai_overview"]
       }
     },
@@ -94,12 +94,12 @@
       "cpc": 1.40,
       "keywordDifficulty": 38,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 7,
         "previousPosition": 8,
-        "url": "https://acme.example/french-press",
+        "rankingUrl": "https://acme.example/french-press",
         "serpFeatures": ["ai_overview"]
       }
     },
@@ -111,12 +111,12 @@
       "cpc": 2.50,
       "keywordDifficulty": 42,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 9,
         "previousPosition": 10,
-        "url": "https://acme.example/colombian",
+        "rankingUrl": "https://acme.example/colombian",
         "serpFeatures": ["ai_overview"]
       }
     },
@@ -128,12 +128,12 @@
       "cpc": 2.20,
       "keywordDifficulty": 33,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 11,
         "previousPosition": 12,
-        "url": "https://acme.example/ethiopian",
+        "rankingUrl": "https://acme.example/ethiopian",
         "serpFeatures": ["featured_snippet"]
       }
     },
@@ -145,12 +145,12 @@
       "cpc": 1.10,
       "keywordDifficulty": 25,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 14,
         "previousPosition": 13,
-        "url": "https://acme.example/decaf",
+        "rankingUrl": "https://acme.example/decaf",
         "serpFeatures": ["people_also_ask"]
       }
     },
@@ -162,12 +162,12 @@
       "cpc": 3.40,
       "keywordDifficulty": 55,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 16,
         "previousPosition": 18,
-        "url": "https://acme.example/subscription",
+        "rankingUrl": "https://acme.example/subscription",
         "serpFeatures": ["people_also_ask"]
       }
     },
@@ -179,12 +179,12 @@
       "cpc": 0.90,
       "keywordDifficulty": 20,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 19,
         "previousPosition": null,
-        "url": "https://acme.example/filters",
+        "rankingUrl": "https://acme.example/filters",
         "serpFeatures": []
       }
     },
@@ -196,12 +196,12 @@
       "cpc": 2.80,
       "keywordDifficulty": 60,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 22,
         "previousPosition": 25,
-        "url": "https://acme.example/fresh",
+        "rankingUrl": "https://acme.example/fresh",
         "serpFeatures": ["featured_snippet"]
       }
     },
@@ -213,12 +213,12 @@
       "cpc": 1.70,
       "keywordDifficulty": 62,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 26,
         "previousPosition": 24,
-        "url": "https://acme.example/grinder",
+        "rankingUrl": "https://acme.example/grinder",
         "serpFeatures": ["local_pack"]
       }
     },
@@ -230,12 +230,12 @@
       "cpc": 0.85,
       "keywordDifficulty": 18,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 30,
         "previousPosition": 35,
-        "url": "https://acme.example/tamper",
+        "rankingUrl": "https://acme.example/tamper",
         "serpFeatures": []
       }
     },
@@ -247,12 +247,12 @@
       "cpc": 1.20,
       "keywordDifficulty": 40,
       "pinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 35,
         "previousPosition": 31,
-        "url": "https://acme.example/aeropress",
+        "rankingUrl": "https://acme.example/aeropress",
         "serpFeatures": []
       }
     },
@@ -264,12 +264,12 @@
       "cpc": 1.05,
       "keywordDifficulty": 30,
       "isPinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": null,
         "previousPosition": 15,
-        "url": null,
+        "rankingUrl": null,
         "serpFeatures": []
       }
     },
@@ -281,12 +281,12 @@
       "cpc": 2.30,
       "keywordDifficulty": 44,
       "isPinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 4,
         "previousPosition": 4,
-        "url": "https://acme.example/gift-set",
+        "rankingUrl": "https://acme.example/gift-set",
         "serpFeatures": ["people_also_ask"]
       }
     },
@@ -298,12 +298,12 @@
       "cpc": 1.95,
       "keywordDifficulty": 29,
       "isPinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 6,
         "previousPosition": 7,
-        "url": "https://acme.example/guatemalan",
+        "rankingUrl": "https://acme.example/guatemalan",
         "serpFeatures": []
       }
     },
@@ -315,12 +315,12 @@
       "cpc": 2.05,
       "keywordDifficulty": 31,
       "isPinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 12,
         "previousPosition": 15,
-        "url": "https://acme.example/sumatra",
+        "rankingUrl": "https://acme.example/sumatra",
         "serpFeatures": []
       }
     },
@@ -332,12 +332,12 @@
       "cpc": 1.65,
       "keywordDifficulty": 48,
       "isPinned": false,
-      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "url": null, "serpFeatures": [] },
+      "desktop": { "checkedAt": null, "position": null, "previousPosition": null, "rankingUrl": null, "serpFeatures": [] },
       "mobile": {
         "checkedAt": "2026-11-13T05:12:00.000Z",
         "position": 18,
         "previousPosition": 20,
-        "url": "https://acme.example/fair-trade",
+        "rankingUrl": "https://acme.example/fair-trade",
         "serpFeatures": []
       }
     }

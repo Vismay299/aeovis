@@ -319,6 +319,8 @@ try {
         const body = request.postDataJSON();
         pinRequests.push(body);
         if (options.pinFail) {
+          // Hold the failure long enough to observe the optimistic move.
+          await new Promise((r) => setTimeout(r, 1500));
           return route.fulfill({
             status: 500,
             contentType: "application/json",
@@ -422,7 +424,7 @@ try {
   });
 
   await record("B6", "pin moves row before request resolves and reverts on a 500", async () => {
-    const { context, page } = await openDetail({
+    const { context, page, pinRequests } = await openDetail({
       pinFail: true,
     });
     try {
@@ -434,12 +436,17 @@ try {
       const pinBtn = rows.nth(1).getByRole("button", { name: "Pin keyword to top" });
       await pinBtn.click();
 
-      const firstRowOptimistic = await rows.nth(0).innerText();
-      assert.ok(firstRowOptimistic.includes("best espresso blend"), "row must move to top optimistically");
-
-      await page.waitForTimeout(600);
-      const firstRowReverted = await rows.nth(0).innerText();
-      assert.ok(firstRowReverted.includes("acme coffee beans"), "row must revert after 500 failure");
+      const waitFirstRow = async (text, message) => {
+        const deadline = Date.now() + 3000;
+        while (Date.now() < deadline) {
+          if ((await rows.nth(0).innerText()).includes(text)) return;
+          await page.waitForTimeout(50);
+        }
+        assert.fail(message);
+      };
+      await waitFirstRow("best espresso blend", "row must move to top optimistically");
+      assert.equal(pinRequests.length >= 1, true);
+      await waitFirstRow("acme coffee beans", "row must revert after 500 failure");
 
       return "pin moved row optimistically to top and reverted on 500";
     } finally { await context.close(); }
@@ -451,11 +458,14 @@ try {
       const historyBtn = page.getByRole("button", { name: "History", exact: true });
       await historyBtn.waitFor();
       await historyBtn.click();
+      await page.waitForURL(/[?&]view=history/);
 
-      await page.getByText("Nov 6", { exact: false }).waitFor();
-      await page.getByText("Nov 13", { exact: false }).waitFor();
+      const matrix = page.locator("table").last();
+      await matrix.getByText("Nov 6", { exact: false }).first().waitFor();
+      await matrix.getByText("Nov 13", { exact: false }).first().waitFor();
 
       await page.getByRole("button", { name: "Latest", exact: true }).click();
+      await page.waitForURL((u) => !u.searchParams.has("view"));
       await page.getByText("acme coffee beans").waitFor();
 
       await page.getByRole("button", { name: "acme coffee beans" }).click();
