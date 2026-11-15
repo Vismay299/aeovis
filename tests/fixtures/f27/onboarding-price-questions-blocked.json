@@ -1,0 +1,8 @@
+{
+  "action": "questions.setup.run",
+  "totalUsd": 0,
+  "blocked": { "code": "feature_disabled", "message": "Question research is unavailable for this workspace." },
+  "units": [],
+  "lines": [],
+  "warnings": []
+}

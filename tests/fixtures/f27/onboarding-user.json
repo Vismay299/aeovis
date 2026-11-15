@@ -1,0 +1,6 @@
+{
+  "id": "f27-qa-user",
+  "email": "owner@example.test",
+  "email_confirmed_at": "2026-11-15T00:00:00.000Z",
+  "user_metadata": { "display_name": "Acme" }
+}

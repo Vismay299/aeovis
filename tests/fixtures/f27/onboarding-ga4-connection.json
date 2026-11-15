@@ -1,0 +1,11 @@
+{
+  "connected": false,
+  "configured": true,
+  "canManage": true,
+  "currentUserHasGrant": true,
+  "connectorIsMember": true,
+  "grantStatus": null,
+  "property": null,
+  "connectedByEmail": null,
+  "connectedAt": null
+}

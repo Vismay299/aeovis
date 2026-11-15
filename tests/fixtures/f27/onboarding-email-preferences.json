@@ -1,0 +1,9 @@
+{
+  "productUpdates": false,
+  "scanResults": true,
+  "scheduleAlerts": true,
+  "spendAlerts": true,
+  "productUpdatesChangedAt": null,
+  "loopsConfigured": true,
+  "loopsSynced": true
+}
