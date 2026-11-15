@@ -1,0 +1,8 @@
+{
+  "action": "questions.setup.run",
+  "totalUsd": 1.23,
+  "blocked": null,
+  "units": [{ "key": "questions", "count": 24, "label": "questions" }],
+  "lines": [{ "label": "Question research" }],
+  "warnings": []
+}

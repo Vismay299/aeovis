@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "needsOnboarding": true,
+  "completedAt": null,
+  "workspace": { "brandKey": "f27-workspace", "displayName": "Acme", "website": "https://acme.example", "websiteHost": "acme.example", "role": "owner", "telemetryId": "f27-telemetry", "hasScans": false },
+  "visibleSteps": ["website", "search_console", "analytics", "preferences", "first_scan"],
+  "steps": { "website": "done", "search_console": "done", "analytics": "done", "preferences": "done", "first_scan": "todo" },
+  "market": { "country": "in", "language": "en" },
+  "prefill": null,
+  "handoff": { "domain": null, "scanId": null, "importedQuestions": 0 },
+  "audit": { "available": true, "auditId": "audit-f27", "status": "completed", "pagesCrawled": 50, "pagesTotal": 50 },
+  "research": { "available": true, "status": "saved", "jobId": "job-research-f27" },
+  "questions": { "curation": true, "approvedVersion": 3, "active": 24, "paused": 0 },
+  "gsc": { "connected": true, "property": "sc-domain:acme.example" },
+  "ga4": { "available": true, "connected": true },
+  "preferences": { "productUpdatesAvailable": true, "analyticsAvailable": true },
+  "domainOverview": true,
+  "pollAfterSeconds": null
+}

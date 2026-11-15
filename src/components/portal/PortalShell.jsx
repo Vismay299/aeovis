@@ -1,3 +1,8 @@
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/client/features/onboarding/useOnboardingRedirect.ts:12-61
+//   src/routes/_app/route.tsx:34-39
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
+
 "use client";
 
 /**
@@ -36,6 +41,7 @@ import {
 import { describeError } from "@/lib/query/errors";
 import { setUnauthorizedHandler } from "@/lib/query/fetchJson";
 import { WorkspaceProvider } from "@/components/app/workspace/WorkspaceContext";
+import { decideOnboardingRedirect } from "@/components/app/onboarding/useOnboardingRedirect";
 
 /**
  * @typedef {Object} PortalBrand
@@ -213,6 +219,40 @@ export default function PortalShell({ children }) {
         role: row.role,
         ...(Array.isArray(row.customer_brands) ? row.customer_brands[0] : row.customer_brands),
       }));
+
+      // Existing customers and invitees with no onboarding row stay on their
+      // requested page. Only accounts that may need onboarding read the F27
+      // state route; a failed check keeps the portal available.
+      const onboardingRowResult = await supabase
+        .from("user_onboarding")
+        .select("completed_at, brand_key")
+        .eq("user_id", signedIn.id)
+        .maybeSingle();
+      if (!live) return;
+      const onboardingRow = onboardingRowResult.error ? null : onboardingRowResult.data;
+      const shouldCheckOnboarding =
+        assigned.length === 0 || Boolean(onboardingRow && !onboardingRow.completed_at);
+      if (!onboardingRowResult.error && shouldCheckOnboarding) {
+        try {
+          const response = await fetch("/api/customer/onboarding", { cache: "no-store" });
+          const state = response.ok ? await response.json() : null;
+          if (!live) return;
+          const destination = decideOnboardingRedirect({
+            flagKnown: response.ok,
+            memberships: assigned,
+            row: onboardingRow,
+            state,
+            pathname: window.location.pathname,
+            search: window.location.search,
+          });
+          if (destination) {
+            router.replace(destination);
+            return;
+          }
+        } catch {
+          // A failed optional onboarding check never blocks portal access.
+        }
+      }
       const fromUrl = new URLSearchParams(window.location.search).get("brand_key");
       const stored = readStoredBrand();
       const initial =

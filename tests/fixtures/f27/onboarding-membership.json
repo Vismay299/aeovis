@@ -1,0 +1,7 @@
+[
+  {
+    "brand_key": "f27-workspace",
+    "role": "owner",
+    "customer_brands": { "brand_key": "f27-workspace", "display_name": "Acme", "website": "https://acme.example", "is_active": true, "telemetry_id": "f27-telemetry" }
+  }
+]
