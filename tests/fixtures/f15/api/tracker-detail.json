@@ -1,0 +1,20 @@
+{
+  "tracker": {
+    "id": "6f0c0000-0000-4000-8000-000000000000",
+    "domain": "acme.example",
+    "locationCode": 2840,
+    "languageCode": "en",
+    "locationName": null,
+    "devices": "mobile",
+    "serpDepth": 40,
+    "scheduleInterval": "weekly",
+    "nextCheckAt": "2026-11-20T05:12:00.000Z",
+    "lastCheckedAt": "2026-11-13T05:12:00.000Z",
+    "lastSkipReason": null,
+    "lastSkipMessage": null,
+    "approvedMaxUsd": 0.5,
+    "keywordCount": 19,
+    "lastRunStatus": "completed",
+    "lastRunCompletedAt": "2026-11-13T05:15:00.000Z"
+  }
+}
