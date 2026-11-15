@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { startExploreRun, getExploreRun, listExploreRuns } from "./service.ts";
+import { startExploreRun, getExploreRun, listExploreRuns, trackExploreQuestion } from "./service.ts";
 import { createMemoryExploreStore } from "./memoryStore.ts";
 import { AppError } from "../http/errors.ts";
 import { hashPrompt } from "./shape.ts";
@@ -424,5 +424,59 @@ describe("src/lib/explore/service.ts", () => {
     assert.equal(result.runs.length, 1);
     assert.equal(result.runs[0].id, "run-list-1");
     assert.equal(result.runs[0].prompt, "question 1");
+  });
+
+  it("trackExploreQuestion calls addWorkspaceQuestion and updates run question_id", async () => {
+    const store = createMemoryExploreStore();
+    const promptHash = hashPrompt("what is perceev");
+    await store.createRun({
+      id: "run-track-test",
+      brand_key: brandKey,
+      created_by: userId,
+      job_id: null,
+      prompt: "what is perceev",
+      prompt_hash: promptHash,
+      models: ["chatgpt"],
+      web_search: true,
+      country: null,
+      highlight_brand: null,
+      status: "completed",
+      plan: [],
+      quote: {},
+      approved_max_usd: 0,
+      hold_id: null,
+      question_id: null,
+      created_at: now.toISOString(),
+      finished_at: now.toISOString(),
+    });
+
+    let addArgs: any = null;
+
+    const res = await trackExploreQuestion(
+      { admin: dummyClient, brandKey, user: { id: userId } },
+      "run-track-test",
+      {
+        store,
+        addWorkspaceQuestion: async (_admin, input) => {
+          addArgs = input;
+          return {
+            question: { id: "q-tracked-1", status: "active" } as any,
+            created: true,
+            revived: false,
+          };
+        },
+      },
+    );
+
+    assert.equal(res.questionId, "q-tracked-1");
+    assert.equal(res.created, true);
+    assert.equal(res.status, "active");
+    assert.equal(addArgs.text, "what is perceev");
+    assert.equal(addArgs.origin, "manual");
+    assert.equal(addArgs.createdBy, userId);
+    assert.deepEqual(addArgs.sourceRef, { kind: "explore_run", id: "run-track-test" });
+
+    const updated = await store.getRun(brandKey, "run-track-test");
+    assert.equal(updated?.question_id, "q-tracked-1");
   });
 });
