@@ -719,6 +719,14 @@ SOFTWARE.
 ### F20 Phase 5 ports
 - `src/components/portal/analytics/OrganicOverviewCard.tsx` (from `openseo:src/client/features/dashboard/Ga4Card.tsx:43-180`)
 
+### F11 Phase 2 ports
+- `src/shared/explore.ts` (from `openseo:src/types/schemas/ai-search.ts:156-243`, `openseo:src/shared/prompt-explorer-labels.ts`)
+- `src/lib/explore/shape.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:198-359`)
+- `src/lib/explore/routes.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:104-182`)
+- `src/lib/explore/job.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:53-94`)
+- `src/lib/explore/service.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:104-182`)
+- `src/app/api/customer/explore/route.ts` (from `openseo:src/serverFunctions/ai-search.ts:19-24`)
+
 ### F12 Phase 3 ports
 - `src/app/portal/questions/[questionId]/page.tsx` (from `openseo:src/routes/_app/p/$projectId/ai-visibility/prompts/$promptId.tsx`)
 - `src/components/app/markdown/MarkdownAnswer.tsx` (from `openseo:src/client/features/ai-visibility/MarkdownAnswer.tsx`)

@@ -1,0 +1,27 @@
+{
+  "model_name": "gpt-5.6-luna",
+  "web_search": true,
+  "output_tokens": 812.4,
+  "items": [
+    {
+      "type": "message",
+      "sections": [
+        {
+          "type": "text",
+          "text": "Popular choices for oversized t-shirts include various brands known for heavyweight fabrics and comfortable drops.",
+          "annotations": [
+            {
+              "title": "Oversized tees guide",
+              "url": "https://www.example.in/oversized"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "fan_out_queries": [
+    "oversized t-shirt brands india",
+    "heavyweight tee india price"
+  ],
+  "cost": 0.0611
+}

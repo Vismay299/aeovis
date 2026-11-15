@@ -391,6 +391,7 @@ test("usd6 rounds half-up to six decimals and SPEND_FEATURES is a closed union",
     "rank_tracking.check",
     "rank_tracking.suggestions",
     "rank_tracking.metrics",
+    "ai_visibility.explore",
   ]);
   assert.strictEqual(SPEND_FEATURES, SHARED_SPEND_FEATURES, "the lib path re-exports the shared array");
   assert.equal(isSpendFeature("platform.selftest"), true);
@@ -403,6 +404,7 @@ test("usd6 rounds half-up to six decimals and SPEND_FEATURES is a closed union",
   assert.equal(isSpendFeature("backlinks.research"), true);
   assert.equal(isSpendFeature("backlinks.snapshots"), true);
   assert.equal(isSpendFeature("questions.research"), true);
+  assert.equal(isSpendFeature("ai_visibility.explore"), true);
   assert.equal(isSpendFeature("platform.selftest.extra"), false);
 });
 

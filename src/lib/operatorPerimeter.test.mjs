@@ -379,6 +379,10 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/rank-tracking/configs/[configId]/trend",
       "/api/customer/rank-tracking/configs/[configId]/matrix",
       "/api/customer/rank-tracking/suggestions",
+      // F11 Phase 2 — Prompt Explorer routes. Self-gated via requireWorkspace.
+      "/api/customer/explore",
+      "/api/customer/explore/[runId]",
+      "/api/customer/explore/[runId]/track",
     ].sort(),
     "only cron workers and customer-authenticated routes may bypass the operator token gate"
   );
