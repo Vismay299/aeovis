@@ -6,7 +6,7 @@
 
 import { useMemo, type MutableRefObject } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Star, MoreHorizontal, History, ExternalLink, Trash2 } from "lucide-react";
+import { Star, MoreHorizontal, History, ExternalLink, Trash2, Sparkles } from "lucide-react";
 import { makeSelectionColumn } from "@/components/app/table/DataTable";
 import { ScoreBadge } from "@/components/app/table/ScoreBadge";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ import {
   SerpFeatureTags,
   VolumeCell,
 } from "./RankTrackingTableParts";
+import { AiVisibilityCell } from "./AiVisibilityCell";
 import type { SelectionAnchor } from "@/lib/table/tableSelection";
 
 export const RANK_TRACKING_HEADER_CLASS =
@@ -239,6 +240,7 @@ const cpcColumn: ColumnDef<RankTrackingRow> = {
 
 function makeSerpColumn(
   device: "desktop" | "mobile",
+  onTrackAiQuestion?: (row: RankTrackingRow) => void,
 ): ColumnDef<RankTrackingRow> {
   return {
     id: device === "desktop" ? "desktopSerp" : "mobileSerp",
@@ -254,8 +256,31 @@ function makeSerpColumn(
     cell: ({ row }) => {
       const features = row.original[device].serpFeatures;
       if (features.length === 0) return null;
-      return <SerpFeatureTags features={features} />;
+      return (
+        <SerpFeatureTags
+          features={features}
+          onTrackAiQuestion={
+            onTrackAiQuestion ? () => onTrackAiQuestion(row.original) : undefined
+          }
+        />
+      );
     },
+  };
+}
+
+export function makeAiVisibilityColumn(): ColumnDef<RankTrackingRow> {
+  return {
+    id: "aiVisibility",
+    enableSorting: false,
+    header: () => (
+      <span
+        className="cursor-help text-xs font-medium tracking-wide uppercase text-muted-foreground"
+        title="Latest Google AI Overview result for this keyword's AI question, from your AI-visibility scans"
+      >
+        AI Visibility
+      </span>
+    ),
+    cell: ({ row }) => <AiVisibilityCell row={row.original} />,
   };
 }
 
@@ -263,6 +288,7 @@ function makeActionsColumn(
   onKeywordClick: (row: RankTrackingRow) => void,
   onRemoveKeyword: (keywordId: string) => void,
   market: { locationCode: number; languageCode: string; locationName?: string | null },
+  onTrackAiQuestion?: (row: RankTrackingRow) => void,
 ): ColumnDef<RankTrackingRow> {
   return {
     id: "actions",
@@ -313,7 +339,15 @@ function makeActionsColumn(
               <ExternalLink className="size-3.5 text-muted-foreground" />
               <span>Open in Google</span>
             </DropdownMenuItem>
-            {/* Phase 6 column / action slot: Track as AI question */}
+            {onTrackAiQuestion && (
+              <DropdownMenuItem
+                onClick={() => onTrackAiQuestion(kw)}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Sparkles className="size-3.5 text-muted-foreground" />
+                <span>Track as AI question</span>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => onRemoveKeyword(kw.trackingKeywordId)}
               className="flex items-center gap-2 text-destructive focus:text-destructive cursor-pointer"
@@ -342,6 +376,7 @@ export function useRankTrackingColumns(options: {
   locationName?: string | null;
   /** Phase 6 slot for AI question column */
   aiQuestionColumn?: ColumnDef<RankTrackingRow>;
+  onTrackAiQuestion?: (row: RankTrackingRow) => void;
 }): ColumnDef<RankTrackingRow>[] {
   const {
     showDesktop,
@@ -356,6 +391,7 @@ export function useRankTrackingColumns(options: {
     languageCode,
     locationName,
     aiQuestionColumn,
+    onTrackAiQuestion,
   } = options;
 
   const locationLabel = locationName
@@ -381,10 +417,10 @@ export function useRankTrackingColumns(options: {
     cols.push(makeVolumeColumn(locationLabel), kdColumn, cpcColumn);
 
     if (showDesktop) {
-      cols.push(makeSerpColumn("desktop"));
+      cols.push(makeSerpColumn("desktop", onTrackAiQuestion));
     }
     if (showMobile) {
-      cols.push(makeSerpColumn("mobile"));
+      cols.push(makeSerpColumn("mobile", onTrackAiQuestion));
     }
 
     // Phase 6 column slot: AI question cell (aiVisibilityColumn)
@@ -393,11 +429,16 @@ export function useRankTrackingColumns(options: {
     }
 
     cols.push(
-      makeActionsColumn(onKeywordClick, onRemoveKeyword, {
-        locationCode,
-        languageCode,
-        locationName,
-      }),
+      makeActionsColumn(
+        onKeywordClick,
+        onRemoveKeyword,
+        {
+          locationCode,
+          languageCode,
+          locationName,
+        },
+        onTrackAiQuestion,
+      ),
     );
 
     return cols;
@@ -415,5 +456,6 @@ export function useRankTrackingColumns(options: {
     locationName,
     locationLabel,
     aiQuestionColumn,
+    onTrackAiQuestion,
   ]);
 }

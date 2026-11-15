@@ -23,6 +23,7 @@ import type { RankTrackingRow } from "@/shared/rank-tracking";
 import {
   PINNED_COLUMN_ID,
   useRankTrackingColumns,
+  makeAiVisibilityColumn,
 } from "./RankTrackingColumns";
 import { useSetKeywordPinned } from "./hooks/useSetKeywordPinned";
 import { exportRankTracking } from "./RankTrackingTableParts";
@@ -30,6 +31,7 @@ import {
   KeywordTrendModal,
   type KeywordTrendTarget,
 } from "./KeywordTrendModal";
+import { TrackAiQuestionDialog } from "./TrackAiQuestionDialog";
 import type { SelectionAnchor } from "@/lib/table/tableSelection";
 
 export function RankTrackingTable({
@@ -46,6 +48,7 @@ export function RankTrackingTable({
   languageCode,
   locationName,
   serpDepth = 40,
+  showAiQuestions = false,
   onAddKeywords,
   onClearFilters,
   onCheckSelected,
@@ -63,6 +66,7 @@ export function RankTrackingTable({
   languageCode: string;
   locationName?: string | null;
   serpDepth?: number;
+  showAiQuestions?: boolean;
   onAddKeywords: () => void;
   onClearFilters: () => void;
   onCheckSelected?: (keywordIds: string[]) => void;
@@ -71,12 +75,22 @@ export function RankTrackingTable({
   const [showConfirm, setShowConfirm] = useState(false);
   const [singleRemoveId, setSingleRemoveId] = useState<string | null>(null);
   const [trendTarget, setTrendTarget] = useState<KeywordTrendTarget | null>(null);
+  const [trackAiTarget, setTrackAiTarget] = useState<{ keywordId: string; keyword: string } | null>(null);
   const selectAnchorRef = useRef<SelectionAnchor | null>(null);
 
   const handleKeywordClick = useCallback(
     (row: RankTrackingRow) =>
       setTrendTarget({
         trackingKeywordId: row.trackingKeywordId,
+        keyword: row.keyword,
+      }),
+    [],
+  );
+
+  const handleTrackAiQuestion = useCallback(
+    (row: RankTrackingRow) =>
+      setTrackAiTarget({
+        keywordId: row.trackingKeywordId,
         keyword: row.keyword,
       }),
     [],
@@ -100,6 +114,8 @@ export function RankTrackingTable({
     locationCode,
     languageCode,
     locationName,
+    aiQuestionColumn: showAiQuestions ? makeAiVisibilityColumn() : undefined,
+    onTrackAiQuestion: showAiQuestions ? handleTrackAiQuestion : undefined,
   });
 
   const tableSorting = useMemo(
@@ -248,6 +264,17 @@ export function RankTrackingTable({
           locationName={locationName}
           serpDepth={serpDepth}
           onClose={() => setTrendTarget(null)}
+        />
+      )}
+
+      {trackAiTarget && (
+        <TrackAiQuestionDialog
+          open={!!trackAiTarget}
+          brandKey={brandKey}
+          configId={configId}
+          keywordId={trackAiTarget.keywordId}
+          initialKeyword={trackAiTarget.keyword}
+          onClose={() => setTrackAiTarget(null)}
         />
       )}
 
