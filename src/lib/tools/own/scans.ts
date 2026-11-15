@@ -327,9 +327,10 @@ export const getScanSourcesTool: ToolDefinition = {
     const loaded = await read<Row[]>(
       ctx.admin
         .from("citations")
-        .select("domain,url,domain_type,content_type,is_own,engine,result_id")
-        .eq("scan_id", input.scanId)
-        .eq("brand", ctx.brand.brandKey),
+        .select("domain,url,domain_type,content_type,is_self,engine,result_id")
+        // Ownership was checked through getOwnedScan; citations.brand holds
+        // the legacy brand slug, not the workspace brand_key.
+        .eq("scan_id", input.scanId),
     );
     const citations = Array.isArray(loaded) ? loaded : [];
     let absentResultIds = new Set<string>();
@@ -370,7 +371,7 @@ export const getScanSourcesTool: ToolDefinition = {
           url: String(row.url ?? ""),
           domainType: typeof row.domain_type === "string" ? row.domain_type : null,
           contentType: typeof row.content_type === "string" ? row.content_type : null,
-          isOwn: row.is_own === true,
+          isOwn: row.is_self === true,
           answers: new Set(),
           engines: new Set(),
         };
@@ -409,7 +410,7 @@ export const getScanStatusTool: ToolDefinition = {
     const row = await read<Row | null>(
       ctx.admin
         .from("scan_jobs")
-        .select("id,brand_key,status,progress_pct,scan_id")
+        .select("id,brand_key,status,progress_pct,result_id")
         .eq("id", input.jobId)
         .eq("brand_key", ctx.brand.brandKey)
         .maybeSingle(),
@@ -423,7 +424,7 @@ export const getScanStatusTool: ToolDefinition = {
       jobId: String(row.id),
       status: String(row.status),
       progressPct: nullableNumber(row.progress_pct),
-      scanId: typeof row.scan_id === "string" ? row.scan_id : null,
+      scanId: typeof row.result_id === "string" ? row.result_id : null,
     });
   },
 };

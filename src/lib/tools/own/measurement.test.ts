@@ -8,7 +8,7 @@ function contextFor(tables:Record<string,Record<string,unknown>[]>,calls:string[
 }
 const question=(id:string,branded:boolean)=>({id,text:"sample question",topic:"topic",origin:"manual",status:"active",branded,cohort:"core",duplicateReason:null,createdAt:"2026-11-01T00:00:00.000Z",archivedAt:null});
 test("measurement status uses the active panel and workspace-scoped recent scans",async()=>{
- const calls:string[]=[];const ctx=contextFor({scan_jobs:[{id:"j1",brand_key:"brand-a",status:"completed",created_at:"2026-11-01",finished_at:"2026-11-01",origin_job_id:"j1"},{id:"j2",brand_key:"brand-b",status:"running",origin_job_id:"j2"}],scans:[{id:"s1",brand_key:"brand-a",origin_job_id:"j1",visibility_pct:75,prompts_tracked:4,prompts_answered:3}]},calls);
+ const calls:string[]=[];const ctx=contextFor({scan_jobs:[{id:"j1",brand_key:"brand-a",status:"completed",created_at:"2026-11-01",result_id:"s1"},{id:"j2",brand_key:"brand-b",status:"running"}],scans:[{id:"s1",brand_key:"brand-a",origin_job_id:"j1",visibility_pct:75,prompts_tracked:4,prompts_mentioned:3,scanned_at:"2026-11-01"}]},calls);
  const tool=createMeasurementStatusTool({enabled:async()=>false,listQuestions:async(_ctx,input)=>{assert.equal(input.status,"active");return {questions:[question("q1",true),question("q2",false)],approvedVersion:4,dirty:true};}});
  const result=await tool.handler(ctx,{}) as any;
  assert.deepEqual(result.panel,{approvedVersion:4,dirty:true,active:2,branded:1});assert.equal(result.latestScans.length,1);assert.equal(result.latestScans[0].scanId,"s1");assert.equal(result.latestScans[0].answered,3);assert.equal(result.schedule,null);assert.ok(calls.includes("scan_jobs.select"));

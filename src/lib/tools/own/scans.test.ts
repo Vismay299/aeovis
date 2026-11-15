@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AppError } from "../../http/appError.ts";
-import { getScanAnswerTool, getScanReportTool, getScanSourcesTool } from "./scans.ts";
+import { getScanAnswerTool, getScanReportTool, getScanSourcesTool, getScanStatusTool } from "./scans.ts";
 import type { ToolHandlerContext } from "../types.ts";
 
 type Row = Record<string, any>;
@@ -221,7 +221,7 @@ test("scan sources group domains and count distinct citing answers", async () =>
         scan_id: SCAN,
         result_id: RESULT,
         engine: "chatgpt",
-        is_own: false,
+        is_self: false,
       },
       {
         domain: "docs.example.test",
@@ -230,7 +230,7 @@ test("scan sources group domains and count distinct citing answers", async () =>
         scan_id: SCAN,
         result_id: RESULT,
         engine: "gemini",
-        is_own: false,
+        is_self: false,
       },
       {
         domain: "docs.example.test",
@@ -239,7 +239,7 @@ test("scan sources group domains and count distinct citing answers", async () =>
         scan_id: SCAN,
         result_id: "r2",
         engine: "gemini",
-        is_own: false,
+        is_self: false,
       },
     ],
   });
@@ -249,4 +249,17 @@ test("scan sources group domains and count distinct citing answers", async () =>
   assert.equal(output.totalCount, 1);
   assert.equal(output.sources[0].answersCiting, 2);
   assert.deepEqual(output.sources[0].engines, ["chatgpt", "gemini"]);
+});
+
+test("get_scan_status reads the finished scan from scan_jobs.result_id", async () => {
+  const JOB = "11111111-1111-4111-8111-111111111111";
+  const { context, calls } = fakeAdmin({
+    scan_jobs: [{ id: JOB, brand_key: "brand-a", status: "complete", progress_pct: 100, result_id: SCAN }],
+  });
+
+  const output = (await getScanStatusTool.handler(context, { jobId: JOB })) as any;
+
+  assert.equal(output.scanId, SCAN);
+  assert.equal(output.progressPct, 100);
+  assert.ok(calls.some((call) => call === "scan_jobs.select:id,brand_key,status,progress_pct,result_id"));
 });

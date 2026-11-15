@@ -84,7 +84,7 @@ export function createMeasurementStatusTool(deps: Deps = {}): ToolDefinition {
       const jobs = await read<Row[]>(
         ctx.admin
           .from("scan_jobs")
-          .select("id,brand_key,status,created_at,finished_at,scan_id,origin_job_id")
+          .select("id,brand_key,status,created_at,result_id")
           .eq("brand_key", ctx.brand.brandKey)
           .order("created_at", { ascending: false })
           .limit(5),
@@ -93,7 +93,7 @@ export function createMeasurementStatusTool(deps: Deps = {}): ToolDefinition {
       const origins = [
         ...new Set(
           jobRows
-            .map((job) => job.origin_job_id)
+            .map((job) => job.id)
             .filter((value): value is string => typeof value === "string"),
         ),
       ];
@@ -103,7 +103,7 @@ export function createMeasurementStatusTool(deps: Deps = {}): ToolDefinition {
             ctx.admin
               .from("scans")
               .select(
-                "id,origin_job_id,visibility_pct,prompts_tracked,prompts_mentioned,prompts_answered",
+                "id,origin_job_id,visibility_pct,prompts_tracked,prompts_mentioned,scanned_at",
               )
               .eq("brand_key", ctx.brand.brandKey)
               .in("origin_job_id", origins),
@@ -154,26 +154,23 @@ export function createMeasurementStatusTool(deps: Deps = {}): ToolDefinition {
         schedule,
         latestScans: jobRows.map((job) => {
           const scan =
-            scansByOrigin.get(String(job.id)) ??
-            scansByOrigin.get(String(job.origin_job_id));
+            scansByOrigin.get(String(job.id));
 
           return {
             scanId:
               typeof scan?.id === "string"
                 ? scan.id
-                : typeof job.scan_id === "string"
-                  ? job.scan_id
+                : typeof job.result_id === "string"
+                  ? job.result_id
                   : null,
             jobId: String(job.id),
             status: String(job.status),
             createdAt:
               typeof job.created_at === "string" ? job.created_at : null,
             finishedAt:
-              typeof job.finished_at === "string" ? job.finished_at : null,
+              typeof scan?.scanned_at === "string" ? scan.scanned_at : null,
             visibilityPct: nullableNumber(scan?.visibility_pct),
-            answered: nullableNumber(
-              scan?.prompts_answered ?? scan?.prompts_mentioned,
-            ),
+            answered: nullableNumber(scan?.prompts_mentioned),
             planned: nullableNumber(scan?.prompts_tracked),
           };
         }),
