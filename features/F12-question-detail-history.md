@@ -603,6 +603,6 @@ Fixtures are synthetic; no provider calls. Answer texts in fixtures are short in
 - [x] Phases 1–3 merged with their checkpoints green.
 - [x] F12-AC-01 … F12-AC-14 covered by passing tests in §9.
 - [x] `npm test`, `npm run typecheck`, `npm run build` green; CI `customer-database` green including `check-f12-db.mjs` groups.
-- [x] Owner backfill run recorded (counts only).
+- [ ] Owner backfill run recorded (counts only).
 - [x] `THIRD_PARTY_NOTICES.md` lists every ported file.
 - [x] `features/README.md` F12 status updated, and F08 added to its Depends column.

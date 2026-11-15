@@ -14,16 +14,8 @@ import {
   readEngineScores,
   engineMetricReading,
 } from "./reportData";
+import { QuestionHistoryLink } from "@/components/portal/questions/history/QuestionHistoryLink";
 import "./scans.css";
-
-let QuestionHistoryLink = null;
-try {
-  QuestionHistoryLink = require("@/components/portal/questions/history/QuestionHistoryLink").QuestionHistoryLink;
-} catch {
-  try {
-    QuestionHistoryLink = require("../questions/history/QuestionHistoryLink").QuestionHistoryLink;
-  } catch {}
-}
 
 /** One row per engine with its measured visibility. */
 export function EngineScoresCard({ engineScores, engines, terminalOutcome }) {
@@ -178,7 +170,7 @@ function QuestionRow({ question, engine, questionIdByQuery, scanId }) {
       </button>
       {open ? (
         <div id={id} className="space-y-3 border-t border-border p-4 bg-card pv-scans-q__answers">
-          {linkedQuestionId && QuestionHistoryLink ? (
+          {linkedQuestionId ? (
             <div className="pv-scans-q__history">
               <QuestionHistoryLink questionId={linkedQuestionId} fromScan={scanId} />
             </div>
