@@ -1,6 +1,3 @@
-// Portions Copyright (c) 2026 OpenSEO authors. Licensed under MIT.
-// Adapted for Perceev.
-
 import { requireWorkspace } from "../../../../../lib/workspace/requireWorkspace.ts";
 import type { RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
 import { toErrorResponse, jsonOk, AppError } from "../../../../../lib/http/errors.ts";

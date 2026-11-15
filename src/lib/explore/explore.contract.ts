@@ -1,6 +1,3 @@
-// Portions Copyright (c) 2026 upstream authors. Licensed under MIT.
-// Adapted for Perceev.
-
 import { z } from "zod";
 import { defineRouteContract, type RouteContract } from "../http/routeContract.ts";
 import {

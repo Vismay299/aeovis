@@ -1,5 +1,6 @@
-// Portions Copyright (c) 2026 OpenSEO authors. Licensed under MIT.
-// Adapted for Perceev.
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/serverFunctions/ai-search.ts:19-24
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { requireWorkspace } from "../../../../lib/workspace/requireWorkspace.ts";
 import type { RequireWorkspaceDeps } from "../../../../lib/workspace/requireWorkspace.ts";

@@ -1,6 +1,3 @@
-// Portions Copyright (c) 2026 OpenSEO authors. Licensed under MIT.
-// Adapted for Perceev.
-
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { AppError } from "../http/errors.ts";
 

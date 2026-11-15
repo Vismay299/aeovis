@@ -1,5 +1,6 @@
-// Portions Copyright (c) 2026 OpenSEO authors. Licensed under MIT.
-// Adapted for Perceev.
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/server/features/ai-search/services/promptExplorer.ts:198-359
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { createHash } from "node:crypto";
 import { safeHttpUrl, safeHostname } from "../../shared/safe-url.ts";

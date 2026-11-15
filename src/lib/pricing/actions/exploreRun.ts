@@ -1,6 +1,3 @@
-// Portions Copyright (c) 2026 OpenSEO authors. Licensed under MIT.
-// Adapted for Perceev.
-
 import { z } from "zod";
 import { definePricedAction, type PricingContext, type PricedActionEstimateResult } from "../pricedActions.ts";
 import {

@@ -724,6 +724,7 @@ SOFTWARE.
 - `src/lib/explore/shape.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:198-359`)
 - `src/lib/explore/routes.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:104-182`)
 - `src/lib/explore/job.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:53-94`)
+- `src/lib/explore/service.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:104-182`)
 - `src/app/api/customer/explore/route.ts` (from `openseo:src/serverFunctions/ai-search.ts:19-24`)
 
 ### F12 Phase 3 ports

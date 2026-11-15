@@ -1,6 +1,3 @@
-// Portions Copyright (c) 2026 upstream authors. Licensed under MIT.
-// Adapted for Perceev.
-
 import { defineJob, getJobDefinition } from "../jobs/registry.ts";
 import { definePeriodic } from "../jobs/periodic.ts";
 import { DB_STEP } from "../jobs/stepConfigs.ts";
