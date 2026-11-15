@@ -668,7 +668,7 @@ Fixtures are synthetic (§6.4). Fake tokens follow the secrets rule (`ya29.EXAMP
 - [x] `npm run build` green; full suite green; `node scripts/qa/check-f20-db.mjs` and `node scripts/qa/check-f20-browser.mjs` pass.
 - [x] Search Console guard (§8) clean on every phase; `node --test src/lib/gsc/` passes unchanged.
 - [x] Migration paperwork for 135 and 136 in `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`; `THIRD_PARTY_NOTICES.md` lists every COPY/PORT path.
-- [x] `features/README.md` status updated; owner-run live check recorded.
+- [ ] `features/README.md` status updated; owner-run live check recorded. (Status updated; live check is an owner action.)
 
 ## Deviations from conventions
 
