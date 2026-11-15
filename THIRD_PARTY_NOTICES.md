@@ -718,3 +718,27 @@ SOFTWARE.
 
 ### F20 Phase 5 ports
 - `src/components/portal/analytics/OrganicOverviewCard.tsx` (from `openseo:src/client/features/dashboard/Ga4Card.tsx:43-180`)
+
+### F15 Phase 5 ports
+- `src/lib/rank-tracking/runPolling.ts` (from `openseo:src/client/features/rank-tracking/useRankRunPolling.ts:9-47`)
+- `src/components/portal/rank-tracking/AddKeywordsPanel.tsx` (from `openseo:src/client/features/rank-tracking/AddKeywordsModal.tsx`)
+- `src/components/portal/rank-tracking/AiOverviewStrip.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingDomainDetail.tsx`)
+- `src/components/portal/rank-tracking/KeywordTrendModal.tsx` (from `openseo:src/client/features/rank-tracking/KeywordTrendModal.tsx`)
+- `src/components/portal/rank-tracking/RankRunAlerts.tsx` (from `openseo:src/client/features/rank-tracking/RankRunAlerts.tsx`)
+- `src/components/portal/rank-tracking/RankTrackingColumns.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingColumns.tsx`)
+- `src/components/portal/rank-tracking/RankTrackingDetailHeader.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingDomainDetail.tsx`)
+- `src/components/portal/rank-tracking/RankTrackingDomainDetail.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingDomainDetail.tsx`)
+- `src/components/portal/rank-tracking/RankTrackingFilterPanel.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingFilters.tsx`)
+- `src/components/portal/rank-tracking/RankTrackingHistoryMatrix.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingHistoryMatrix.tsx`)
+- `src/components/portal/rank-tracking/RankTrackingOverview.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingOverview.tsx`)
+- `src/components/portal/rank-tracking/RankTrackingTable.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingTable.tsx`)
+- `src/components/portal/rank-tracking/RankTrackingTableParts.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingTableParts.tsx`)
+- `src/components/portal/rank-tracking/RankTrackingTableToolbar.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingTableToolbar.tsx`)
+- `src/components/portal/rank-tracking/RankTrendChart.tsx` (from `openseo:src/client/features/rank-tracking/RankTrendChart.tsx`)
+- `src/components/portal/rank-tracking/ToolbarMenus.tsx` (from `openseo:src/client/features/rank-tracking/ToolbarMenus.tsx`)
+- `src/components/portal/rank-tracking/hooks/useMetricsRefresh.ts` (from `openseo:src/client/features/rank-tracking/useMetricsRefresh.ts`)
+- `src/components/portal/rank-tracking/hooks/useRankCheckTrigger.ts` (from `openseo:src/client/features/rank-tracking/useRankCheckTrigger.ts`)
+- `src/components/portal/rank-tracking/hooks/useRankResults.ts` (from `openseo:src/client/features/rank-tracking/RankTrackingDomainDetail.tsx`)
+- `src/components/portal/rank-tracking/hooks/useRankRunPolling.ts` (from `openseo:src/client/features/rank-tracking/useRankRunPolling.ts`)
+- `src/components/portal/rank-tracking/hooks/useSetKeywordPinned.ts` (from `openseo:src/client/features/rank-tracking/useSetKeywordPinned.ts`)
+
