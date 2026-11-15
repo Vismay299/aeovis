@@ -19,3 +19,4 @@ import "../local/jobs.ts";
 import "../export/retention.ts";
 import "../rank-tracking/jobs.ts";
 import "../explore/jobs.ts";
+import "../backlinks/jobs.ts";

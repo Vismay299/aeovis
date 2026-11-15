@@ -11,6 +11,7 @@ import { normalizeBacklinksTarget } from "../../providers/dataforseo/backlinksTa
 import { buildBacklinksDateRange } from "../../backlinks/backlinksService.ts";
 import { backlinksResearchKey } from "../../backlinks/researchLog.ts";
 import { findRecentResearch as defaultFindRecentResearch } from "../../projectContext/service.ts";
+import { scheduledChecksPerMonth } from "../../../shared/schedule.ts";
 
 export type BacklinksQuoteDeps = {
   findRecentResearch?: typeof defaultFindRecentResearch;
@@ -344,4 +345,45 @@ export const backlinksExpandDomainAction = definePricedAction({
   input: backlinksExpandDomainInput,
   requireApproval: false,
   estimate: (ctx, input) => estimateBacklinksExpandDomain(ctx, input),
+});
+
+export const backlinksSnapshotsTrackInput = z.strictObject({
+  target: z.string().trim().min(3).max(255),
+  scope: z.enum(["domain", "subdomains"]),
+  interval: z.enum(["weekly", "monthly"]),
+});
+
+export async function estimateBacklinksSnapshotsTrack(
+  _ctx: PricingContext,
+  input: z.infer<typeof backlinksSnapshotsTrackInput>,
+): Promise<PricedActionEstimateResult> {
+  const unitUsd = fromMicros(
+    toMicros(dataforseoPricing.backlinks.summary({})),
+  );
+  const runsPerMonth = scheduledChecksPerMonth(input.interval);
+  const totalUsd = fromMicros(toMicros(unitUsd * runsPerMonth));
+  return {
+    totalUsd,
+    expectedUsd: null,
+    units: [{ key: "summary", label: "Backlink summary", count: runsPerMonth }],
+    lines: [
+      {
+        label: `Backlink summary for ${input.target}`,
+        quantity: runsPerMonth,
+        unitUsd,
+        totalUsd,
+      },
+    ],
+    monthly: { interval: input.interval, runsPerMonth, totalUsd },
+    warnings: [],
+    blocked: null,
+  };
+}
+
+export const backlinksSnapshotsTrackAction = definePricedAction({
+  key: "backlinks.snapshots.track",
+  feature: "backlinks.snapshots",
+  input: backlinksSnapshotsTrackInput,
+  requireApproval: true,
+  estimate: (ctx, input) => estimateBacklinksSnapshotsTrack(ctx, input),
 });
