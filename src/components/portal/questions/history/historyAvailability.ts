@@ -1,1 +1,1 @@
-export const QUESTION_HISTORY_AVAILABLE = false;
+export const QUESTION_HISTORY_AVAILABLE = true;

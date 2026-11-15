@@ -60,6 +60,7 @@ next-env.d.ts
 /test_reports/f09-browser/
 /test_reports/f07-browser/
 /test_reports/f08-browser/
+/test_reports/f12-browser/
 
 # Playwright MCP browser session snapshots
 .playwright-mcp/
