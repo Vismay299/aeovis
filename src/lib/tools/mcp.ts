@@ -8,9 +8,12 @@ import { AppError } from "../http/appError.ts";
 import { toToolError } from "./errors.ts";
 import { toCallToolResult } from "./format.ts";
 import { runTool, type ToolOutcome } from "./run.ts";
+import { TOOL_REGISTRY } from "./registry.ts";
 import type { ToolHandlerContext, ToolRegistration } from "./types.ts";
 
-export function toMcpToolDescriptors(registrations: readonly ToolRegistration[] = []): Array<{
+export function toMcpToolDescriptors(
+  registrations: readonly ToolRegistration[] = TOOL_REGISTRY,
+): Array<{
   name: string;
   title: string;
   description: string;
@@ -39,14 +42,26 @@ export async function callToolForMcp(
       typeof rawInput === "object" && rawInput !== null
         ? (rawInput as Record<string, unknown>).maxUsd
         : undefined;
+
     if (typeof maxUsd !== "number" || !Number.isFinite(maxUsd) || maxUsd <= 0) {
       const outcome: ToolOutcome = {
         ok: false,
-        error: toToolError(new AppError(400, "approval_required", "Pass the approved maxUsd before running this tool.")),
+        error: toToolError(
+          new AppError(400, "approval_required", "Pass the approved maxUsd before running this tool."),
+        ),
       };
-      return toCallToolResult(registration, outcome, { ...base, brandKey: context.brand.brandKey });
+
+      return toCallToolResult(registration, outcome, {
+        ...base,
+        brandKey: context.brand.brandKey,
+      });
     }
   }
+
   const outcome = await runTool(registration, context, rawInput);
-  return toCallToolResult(registration, outcome, { ...base, brandKey: context.brand.brandKey });
+
+  return toCallToolResult(registration, outcome, {
+    ...base,
+    brandKey: context.brand.brandKey,
+  });
 }
