@@ -95,14 +95,14 @@ test("createOAuthAttempt stores default return path when omitted, stores /onboar
     },
   };
 
-  // 1. Default return path stored when omitted
+  // 1. Default return path left to the column default when omitted
   await createOAuthAttempt({
     userId: "user-a",
     brandKey: "workspace-a",
     sessionTokenHash: "session-hash-1",
     admin,
   });
-  assert.equal(inserted.return_path, "/portal/search-console");
+  assert.equal("return_path" in inserted, false);
 
   // 2. /onboarding stored
   await createOAuthAttempt({

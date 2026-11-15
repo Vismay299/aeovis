@@ -58,7 +58,9 @@ export async function createOAuthAttempt({ userId, brandKey, sessionTokenHash, a
     session_token_hash: sessionTokenHash || null,
     encrypted_code_verifier: JSON.stringify(encryptedVerifier),
     expires_at: new Date(Date.now() + ATTEMPT_TTL_MS).toISOString(),
-    return_path: returnPath,
+    // Written only when it differs from the column default, so Search Console
+    // keeps working on databases that do not have migration 170 yet.
+    ...(returnPath === "/onboarding" ? { return_path: returnPath } : {}),
   });
   if (error) throw new Error(`Failed to create OAuth attempt: ${error.message}`);
 

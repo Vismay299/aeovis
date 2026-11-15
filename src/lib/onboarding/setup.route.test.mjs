@@ -154,7 +154,7 @@ test("GET /api/customer/setup - computes each row from data sources", async () =
       { brand_key: "brand-1", user_id: "u-1" },
       { brand_key: "brand-1", user_id: "u-2" },
     ],
-    customer_brand_invites: [],
+    customer_team_invites: [],
     workspace_setup_dismissals: [],
   };
 

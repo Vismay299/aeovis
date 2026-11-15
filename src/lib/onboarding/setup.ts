@@ -139,7 +139,7 @@ export async function getSetupActivation(
       if ((memberCount ?? 0) > 1) return true;
 
       const { count: inviteCount } = await admin
-        .from("customer_brand_invites")
+        .from("customer_team_invites")
         .select("id", { count: "exact", head: true })
         .eq("brand_key", brandKey)
         .eq("status", "pending");

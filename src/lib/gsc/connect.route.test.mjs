@@ -129,7 +129,8 @@ test("POST /api/customer/gsc/connect - return_to: '/x' is ignored and defaults t
   const res = await connectRoute.POST(req);
   assert.equal(res.status, 200);
   assert.equal(insertedAttempts.length, 1);
-  assert.equal(insertedAttempts[0].return_path, "/portal/search-console");
+  // Default path is left to the column default (works before migration 170).
+  assert.equal("return_path" in insertedAttempts[0], false);
 });
 
 test("GET /api/customer/gsc/callback - onboarding attempt redirects to /onboarding?step=search_console...", async (t) => {
