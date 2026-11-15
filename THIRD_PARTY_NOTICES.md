@@ -771,3 +771,13 @@ SOFTWARE.
 - `src/lib/onboarding/website.ts` (from `openseo:src/serverFunctions/projects.ts:67-81`, `openseo:src/server/features/dashboard/services/DashboardFirstAuditService.ts:11-90`)
 - `src/lib/onboarding/steps.ts` (from `openseo:src/serverFunctions/onboarding.ts:77-136`)
 - `src/lib/onboarding/setup.ts` (from `openseo:src/server/features/dashboard/services/DashboardService.ts:52-98`, `openseo:src/serverFunctions/dashboard.ts:55-66`)
+
+### F22 Phase 1 ports
+- `src/lib/tools/links.ts` (from `src/server/mcp/urls.ts`)
+- `src/lib/tools/capOutput.ts` (from `src/server/features/sam/samToolOutput.ts`)
+- `src/lib/tools/capOutput.test.ts` (three parity cases from `src/server/features/sam/samToolOutput.test.ts`)
+- `src/lib/tools/errors.ts` (from `src/server/mcp/tool-error-message.ts`, `src/server/mcp/instrumentation.ts`)
+- `src/lib/tools/run.ts` (from `src/server/features/sam/samChatTools.ts`)
+- `src/lib/tools/waiting.ts` and `src/lib/tools/waiting.test.ts` (from `src/server/features/sam/samChatTools.ts`)
+- `src/lib/tools/format.ts` (from `src/server/mcp/formatters.ts`)
+- `src/lib/tools/mcp.ts` (from `src/server/mcp/output-schemas.ts`, `src/server/mcp/server.ts`)
