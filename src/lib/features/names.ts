@@ -62,6 +62,8 @@ export const FEATURES = {
   rank_tracking_ai_questions: { spend: [] as const },
   // F11: Prompt Explorer
   prompt_explorer: { spend: ["ai_visibility.explore"] as const },
+  // F27: onboarding wizard and setup checklist
+  onboarding_wizard: { spend: [] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;

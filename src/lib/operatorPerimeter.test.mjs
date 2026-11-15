@@ -383,6 +383,13 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/explore",
       "/api/customer/explore/[runId]",
       "/api/customer/explore/[runId]/track",
+      // F27 — onboarding wizard and setup checklist routes
+      "/api/customer/onboarding",
+      "/api/customer/onboarding/complete",
+      "/api/customer/onboarding/step",
+      "/api/customer/onboarding/website",
+      "/api/customer/setup",
+      "/api/customer/setup/dismiss",
     ].sort(),
     "only cron workers and customer-authenticated routes may bypass the operator token gate"
   );

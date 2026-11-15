@@ -588,6 +588,12 @@ abandoned is not.
 ---
 
 
+### `170_f27_onboarding` (F27 phase 1)
+- Status: implemented in repo; **not yet applied to production**.
+- apply 170; existing users get no row and are never redirected.
+- Objects: `user_onboarding` (per-user progress, nullable brand_key, RLS read-own), `workspace_setup_dismissals` (per-user per-workspace checklist dismissals, RLS read-own with customer_can_access_brand), `gsc_oauth_attempts.return_path` (default '/portal/search-console').
+- Safety: no production changes made; flags default off.
+
 ### `165_f26_privacy_and_telemetry_ids` (F26 phase 1)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply 165; no backfill needed: the column default fills existing rows.

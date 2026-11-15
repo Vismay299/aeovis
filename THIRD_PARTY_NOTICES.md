@@ -764,3 +764,10 @@ SOFTWARE.
 
 ### F20 Phase 6 ports
 - `src/lib/ga4/tools.ts` (from `openseo:src/server/mcp/tools/google-analytics-tools.ts`)
+
+### F27 Phase 1 ports
+- `src/shared/onboarding.ts` (from `openseo:src/client/features/onboarding/onboardingModel.ts:4-19`)
+- `src/shared/setup-steps.ts` (from `openseo:src/client/features/dashboard/dashboardSteps.ts:1-79`)
+- `src/lib/onboarding/website.ts` (from `openseo:src/serverFunctions/projects.ts:67-81`, `openseo:src/server/features/dashboard/services/DashboardFirstAuditService.ts:11-90`)
+- `src/lib/onboarding/steps.ts` (from `openseo:src/serverFunctions/onboarding.ts:77-136`)
+- `src/lib/onboarding/setup.ts` (from `openseo:src/server/features/dashboard/services/DashboardService.ts:52-98`, `openseo:src/serverFunctions/dashboard.ts:55-66`)

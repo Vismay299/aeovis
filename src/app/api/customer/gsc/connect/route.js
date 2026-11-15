@@ -36,11 +36,17 @@ export async function POST(request) {
     const sessionHash = await customerSessionBinding(context);
     if (!sessionHash) throw new Error("Your login session expired. Please sign in again.");
 
+    let returnPath = "/portal/search-console";
+    if (body?.return_to === "/onboarding") {
+      returnPath = "/onboarding";
+    }
+
     const { authorizationUrl } = await createOAuthAttempt({
       userId: context.user.id,
       brandKey: brand.brandKey,
       sessionTokenHash: sessionHash,
       admin,
+      returnPath,
     });
 
     return NextResponse.json({ authorization_url: authorizationUrl });

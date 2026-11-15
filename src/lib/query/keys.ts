@@ -145,6 +145,8 @@ export const keys = {
     ["rankKeywordHistory", brandKey, configId, keywordId, sinceDays] as const,
   rankSuggestions: (brandKey: string, domain: string, locationCode: number) =>
     ["rankSuggestions", brandKey, domain, locationCode] as const,
+  // F27
+  setup: (brandKey: string) => ["setup", brandKey] as const,
 } as const;
 
 // F12 §6.2 — question history reads. Workspace data follows
@@ -167,6 +169,17 @@ export const emailKeys = {
   preferences: () => ["emailPreferences"] as const,
 } as const;
 
+// F27 — per-user onboarding state. A user-level key: the data belongs
+// to the person, not a workspace.
+export const onboardingKeys = {
+  state: (scan?: string | null, domain?: string | null) =>
+    ["onboarding", scan ?? "", domain ?? ""] as const,
+} as const;
+
+// F27 — setup checklist. Workspace-scoped.
+export const setupKeys = {
+  activation: (brandKey: string) => ["setup", brandKey] as const,
+} as const;
 
 /** Every domain above whose second element is a brandKey. */
 export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
@@ -221,6 +234,7 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "rankMatrix",
   "rankKeywordHistory",
   "rankSuggestions",
+  "setup",
 ]);
 
 export function isWorkspaceKey(

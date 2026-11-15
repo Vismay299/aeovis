@@ -1609,6 +1609,28 @@ Migration 051 adds only the four read functions behind F03's customer Usage page
 2. It must be applied after `050_f03_cost_ledger`, because `workspace_spend_position` reads `f01_committed_usd` and the open holds, and `operator_costs_by_workspace` counts the open `cost_reconciliations` rows.
 3. Verified against disposable PostgreSQL by the `usage` group of `scripts/qa/check-f03-db.mjs`.
 
+## `170_f27_onboarding.sql`
+
+**Status:** in repo; **not yet applied to production**.
+
+Onboarding progress per user, setup-checklist dismissals per user and workspace, and an optional Search Console return path to onboarding.
+
+### Objects to check in the catalog
+- table `public.user_onboarding` (RLS enabled; authenticated reads own; service role all)
+- table `public.workspace_setup_dismissals` (RLS enabled; authenticated reads own with customer_can_access_brand; service role all)
+- column `public.gsc_oauth_attempts.return_path` (text, default '/portal/search-console', checked in ('/portal/search-console', '/onboarding'))
+
+### Apply
+1. Apply the migration on a maintenance window (idempotent DDL).
+2. Existing users get no `user_onboarding` row and are never redirected into onboarding.
+3. Confirm with:
+   - `select to_regclass('public.user_onboarding');` → `user_onboarding`
+   - `select to_regclass('public.workspace_setup_dismissals');` → `workspace_setup_dismissals`
+   - `select column_name, column_default from information_schema.columns where table_name='gsc_oauth_attempts' and column_name='return_path';`
+
+### Owner follow-ups (not this migration)
+Turn on `FEATURE_ONBOARDING_WIZARD` when ready to enable the onboarding wizard and setup checklist (see F27 §10).
+
 ## `165_f26_privacy_and_telemetry_ids.sql`
 
 **Status:** in repo; **not yet applied to production**.

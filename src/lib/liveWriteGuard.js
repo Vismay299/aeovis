@@ -234,6 +234,9 @@ export const NEVER_WRITABLE = Object.freeze([
   // workspace questions. Tenant data; live tests use the loopback-only
   // check-f12-db.mjs harness.
   "question_answer_links",
+  // F27 — migration 170: onboarding progress and setup checklist dismissals.
+  "user_onboarding",
+  "workspace_setup_dismissals",
 ]);
 
 /**

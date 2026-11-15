@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import {
   WORKSPACE_DOMAINS,
   emailKeys,
+  onboardingKeys,
+  setupKeys,
   invalidateWorkspace,
   isWorkspaceKey,
   keys,
@@ -95,6 +97,7 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.rankMatrix("acme", "c1", "mobile"),
     keys.rankKeywordHistory("acme", "c1", "k1", 30),
     keys.rankSuggestions("acme", "example.com", 2356),
+    keys.setup("acme"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
@@ -267,3 +270,16 @@ test("F25 email preferences key is user-level, never workspace-scoped", () => {
   assert.equal(WORKSPACE_DOMAINS.has("emailPreferences"), false);
   assert.equal(isWorkspaceKey(emailKeys.preferences(), "acme"), false);
 });
+
+test("F27 onboarding and setup keys: onboarding is user-level, setup is workspace-scoped", () => {
+  assert.deepEqual(onboardingKeys.state("s1", "example.com"), ["onboarding", "s1", "example.com"]);
+  assert.deepEqual(onboardingKeys.state(), ["onboarding", "", ""]);
+  assert.equal(WORKSPACE_DOMAINS.has("onboarding"), false);
+  assert.equal(isWorkspaceKey(onboardingKeys.state(), "acme"), false);
+
+  assert.deepEqual(setupKeys.activation("acme"), ["setup", "acme"]);
+  assert.equal(WORKSPACE_DOMAINS.has("setup"), true);
+  assert.equal(isWorkspaceKey(setupKeys.activation("acme"), "acme"), true);
+  assert.equal(isWorkspaceKey(setupKeys.activation("acme"), "other"), false);
+});
+
