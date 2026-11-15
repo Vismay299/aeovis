@@ -1,0 +1,28 @@
+{
+  "id": "gen-1234567890",
+  "model": "anthropic/claude-3.5-sonnet",
+  "choices": [
+    {
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "Several notable brands offer premium heavyweight and relaxed-fit tees.",
+        "annotations": [
+          {
+            "title": "Streetwear Directory",
+            "url": "https://www.streetwear.example/directory"
+          }
+        ]
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 150,
+    "completion_tokens": 320,
+    "total_tokens": 470,
+    "cost": 0.045,
+    "server_tool_use": {
+      "web_search_requests": 1
+    }
+  }
+}

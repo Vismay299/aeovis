@@ -1,0 +1,19 @@
+{
+  "model_name": "claude-3-7-sonnet",
+  "web_search": false,
+  "output_tokens": 450,
+  "items": [
+    {
+      "type": "message",
+      "sections": [
+        {
+          "type": "text",
+          "text": "An oversized t-shirt generally features dropped shoulders and a boxy silhouette for a relaxed fit.",
+          "annotations": []
+        }
+      ]
+    }
+  ],
+  "fan_out_queries": [],
+  "cost": 0.08
+}
