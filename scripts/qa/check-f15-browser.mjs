@@ -41,7 +41,7 @@ if (!(await waitForServer(1000))) {
   }
 }
 const onlyIndex = process.argv.indexOf("--only");
-const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B8";
+const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B9";
 const selectedScenarios = new Set();
 for (const selection of requested.split(",")) {
   const range = selection.match(/^B(\d+)-B(\d+)$/);
@@ -270,11 +270,19 @@ try {
     let resultsFetchCount = 0;
     const pinRequests = [];
     const checkRequests = [];
+    const aiQuestionRequests = [];
 
     await page.route("**/api/customer/features*", (route) => route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ brandKey: "acme", features: { rank_tracking: true } }),
+      body: JSON.stringify({
+        brandKey: "acme",
+        features: {
+          rank_tracking: true,
+          rank_tracking_ai_questions: true,
+          question_curation: true,
+        },
+      }),
     }));
 
     await page.route("**/api/customer/rank-tracking/**", async (route) => {
@@ -300,6 +308,19 @@ try {
       }
       if (request.method() === "GET" && url.pathname.endsWith(`/configs/${trackerDetail.tracker.id}`)) {
         return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(trackerDetail) });
+      }
+      if (request.method() === "POST" && url.pathname.includes("/ai-question")) {
+        aiQuestionRequests.push(request.postDataJSON());
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            questionId: "50000000-0000-4000-8000-000000000001",
+            created: true,
+            revived: false,
+            linked: true,
+          }),
+        });
       }
       if (request.method() === "POST" && url.pathname.endsWith("/check")) {
         checkRequests.push(request.postDataJSON());
@@ -357,6 +378,7 @@ try {
       page,
       pinRequests,
       checkRequests,
+      aiQuestionRequests,
       getResultsFetchCount: () => resultsFetchCount,
       setRun: (r) => { currentRun = r; },
       resultsData,
@@ -510,6 +532,36 @@ try {
       assert.ok(!hasHorizontalScroll, "phone width 390px must have no horizontal page scroll");
 
       return "aio=shown filter isolates 6 rows, CSV export has AI Overview and numeric change, 390px has no horizontal scroll";
+    } finally { await context.close(); }
+  });
+
+  await record("B9", "row menu 'Track as AI question' prefilled, created toast with 'Open Questions', column shows 'Cited in AI Overview'", async () => {
+    const { context, page, aiQuestionRequests } = await openDetail();
+    try {
+      await page.getByText("Cited in AI Overview").first().waitFor();
+
+      const row = page.locator("table").last().locator("tbody tr").nth(1);
+      const menuBtn = row.getByRole("button", { name: "Keyword actions" });
+      await menuBtn.click();
+
+      await page.getByRole("menuitem", { name: "Track as AI question" }).click();
+
+      const dialog = page.getByRole("dialog");
+      await dialog.waitFor();
+      await dialog.getByText("Track as AI question").waitFor();
+
+      const input = dialog.locator("#track-ai-question-text");
+      assert.equal(await input.inputValue(), "best espresso blend");
+
+      await dialog.getByRole("button", { name: "Add question" }).click();
+
+      await page.getByText("Question added. Approve your panel in Questions to start measuring it.").waitFor();
+      await page.getByRole("button", { name: "Open Questions" }).waitFor();
+
+      assert.equal(aiQuestionRequests.length, 1);
+      assert.equal(aiQuestionRequests[0].text, "best espresso blend");
+
+      return "row menu 'Track as AI question' prefilled, created toast with 'Open Questions', column shows 'Cited in AI Overview'";
     } finally { await context.close(); }
   });
 } finally {

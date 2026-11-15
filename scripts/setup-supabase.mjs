@@ -594,6 +594,10 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "rank_config_summaries" },
     { kind: "function", name: "prune_rank_tracking" },
   ],
+  "112_f15_rank_keyword_questions.sql": [
+    { kind: "table", name: "rank_keyword_questions" },
+    { kind: "function", name: "rank_question_aio_status" },
+  ],
   "065_f06_exports.sql": [
     { kind: "bucket", name: "exports" },
     { kind: "table", name: "export_requests" },

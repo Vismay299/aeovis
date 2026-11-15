@@ -1822,6 +1822,14 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - Adds service-role-only keyword add, scheduler claim, run and spend guards, snapshot/result queries, tracker summaries, and retention pruning functions.
 - Verify with scripts/qa/check-f15-db.mjs against a loopback _qa database. Never run this harness against production.
 
+## `112_f15_rank_keyword_questions.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply after F08's `075`–`079` and F12's `095`, before deploying F15 phase 6.
+- **Additive only.** Creates `rank_keyword_questions` link table with RLS and foreign keys, plus `rank_question_aio_status` returning latest Google AI Overview verdict per question.
+- **Pre-check:** `select to_regclass('public.rank_keyword_questions');` returns null.
+- **Applied-check:** `select to_regclass('public.rank_keyword_questions');` returns `rank_keyword_questions`; `select count(*) from pg_proc where proname = 'rank_question_aio_status';` returns 1.
+- **Verify locally:** apply it to a disposable loopback `*_qa` database, then run `scripts/qa/check-f15-db.mjs`. Never run that harness against production.
+
 ## `065_f06_exports.sql`
 
 - **Status:** in repo; **NOT YET APPLIED to production**. Apply before deploying F06 phase 3.
