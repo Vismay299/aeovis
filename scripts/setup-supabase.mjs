@@ -142,6 +142,11 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "collect_probe_dispatch" },
     { kind: "function", name: "expire_posted_probe_dispatch" },
   ],
+  "170_f27_onboarding.sql": [
+    { kind: "table", name: "user_onboarding" },
+    { kind: "table", name: "workspace_setup_dismissals" },
+    { kind: "column", name: "gsc_oauth_attempts.return_path" },
+  ],
   "165_f26_privacy_and_telemetry_ids.sql": [
     { kind: "column", name: "customer_brands.telemetry_id" },
     { kind: "table", name: "user_privacy_choices" },

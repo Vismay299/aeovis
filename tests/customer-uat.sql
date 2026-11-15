@@ -43,6 +43,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/160_f25_email_tables.sql
 \ir ../supabase/migrations/161_f25_email_functions.sql
 \ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
+\ir ../supabase/migrations/170_f27_onboarding.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -733,5 +734,70 @@ DO $f12$ BEGIN
 END $f12$;
 RESET ROLE;
 -- End F12 tenant check.
+
+-- F27: one user_onboarding row per test user and one dismissal per user per workspace;
+-- each user reads only their own rows, and a dismissal for a workspace the user left is not readable.
+RESET ROLE;
+INSERT INTO public.user_onboarding(user_id, brand_key, steps, handoff) VALUES
+ ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '{"website":{"status":"done"}}'::jsonb, '{"domain":"same.example"}'::jsonb),
+ ('00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', '{"website":{"status":"done"}}'::jsonb, '{"domain":"same.example"}'::jsonb),
+ ('00000000-0000-0000-0000-000000000003', NULL, '{}'::jsonb, '{}'::jsonb);
+
+INSERT INTO public.workspace_setup_dismissals(user_id, brand_key, step) VALUES
+ ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', 'gsc'),
+ ('00000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000002', 'gsc');
+
+-- A dismissal for user 1 in workspace B (which user 1 cannot access)
+INSERT INTO public.workspace_setup_dismissals(user_id, brand_key, step) VALUES
+ ('00000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000002', 'scan');
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $f27$ BEGIN
+  IF (SELECT count(*) FROM public.user_onboarding) <> 1
+   OR (SELECT brand_key FROM public.user_onboarding) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F27 user_onboarding rows leaked across users'; END IF;
+
+  IF (SELECT count(*) FROM public.workspace_setup_dismissals) <> 1
+   OR (SELECT brand_key FROM public.workspace_setup_dismissals) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F27 workspace_setup_dismissals leaked across workspaces or permitted inaccessible workspace'; END IF;
+END $f27$;
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $f27$ BEGIN
+  IF (SELECT count(*) FROM public.user_onboarding) <> 1
+   OR (SELECT brand_key FROM public.user_onboarding) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F27 user_onboarding rows leaked across users'; END IF;
+
+  IF (SELECT count(*) FROM public.workspace_setup_dismissals) <> 1
+   OR (SELECT brand_key FROM public.workspace_setup_dismissals) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F27 workspace_setup_dismissals leaked across workspaces'; END IF;
+END $f27$;
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',true);
+DO $f27$ BEGIN
+  IF (SELECT count(*) FROM public.user_onboarding) <> 1
+   OR (SELECT brand_key FROM public.user_onboarding) IS NOT NULL
+  THEN RAISE EXCEPTION 'F27 user 3 user_onboarding mismatch'; END IF;
+
+  IF (SELECT count(*) FROM public.workspace_setup_dismissals) <> 0
+  THEN RAISE EXCEPTION 'F27 user 3 should see 0 dismissals'; END IF;
+END $f27$;
+
+SET LOCAL ROLE anon;
+DO $f27$ BEGIN
+  BEGIN
+    PERFORM count(*) FROM public.user_onboarding;
+    RAISE EXCEPTION 'F27 anon read of user_onboarding was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.workspace_setup_dismissals;
+    RAISE EXCEPTION 'F27 anon read of workspace_setup_dismissals was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $f27$;
+RESET ROLE;
+-- End F27 tenant check.
 ROLLBACK;
 
