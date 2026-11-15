@@ -41,7 +41,7 @@ if (!(await waitForServer(1000))) {
   }
 }
 const onlyIndex = process.argv.indexOf("--only");
-const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B3";
+const requested = onlyIndex >= 0 ? process.argv[onlyIndex + 1] : "B1-B8";
 const selectedScenarios = new Set();
 for (const selection of requested.split(",")) {
   const range = selection.match(/^B(\d+)-B(\d+)$/);
@@ -65,6 +65,11 @@ const suggestionsQuote = await apiFixture("suggestions-quote.json");
 const suggestions25 = await apiFixture("suggestions-25.json");
 const keywordsApprovalQuote = await apiFixture("keywords-approval-quote.json");
 const checkQuote = await apiFixture("check-quote.json");
+const trackerDetail = await apiFixture("tracker-detail.json");
+const results19 = await apiFixture("results-19.json");
+const trendPoints = await apiFixture("trend-points.json");
+const matrixCells = await apiFixture("matrix-cells.json");
+const keywordHistory = await apiFixture("keyword-history.json");
 
 const browser = await chromium.launch({ headless: true });
 let failures = 0;
@@ -253,6 +258,248 @@ try {
       await page.getByText("Rank check started").waitFor();
       assert.equal(checkRequests.length, 1, "the first check must run once with its approval");
       return "cacheOnly-first fetch, 25 rows with 20 checked, approval retry, then the first check";
+    } finally { await context.close(); }
+  });
+
+  async function openDetail(options = {}) {
+    const { context, page } = await openPortal(browser, origin, {
+      viewport: options.viewport ?? { width: 1280, height: 900 },
+    });
+    let currentRun = options.initialRun !== undefined ? options.initialRun : results19.run;
+    let resultsData = JSON.parse(JSON.stringify(results19));
+    let resultsFetchCount = 0;
+    const pinRequests = [];
+    const checkRequests = [];
+
+    await page.route("**/api/customer/features*", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ brandKey: "acme", features: { rank_tracking: true } }),
+    }));
+
+    await page.route("**/api/customer/rank-tracking/**", async (route) => {
+      const request = route.request();
+      const url = new URL(request.url());
+
+      if (request.method() === "GET" && url.pathname.endsWith("/runs/latest")) {
+        const runToReturn = typeof options.getRun === "function" ? options.getRun() : currentRun;
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: runToReturn }) });
+      }
+      if (request.method() === "GET" && url.pathname.includes("/results")) {
+        resultsFetchCount += 1;
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(resultsData) });
+      }
+      if (request.method() === "GET" && url.pathname.includes("/trend")) {
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(trendPoints) });
+      }
+      if (request.method() === "GET" && url.pathname.includes("/matrix")) {
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(matrixCells) });
+      }
+      if (request.method() === "GET" && url.pathname.includes("/history")) {
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(keywordHistory) });
+      }
+      if (request.method() === "GET" && url.pathname.endsWith(`/configs/${trackerDetail.tracker.id}`)) {
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(trackerDetail) });
+      }
+      if (request.method() === "POST" && url.pathname.endsWith("/check")) {
+        checkRequests.push(request.postDataJSON());
+        if (options.onCheck) options.onCheck();
+        return route.fulfill({
+          status: 202,
+          contentType: "application/json",
+          body: JSON.stringify({
+            runId: "run-22222222-0000-4000-8000-000000000000",
+            jobId: "job-22222222-0000-4000-8000-000000000000",
+            status: "queued",
+            pollAfterSeconds: 3,
+          }),
+        });
+      }
+      if (request.method() === "POST" && url.pathname.endsWith("/pin")) {
+        const body = request.postDataJSON();
+        pinRequests.push(body);
+        if (options.pinFail) {
+          return route.fulfill({
+            status: 500,
+            contentType: "application/json",
+            body: JSON.stringify({ error: "Failed to update pin", code: "pin_failed" }),
+          });
+        }
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ updated: 1, updatedIds: body.keywordIds }),
+        });
+      }
+      return route.continue();
+    });
+
+    await page.route("**/api/customer/price/estimate*", (route) => {
+      const body = route.request().postDataJSON();
+      if (body.action === "rank_tracking.check.run") {
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...checkQuote, action: body.action }) });
+      }
+      return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(quote1) });
+    });
+
+    const detailUrl = new URL(`/portal/rank-tracking/${trackerDetail.tracker.id}`, origin);
+    if (options.urlParams) {
+      for (const [k, v] of Object.entries(options.urlParams)) {
+        detailUrl.searchParams.set(k, v);
+      }
+    }
+    await page.goto(detailUrl.href, { waitUntil: "networkidle" });
+
+    return {
+      context,
+      page,
+      pinRequests,
+      checkRequests,
+      getResultsFetchCount: () => resultsFetchCount,
+      setRun: (r) => { currentRun = r; },
+      resultsData,
+    };
+  }
+
+  await record("B4", "detail renders chart legend, strip 'AI Overview seen for 6 of 19 checked keywords', 'AI' tags", async () => {
+    const { context, page } = await openDetail();
+    try {
+      await page.getByText("AI Overview seen for 6 of 19 checked keywords on mobile (latest check).").waitFor();
+      await page.getByText("Top 3", { exact: true }).first().waitFor();
+      await page.getByText("4–10", { exact: true }).first().waitFor();
+      await page.getByText("11–20", { exact: true }).first().waitFor();
+      await page.getByText("Not in top 20", { exact: true }).first().waitFor();
+      await page.getByText("Not checked", { exact: true }).first().waitFor();
+      const aiTags = page.getByText("AI", { exact: true });
+      assert.ok((await aiTags.count()) >= 6, "expected at least 6 AI tags rendered");
+      return "chart legend, strip 'AI Overview seen for 6 of 19 checked keywords', 'AI' tags";
+    } finally { await context.close(); }
+  });
+
+  await record("B5", "'Check rankings' opens cost dialog, confirm -> progress '10/20', polling stops at completed and table refreshes once", async () => {
+    let runState = { ...results19.run, status: "completed" };
+    const { context, page, checkRequests, getResultsFetchCount } = await openDetail({
+      getRun: () => runState,
+    });
+    try {
+      await page.getByRole("button", { name: "More actions" }).click();
+      await page.getByText("Check rankings", { exact: true }).click();
+      const costDlg = page.getByRole("dialog", { name: /Check 19 keywords/ });
+      await costDlg.waitFor();
+      await costDlg.getByText("19 keywords × 1 device = 19 searches").waitFor();
+
+      const fetchCountBefore = getResultsFetchCount();
+
+      runState = {
+        ...results19.run,
+        id: "run-22222222-0000-4000-8000-000000000000",
+        status: "running",
+        keywordsTotal: 20,
+        keywordsChecked: 10,
+        phase: "checking",
+        pollAfterSeconds: 3,
+      };
+      await costDlg.getByRole("button", { name: "Run check" }).click();
+
+      await page.getByLabel("Rank check progress").waitFor();
+      await page.getByText("10/20").waitFor();
+      assert.equal(checkRequests.length, 1);
+
+      runState = {
+        ...runState,
+        status: "completed",
+        keywordsChecked: 20,
+        completedAt: new Date().toISOString(),
+        pollAfterSeconds: null,
+      };
+
+      await page.waitForTimeout(4000);
+      const fetchCountAfter = getResultsFetchCount();
+      assert.ok(fetchCountAfter > fetchCountBefore, "table results should refresh after run finishes");
+
+      return "Check rankings opens CostReviewDialog, progress 10/20 shown, polling stops at completed and table refreshed";
+    } finally { await context.close(); }
+  });
+
+  await record("B6", "pin moves row before request resolves and reverts on a 500", async () => {
+    const { context, page } = await openDetail({
+      pinFail: true,
+    });
+    try {
+      await page.getByText("best espresso blend").waitFor();
+      const rows = page.locator("table").last().locator("tbody tr");
+      const firstRowBefore = await rows.nth(0).innerText();
+      assert.ok(firstRowBefore.includes("acme coffee beans"));
+
+      const pinBtn = rows.nth(1).getByRole("button", { name: "Pin keyword to top" });
+      await pinBtn.click();
+
+      const firstRowOptimistic = await rows.nth(0).innerText();
+      assert.ok(firstRowOptimistic.includes("best espresso blend"), "row must move to top optimistically");
+
+      await page.waitForTimeout(600);
+      const firstRowReverted = await rows.nth(0).innerText();
+      assert.ok(firstRowReverted.includes("acme coffee beans"), "row must revert after 500 failure");
+
+      return "pin moved row optimistically to top and reverted on 500";
+    } finally { await context.close(); }
+  });
+
+  await record("B7", "History toggle and trend modal (axis label 'Google position (1 = best)')", async () => {
+    const { context, page } = await openDetail();
+    try {
+      const historyBtn = page.getByRole("button", { name: "History", exact: true });
+      await historyBtn.waitFor();
+      await historyBtn.click();
+
+      await page.getByText("Nov 6", { exact: false }).waitFor();
+      await page.getByText("Nov 13", { exact: false }).waitFor();
+
+      await page.getByRole("button", { name: "Latest", exact: true }).click();
+      await page.getByText("acme coffee beans").waitFor();
+
+      await page.getByRole("button", { name: "acme coffee beans" }).click();
+      const modal = page.getByRole("dialog");
+      await modal.waitFor();
+      await modal.getByText("Google position (1 = best)").waitFor();
+      await modal.getByText("Better ↑").waitFor();
+
+      return "History toggle renders matrix cells, and trend modal opens with inverted axis label";
+    } finally { await context.close(); }
+  });
+
+  await record("B8", "filters aio=shown and export CSV contains numeric change and the 'AI Overview' column; phone width 390 px has no horizontal page scroll", async () => {
+    const { context, page } = await openDetail();
+    try {
+      await page.getByRole("button", { name: "Filters", exact: true }).click();
+      await page.getByRole("combobox", { name: "AI Overview" }).click();
+      await page.getByRole("option", { name: "Shown" }).click();
+
+      await page.waitForURL((url) => url.searchParams.get("aio") === "shown");
+      assert.ok(page.url().includes("aio=shown"), "URL should contain aio=shown");
+
+      const rows = page.locator("table").last().locator("tbody tr");
+      assert.equal(await rows.count(), 6, "only 6 rows with AI Overview should be shown");
+
+      const downloadPromise = page.waitForEvent("download");
+      await page.getByRole("button", { name: "Export", exact: false }).first().click();
+      await page.getByRole("menuitem", { name: "Export CSV" }).click();
+      const download = await downloadPromise;
+      const downloadPath = await download.path();
+      const csvContent = await readFile(downloadPath, "utf8");
+
+      assert.ok(csvContent.includes("AI Overview"), "CSV must include AI Overview column");
+      assert.ok(/[\+\-]?\d+/.test(csvContent), "CSV must include numeric change");
+
+      await page.setViewportSize({ width: 390, height: 844 });
+      await page.waitForTimeout(500);
+
+      const hasHorizontalScroll = await page.evaluate(() => {
+        return document.documentElement.scrollWidth > window.innerWidth;
+      });
+      assert.ok(!hasHorizontalScroll, "phone width 390px must have no horizontal page scroll");
+
+      return "aio=shown filter isolates 6 rows, CSV export has AI Overview and numeric change, 390px has no horizontal scroll";
     } finally { await context.close(); }
   });
 } finally {
