@@ -617,8 +617,8 @@ Branches `feat/f20-ga4-p<N>`. `NT` = `node --import ./src/lib/liveWriteGuardAuto
 **Checkpoint:** browser 12/12; `node --test src/components/portal/` → pass; Search Console guard clean. ACs: 23, 24.
 
 ### Phase 6 — Tools
-- [ ] **P6.T1** *Files:* `src/lib/ga4/tools.ts`, `tools.test.ts`. *Do:* §6.2.2; closed inputs; outputs parse fixture-driven handler results. *Verify:* `NT src/lib/ga4/tools.test.ts` → pass (F20-AC-26).
-- [ ] **P6.T2** *Files:* `scripts/qa/check-f20-live.mjs`. *Do:* owner-run only; refuses without `--brand <key>`; reads `GET /api/customer/ga4` state, one overview (`last_28_days`) and one opportunities request through the service functions with the service-role client; prints only row counts, `hasLimitedData`, `cached` and `quota.tokensPerHour.remaining`; never prints tokens, emails, property names or rows. *Verify:* `node scripts/qa/check-f20-live.mjs` (no args) → exits 1 with "Refusing: pass --brand <key>".
+- [x] **P6.T1** *Files:* `src/lib/ga4/tools.ts`, `tools.test.ts`. *Do:* §6.2.2; closed inputs; outputs parse fixture-driven handler results. *Verify:* `NT src/lib/ga4/tools.test.ts` → pass (F20-AC-26).
+- [x] **P6.T2** *Files:* `scripts/qa/check-f20-live.mjs`. *Do:* owner-run only; refuses without `--brand <key>`; reads `GET /api/customer/ga4` state, one overview (`last_28_days`) and one opportunities request through the service functions with the service-role client; prints only row counts, `hasLimitedData`, `cached` and `quota.tokensPerHour.remaining`; never prints tokens, emails, property names or rows. *Verify:* `node scripts/qa/check-f20-live.mjs` (no args) → exits 1 with "Refusing: pass --brand <key>".
 
 ## 9. Test plan
 
@@ -663,12 +663,12 @@ Fixtures are synthetic (§6.4). Fake tokens follow the secrets rule (`ya29.EXAMP
 
 ## 12. Definition of done
 
-- [ ] Phases 1–6 merged; subtasks ticked here.
-- [ ] F20-AC-01…28 covered by passing tests.
-- [ ] `npm run build` green; full suite green; `node scripts/qa/check-f20-db.mjs` and `node scripts/qa/check-f20-browser.mjs` pass.
-- [ ] Search Console guard (§8) clean on every phase; `node --test src/lib/gsc/` passes unchanged.
-- [ ] Migration paperwork for 135 and 136 in `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`; `THIRD_PARTY_NOTICES.md` lists every COPY/PORT path.
-- [ ] `features/README.md` status updated; owner-run live check recorded.
+- [x] Phases 1–6 merged; subtasks ticked here.
+- [x] F20-AC-01…28 covered by passing tests.
+- [x] `npm run build` green; full suite green; `node scripts/qa/check-f20-db.mjs` and `node scripts/qa/check-f20-browser.mjs` pass.
+- [x] Search Console guard (§8) clean on every phase; `node --test src/lib/gsc/` passes unchanged.
+- [x] Migration paperwork for 135 and 136 in `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`; `THIRD_PARTY_NOTICES.md` lists every COPY/PORT path.
+- [ ] `features/README.md` status updated; owner-run live check recorded. (Status updated; live check is an owner action.)
 
 ## Deviations from conventions
 
