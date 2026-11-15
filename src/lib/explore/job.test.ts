@@ -73,7 +73,7 @@ describe("src/lib/explore/job.ts", () => {
     });
 
     const mockDispatchStore = {
-      claim: async () => ({ granted: true, token: "tok-1" }),
+      claim: async () => ({ granted: true, lease_token: "tok-1" }),
       finish: async () => {},
       renew: async () => true,
     };
@@ -143,7 +143,7 @@ describe("src/lib/explore/job.ts", () => {
     const mockDispatchStore = {
       claim: async (id: string) => {
         claims.push(id);
-        return { granted: true, token: `token-${id}` };
+        return { granted: true, lease_token: `token-${id}` };
       },
       finish: async () => {},
       renew: async () => true,
@@ -203,7 +203,7 @@ describe("src/lib/explore/job.ts", () => {
     let finishedDecision: any = null;
 
     const mockDispatchStore = {
-      claim: async () => ({ granted: true, token: "token-fail" }),
+      claim: async () => ({ granted: true, lease_token: "token-fail" }),
       finish: async (_id: string, _token: string, _res: any, decision: any) => {
         finishedDecision = decision;
       },
@@ -337,7 +337,7 @@ describe("src/lib/explore/job.ts", () => {
     const res = await runExploreJob(ctx, {
       store,
       dispatchStore: {
-        claim: async () => ({ granted: true, token: "tok" }),
+        claim: async () => ({ granted: true, lease_token: "tok" }),
         finish: async () => {},
       },
       settleExploreHold: async () => {

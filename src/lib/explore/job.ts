@@ -178,12 +178,12 @@ export async function runExploreJob(
               leaseSeconds: 180,
             });
 
-            if (!claim || claim.granted === false || !claim.token) {
+            if (!claim || claim.granted !== true || !claim.lease_token) {
               // Not granted: SQL marked blocked/failed
               return;
             }
 
-            const token = claim.token;
+            const token = claim.lease_token;
             const askFn = deps?.askModel ?? askExploreModel;
 
             let result: any = null;
