@@ -492,8 +492,8 @@ Branches `feat/f24-sign-in-hardening-p1` … `-p3`. Shorthand: `NT` = `node --im
 
 **Goal:** the owner turns each protection on in the safe order and records the live results.
 
-- [ ] **P3.T1 Runbook and checklist**
-  - [ ] **P3.T1.S1** *Files:* `docs/OPERATOR_LEDGER.md` (§ C entry "F24 sign-in hardening" with the §10 enabling order, verbatim), `scripts/qa/check-f24-live.md` (the L1–L7 checklist from §10 with blank result fields). *Verify:* `NT src/lib/docStatus.test.mjs` → pass.
+- [x] **P3.T1 Runbook and checklist**
+  - [x] **P3.T1.S1** *Files:* `docs/OPERATOR_LEDGER.md` (§ C entry "F24 sign-in hardening" with the §10 enabling order, verbatim), `scripts/qa/check-f24-live.md` (the L1–L7 checklist from §10 with blank result fields). *Verify:* `NT src/lib/docStatus.test.mjs` → pass.
 - [ ] **P3.T2 Owner-run live checks (only on the owner's instruction)**
   - [ ] **P3.T2.S1** *Do:* the owner runs L1–L7 (§10) on the production deployment and pastes the results (pass/fail, date, no addresses) into the phase-3 PR description. *Verify:* all seven recorded as pass (F24-AC-16).
 
