@@ -168,3 +168,68 @@ test("trend refuses a non-numeric sinceDays with 400 instead of crashing", async
   assert.equal(res.status, 400);
   assert.equal((await res.json()).code, "invalid_request");
 });
+
+test("ai-question route requires both rank_tracking and rank_tracking_ai_questions flags", async () => {
+  const { POST: aiqPost } = await import("../../app/api/customer/rank-tracking/configs/[configId]/keywords/[keywordId]/ai-question/route.ts");
+  const cfgId = crypto.randomUUID();
+  const kwId = crypto.randomUUID();
+
+  // 1. Both off -> 404
+  let res = await aiqPost(
+    req("http://localhost/api", { text: "What is coffee?" }),
+    { params: Promise.resolve({ configId: cfgId, keywordId: kwId }) },
+    {
+      requireWorkspace: async () => ws(),
+      isFeatureEnabled: async () => false,
+    },
+  );
+  assert.equal(res.status, 404);
+  assert.equal((await res.json()).code, "feature_unavailable");
+
+  // 2. Only rank_tracking on -> 404
+  res = await aiqPost(
+    req("http://localhost/api", { text: "What is coffee?" }),
+    { params: Promise.resolve({ configId: cfgId, keywordId: kwId }) },
+    {
+      requireWorkspace: async () => ws(),
+      isFeatureEnabled: async (flag) => flag === "rank_tracking",
+    },
+  );
+  assert.equal(res.status, 404);
+  assert.equal((await res.json()).code, "feature_unavailable");
+
+  // 3. Only rank_tracking_ai_questions on -> 404
+  res = await aiqPost(
+    req("http://localhost/api", { text: "What is coffee?" }),
+    { params: Promise.resolve({ configId: cfgId, keywordId: kwId }) },
+    {
+      requireWorkspace: async () => ws(),
+      isFeatureEnabled: async (flag) => flag === "rank_tracking_ai_questions",
+    },
+  );
+  assert.equal(res.status, 404);
+  assert.equal((await res.json()).code, "feature_unavailable");
+
+  // 4. Both on -> success 200
+  const qId = crypto.randomUUID();
+  res = await aiqPost(
+    req("http://localhost/api", { text: "What is coffee?", topic: "Coffee" }),
+    { params: Promise.resolve({ configId: cfgId, keywordId: kwId }) },
+    {
+      requireWorkspace: async () => ws(),
+      isFeatureEnabled: async () => true,
+      trackKeywordAsAiQuestion: async (_w, _c, _k, _input) => ({
+        questionId: qId,
+        created: true,
+        revived: false,
+        linked: true,
+      }),
+    },
+  );
+  assert.equal(res.status, 200);
+  const data = await res.json();
+  assert.equal(data.questionId, qId);
+  assert.equal(data.created, true);
+  assert.equal(data.linked, true);
+});
+

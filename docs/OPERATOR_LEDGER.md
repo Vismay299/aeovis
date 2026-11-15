@@ -680,6 +680,12 @@ abandoned is not.
 - Migration 110 creates the five tenant-readable rank tracking tables with RLS and composite brand foreign keys. Migration 111 adds service-role-only keyword, schedule claim, run, reserve, result, summary, and pruning functions.
 - Verify with scripts/qa/check-f15-db.mjs against a loopback _qa database and tests/customer-uat.sql.
 
+### `112_f15_rank_keyword_questions` (F15 phase 6)
+- Status: implemented in repo; NOT YET APPLIED to production.
+- Apply 112 after F08's 075–079 and F12's 095, before deploying F15 phase 6.
+- Migration 112 creates `rank_keyword_questions` with tenant RLS and foreign keys, plus `rank_question_aio_status` returning latest Google AI Overview status per question.
+- Verify with scripts/qa/check-f15-db.mjs against a loopback _qa database and tests/customer-uat.sql.
+
 ## D. Content approval — the human gate, and what it does not yet do
 
 The content pipeline is human-in-the-loop by design. `POST /api/content-items/[id]/decision`

@@ -7,6 +7,7 @@
 import { Sparkles, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Tooltip,
   TooltipContent,
@@ -25,23 +26,73 @@ import {
 } from "@/shared/rank-tracking";
 import { trackRankEvent } from "./telemetry";
 
-export function SerpFeatureTags({ features }: { features: string[] }) {
+export function SerpFeatureTags({
+  features,
+  onTrackAiQuestion,
+}: {
+  features: string[];
+  onTrackAiQuestion?: () => void;
+}) {
   const notable = features.filter((f) => f in SERP_FEATURE_SHORT_LABELS);
   if (notable.length === 0) return null;
   return (
     <div className="flex gap-1 flex-wrap items-center">
-      {notable.map((f) => (
-        <Badge
-          key={f}
-          variant="secondary"
-          size="sm"
-          className="cursor-help inline-flex items-center gap-1"
-          title={SERP_FEATURE_TOOLTIPS[f] ?? f}
-        >
-          {f === "ai_overview" && <Sparkles className="size-3" />}
-          <span>{SERP_FEATURE_SHORT_LABELS[f]}</span>
-        </Badge>
-      ))}
+      {notable.map((f) => {
+        if (f === "ai_overview") {
+          return (
+            <Tooltip key={f}>
+              <TooltipTrigger
+                render={
+                  <Badge
+                    variant="secondary"
+                    size="sm"
+                    className="cursor-help inline-flex items-center gap-1"
+                  >
+                    <Sparkles className="size-3" />
+                    <span>{SERP_FEATURE_SHORT_LABELS[f]}</span>
+                  </Badge>
+                }
+              >
+                <Badge
+                  variant="secondary"
+                  size="sm"
+                  className="cursor-help inline-flex items-center gap-1"
+                >
+                  <Sparkles className="size-3" />
+                  <span>{SERP_FEATURE_SHORT_LABELS[f]}</span>
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs space-y-2">
+                <p>{SERP_FEATURE_TOOLTIPS[f] ?? f}</p>
+                {onTrackAiQuestion && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={(e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      onTrackAiQuestion();
+                    }}
+                    className="w-full text-xs"
+                  >
+                    Track as AI question
+                  </Button>
+                )}
+              </TooltipContent>
+            </Tooltip>
+          );
+        }
+        return (
+          <Badge
+            key={f}
+            variant="secondary"
+            size="sm"
+            className="cursor-help inline-flex items-center gap-1"
+            title={SERP_FEATURE_TOOLTIPS[f] ?? f}
+          >
+            <span>{SERP_FEATURE_SHORT_LABELS[f]}</span>
+          </Badge>
+        );
+      })}
     </div>
   );
 }

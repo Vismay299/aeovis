@@ -26,10 +26,16 @@ export async function getLatestResults(
   const before = new Date(now.getTime() - COMPARE_PERIOD_DAYS[compare] * 86400000);
   const latest = await repo.latestSnapshots(ws.brandKey, configId, now.toISOString());
   const previous = await repo.latestSnapshots(ws.brandKey, configId, before.toISOString());
-  const earliest = keywords.length
-    ? await repo.earliestSnapshots(ws.brandKey, configId, keywords.map((k: any) => k.id))
+  const keywordIds = keywords.map((k: any) => k.id);
+  const earliest = keywordIds.length
+    ? await repo.earliestSnapshots(ws.brandKey, configId, keywordIds)
     : [];
   const run = await repo.getLatestRun(ws.brandKey, configId);
+
+  const { aiStatusesForKeywords } = await import("./aiQuestions.ts");
+  const aioMap = deps?.admin
+    ? await aiStatusesForKeywords(deps.admin, ws.brandKey, keywordIds)
+    : new Map();
 
   const latestMap = new Map(latest.map((s: any) => [s.tracking_keyword_id + ":" + s.device, s]));
   const prevMap = new Map(previous.map((s: any) => [s.tracking_keyword_id + ":" + s.device, s]));
@@ -62,7 +68,7 @@ export async function getLatestResults(
         serpFeatures: mobileLatest?.serp_features ?? [],
         checkedAt: mobileLatest?.checked_at ?? null,
       },
-      aiQuestion: null,
+      aiQuestion: aioMap.get(k.id) ?? null,
     };
   });
   return { rows, run };

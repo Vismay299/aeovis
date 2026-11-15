@@ -373,6 +373,7 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/rank-tracking/configs/[configId]/keywords/remove",
       "/api/customer/rank-tracking/configs/[configId]/keywords/pin",
       "/api/customer/rank-tracking/configs/[configId]/keywords/[keywordId]/history",
+      "/api/customer/rank-tracking/configs/[configId]/keywords/[keywordId]/ai-question",
       "/api/customer/rank-tracking/configs/[configId]/metrics/refresh",
       "/api/customer/rank-tracking/configs/[configId]/runs/latest",
       "/api/customer/rank-tracking/configs/[configId]/results",

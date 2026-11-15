@@ -762,6 +762,11 @@ SOFTWARE.
 - `src/components/portal/rank-tracking/hooks/useRankRunPolling.ts` (from `openseo:src/client/features/rank-tracking/useRankRunPolling.ts`)
 - `src/components/portal/rank-tracking/hooks/useSetKeywordPinned.ts` (from `openseo:src/client/features/rank-tracking/useSetKeywordPinned.ts`)
 
+### F15 Phase 6 ports
+- `src/lib/rank-tracking/tools.ts` (from `openseo:src/server/mcp/tools/`)
+- `src/components/portal/rank-tracking/AiVisibilityCell.tsx` (from `openseo:src/client/features/rank-tracking/`)
+- `src/components/portal/rank-tracking/TrackAiQuestionDialog.tsx` (from `openseo:src/client/features/rank-tracking/`)
+
 ### F20 Phase 6 ports
 - `src/lib/ga4/tools.ts` (from `openseo:src/server/mcp/tools/google-analytics-tools.ts`)
 
