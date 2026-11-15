@@ -771,3 +771,14 @@ SOFTWARE.
 - `src/lib/onboarding/website.ts` (from `openseo:src/serverFunctions/projects.ts:67-81`, `openseo:src/server/features/dashboard/services/DashboardFirstAuditService.ts:11-90`)
 - `src/lib/onboarding/steps.ts` (from `openseo:src/serverFunctions/onboarding.ts:77-136`)
 - `src/lib/onboarding/setup.ts` (from `openseo:src/server/features/dashboard/services/DashboardService.ts:52-98`, `openseo:src/serverFunctions/dashboard.ts:55-66`)
+
+### F27 Phase 2 ports
+- `src/components/portal/onboarding/OnboardingShell.tsx` (from `src/client/features/onboarding/PostSignupOnboarding.tsx:22-69`, `src/client/features/onboarding/OnboardingCard.tsx:8-51`)
+- `src/components/portal/onboarding/WizardFooter.tsx` (from `src/client/features/onboarding/WizardFooter.tsx`)
+- `src/components/portal/onboarding/SearchConsoleStep.tsx` (from `src/client/features/onboarding/SearchConsoleOnboardingStep.tsx`)
+- `src/components/portal/onboarding/PreferencesStep.tsx` (from `src/client/features/onboarding/AnalyticsOnboardingStep.tsx`)
+- `src/app/onboarding/page.jsx` (from `src/routes/_authenticated.onboarding.index.tsx:18-151`)
+- `src/components/portal/onboarding/OnboardingWizard.tsx` (from `src/routes/_authenticated.onboarding.index.tsx:18-151`)
+- `src/components/portal/onboarding/WebsiteStep.tsx` (from `src/client/features/onboarding/WebsiteOnboardingStep.tsx:28-211`)
+- `src/components/app/onboarding/useOnboardingRedirect.ts` (from `src/client/features/onboarding/useOnboardingRedirect.ts:12-61`, `src/routes/_app/route.tsx:34-39`)
+- `src/components/portal/PortalShell.jsx` (from `src/client/features/onboarding/useOnboardingRedirect.ts:12-61`, `src/routes/_app/route.tsx:34-39`)
