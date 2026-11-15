@@ -548,13 +548,13 @@ Route `src/app/portal/questions/[questionId]/page.tsx` (client component in the 
 
 **Goal:** customers open a question and read its history.
 
-- [ ] **P3.T1 Page**
-  - [ ] **P3.T1.S1** *Files:* `src/components/app/markdown/MarkdownAnswer.tsx` (only if F11 has not added it), `src/components/portal/questions/history/*` (§6.6), `src/app/portal/questions/[questionId]/page.tsx`. *Verify:* `npm run build` → exit 0.
-- [ ] **P3.T2 Entry points**
-  - [ ] **P3.T2.S1** *Files:* (`QuestionHistoryLink.tsx` already exists from F08; import it, do not recreate it) `src/components/portal/scans/ReportCards.jsx` (`QuestionsCard` and `QuestionRow` take `questionIdByQuery`, `scanId`), `src/app/portal/scans/[scanId]/page.jsx` (passes them), `src/components/portal/scans/reportHistoryLinks.test.mjs` (render harness `src/lib/renderHarness.mjs`: link present only for linked questions, href includes `from_scan`). *Verify:* `node --test src/components/portal/scans/reportHistoryLinks.test.mjs src/components/portal/portalRegressions.test.mjs` → pass (F12-AC-11).
-  - [ ] **P3.T2.S2** *Files:* `src/components/portal/questions/history/QuestionHistoryLink.tsx` (F08 shipped it with `QUESTION_HISTORY_AVAILABLE = false`; conventions §5.3). *Do:* set `QUESTION_HISTORY_AVAILABLE = true`; change nothing else in the file. F08's question rows already render the link when the constant is true. *Verify:* `npm run build` → exit 0; `node --test src/components/portal/questions/questionRow.test.ts` → pass (F08-AC-24); browser scenario below.
-- [ ] **P3.T3 Browser**
-  - [ ] **P3.T3.S1** *Files:* `scripts/qa/check-f12-browser.mjs` (Playwright from `worker/node_modules/playwright`, local app with fixture API responses). Scenarios: loading skeletons; 404 state; no answers; no answers in range + "Show all available history"; custom range validation (no request sent); brand table "x of y", "(n unknown)", "Show 2 more"; engine switch keeps scan; date select; Answer/Citations/Brands on 390 px; citations badges "Your site"/"Competitor: …"; excerpts with `<mark>`; evidence footer stored/expired/withdrawn copy; executions tags Scheduled/Explorer/Legacy and statuses; wording notices; URL restores on reload and back; `data-ph-mask` present; scan report "History" link navigates with "Back to scan report". *Verify:* `node scripts/qa/check-f12-browser.mjs` → "16 passed" (F12-AC-10, 13, 14 UI half).
+- [x] **P3.T1 Page**
+  - [x] **P3.T1.S1** *Files:* `src/components/app/markdown/MarkdownAnswer.tsx` (only if F11 has not added it), `src/components/portal/questions/history/*` (§6.6), `src/app/portal/questions/[questionId]/page.tsx`. *Verify:* `npm run build` → exit 0.
+- [x] **P3.T2 Entry points**
+  - [x] **P3.T2.S1** *Files:* (`QuestionHistoryLink.tsx` already exists from F08; import it, do not recreate it) `src/components/portal/scans/ReportCards.jsx` (`QuestionsCard` and `QuestionRow` take `questionIdByQuery`, `scanId`), `src/app/portal/scans/[scanId]/page.jsx` (passes them), `src/components/portal/scans/reportHistoryLinks.test.mjs` (render harness `src/lib/renderHarness.mjs`: link present only for linked questions, href includes `from_scan`). *Verify:* `node --test src/components/portal/scans/reportHistoryLinks.test.mjs src/components/portal/portalRegressions.test.mjs` → pass (F12-AC-11).
+  - [x] **P3.T2.S2** *Files:* `src/components/portal/questions/history/QuestionHistoryLink.tsx` (F08 shipped it with `QUESTION_HISTORY_AVAILABLE = false`; conventions §5.3). *Do:* set `QUESTION_HISTORY_AVAILABLE = true`; change nothing else in the file. F08's question rows already render the link when the constant is true. *Verify:* `npm run build` → exit 0; `node --test src/components/portal/questions/questionRow.test.ts` → pass (F08-AC-24); browser scenario below.
+- [x] **P3.T3 Browser**
+  - [x] **P3.T3.S1** *Files:* `scripts/qa/check-f12-browser.mjs` (Playwright from `worker/node_modules/playwright`, local app with fixture API responses). Scenarios: loading skeletons; 404 state; no answers; no answers in range + "Show all available history"; custom range validation (no request sent); brand table "x of y", "(n unknown)", "Show 2 more"; engine switch keeps scan; date select; Answer/Citations/Brands on 390 px; citations badges "Your site"/"Competitor: …"; excerpts with `<mark>`; evidence footer stored/expired/withdrawn copy; executions tags Scheduled/Explorer/Legacy and statuses; wording notices; URL restores on reload and back; `data-ph-mask` present; scan report "History" link navigates with "Back to scan report". *Verify:* `node scripts/qa/check-f12-browser.mjs` → "16 passed" (F12-AC-10, 13, 14 UI half).
 
 **Checkpoint:** full suite, build, browser check. Completes F12-AC-10, 11, 13, 14.
 
@@ -600,9 +600,9 @@ Fixtures are synthetic; no provider calls. Answer texts in fixtures are short in
 
 ## 12. Definition of done
 
-- [ ] Phases 1–3 merged with their checkpoints green.
-- [ ] F12-AC-01 … F12-AC-14 covered by passing tests in §9.
-- [ ] `npm test`, `npm run typecheck`, `npm run build` green; CI `customer-database` green including `check-f12-db.mjs` groups.
-- [ ] Owner backfill run recorded (counts only).
-- [ ] `THIRD_PARTY_NOTICES.md` lists every ported file.
-- [ ] `features/README.md` F12 status updated, and F08 added to its Depends column.
+- [x] Phases 1–3 merged with their checkpoints green.
+- [x] F12-AC-01 … F12-AC-14 covered by passing tests in §9.
+- [x] `npm test`, `npm run typecheck`, `npm run build` green; CI `customer-database` green including `check-f12-db.mjs` groups.
+- [x] Owner backfill run recorded (counts only).
+- [x] `THIRD_PARTY_NOTICES.md` lists every ported file.
+- [x] `features/README.md` F12 status updated, and F08 added to its Depends column.

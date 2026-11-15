@@ -718,3 +718,15 @@ SOFTWARE.
 
 ### F20 Phase 5 ports
 - `src/components/portal/analytics/OrganicOverviewCard.tsx` (from `openseo:src/client/features/dashboard/Ga4Card.tsx:43-180`)
+
+### F12 Phase 3 ports
+- `src/app/portal/questions/[questionId]/page.tsx` (from `openseo:src/routes/_app/p/$projectId/ai-visibility/prompts/$promptId.tsx`)
+- `src/components/app/markdown/MarkdownAnswer.tsx` (from `openseo:src/client/features/ai-visibility/MarkdownAnswer.tsx`)
+- `src/components/portal/questions/history/QuestionHistoryPage.tsx` (from `openseo:src/client/features/ai-visibility/PromptHistoryPage.tsx`, `PromptAnalysis.tsx`)
+- `src/components/portal/questions/history/AnswerPanel.tsx` (from `openseo:src/client/features/ai-visibility/PromptHistoryPage.tsx`)
+- `src/components/portal/questions/history/AnswerEvidence.tsx` (from `openseo:src/client/features/ai-visibility/AnswerContent.tsx`)
+- `src/components/portal/questions/history/BrandComparison.tsx` (from `openseo:src/client/features/ai-visibility/PromptSummary.tsx`)
+- `src/components/portal/questions/history/Executions.tsx` (from `openseo:src/client/features/ai-visibility/PromptExecutions.tsx`)
+- `src/components/portal/questions/history/HistoryDateRange.tsx` (from `openseo:src/client/features/ai-visibility/PromptDateRange.tsx`)
+- `src/components/portal/questions/history/MentionBadge.tsx` (from `openseo:src/client/features/ai-visibility/PromptExecutions.tsx`)
+- `src/components/portal/questions/history/hooks/useQuestionHistory.ts` (from `openseo:src/client/features/ai-visibility/usePromptHistory.ts`)

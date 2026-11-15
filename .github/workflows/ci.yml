@@ -213,6 +213,7 @@ jobs:
           node scripts/qa/check-f15-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f25-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f20-browser.mjs http://127.0.0.1:3328
+          node scripts/qa/check-f12-browser.mjs http://127.0.0.1:3328
           npx playwright install --with-deps chromium
           npm run qa:public-browser -- http://127.0.0.1:3328 test_reports/public-browser
 
