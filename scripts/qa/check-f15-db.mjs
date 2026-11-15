@@ -9,7 +9,11 @@ if (!["127.0.0.1", "localhost", "::1"].includes(process.env.PGHOST) || !/(?:_qa|
 const pool = new pg.Pool({ max: 1 });
 const passed = [];
 const id = () => crypto.randomUUID();
+const onlyIdx = process.argv.indexOf("--only");
+const onlyGroup = onlyIdx >= 0 ? process.argv[onlyIdx + 1] : null;
+
 async function group(name, fn) {
+  if (onlyGroup && onlyGroup !== name) return;
   const c = await pool.connect();
   try { await c.query("BEGIN"); await fn(c); await c.query("ROLLBACK"); passed.push(name); console.log(`PASS ${name}`); }
   catch (error) { try { await c.query("ROLLBACK"); } catch { /* keep original error */ } throw error; }
@@ -35,9 +39,9 @@ async function createRun(c, brandKey, configId, runId = id(), maxUsd = 1, actor 
 
 async function main() {
   await group("schema", async (c) => {
-    const names = ["rank_tracking_configs","rank_tracking_keywords","rank_check_runs","rank_snapshots","rank_check_tasks"];
+    const names = ["rank_tracking_configs","rank_tracking_keywords","rank_check_runs","rank_snapshots","rank_check_tasks","rank_keyword_questions"];
     const { rows } = await c.query("SELECT to_regclass('public.' || x) AS obj FROM unnest($1::text[]) x", [names]);
-    assert.equal(rows.filter((x) => x.obj !== null).length, 5);
+    assert.equal(rows.filter((x) => x.obj !== null).length, 6);
     const fk = await c.query("SELECT 1 FROM pg_constraint WHERE conrelid='public.rank_snapshots'::regclass AND confrelid='public.rank_tracking_keywords'::regclass AND contype='f'");
     assert.equal(fk.rowCount, 0, "snapshots preserve history after keyword removal");
     const idx = await c.query("SELECT to_regclass('public.rank_check_runs_one_active_per_config_idx') AS active");
@@ -130,7 +134,71 @@ async function main() {
     const result=await c.query("SELECT prune_rank_tracking('2021-01-01','2021-01-01',100) result");assert.deepEqual(result.rows[0].result,{runs:1,tasks:1});
     assert.equal((await c.query("SELECT count(*)::int n FROM rank_check_runs WHERE id=$1",[old])).rows[0].n,0);
   });
-  assert.equal(passed.length,8);
-  console.log(`ok ${passed.length} groups`);
+
+  await group("aio_status", async (c) => {
+    const b = await brand(c, "aio-status");
+    const q1 = id(), q2 = id(), q3 = id(), job = id();
+    await c.query(
+      "INSERT INTO workspace_questions(id, brand_key, text, origin) VALUES ($1,$2,'q1','manual'), ($3,$2,'q2','manual'), ($4,$2,'q3','manual')",
+      [q1, b, q2, q3]
+    );
+    await c.query(
+      "INSERT INTO scan_jobs(id, brand, brand_key, status, checkpoint, panel_snapshot) VALUES ($1,$2,$2,'complete',$3,$4)",
+      [job, b, JSON.stringify({ prompt_key: `qa-f15-${job}` }), JSON.stringify({ payload: { prompts: ["q1", "q2"] } })]
+    );
+    const observation = async (query, state, result) => {
+      const obsId = `f15-${id()}`;
+      await c.query(
+        `INSERT INTO probe_observations(id, job_id, purpose, engine, query, context, config_version, circuit_key, state, result, deadline_at, brand_key)
+         VALUES ($1,$2,'scan','aio',$3,'{}'::jsonb,'f15-qa-v1',$4,$5,$6::jsonb,now()+interval '1 hour',$7)`,
+        [obsId, job, query, `f15-ck-${id()}`, state, JSON.stringify(result), b]
+      );
+      return obsId;
+    };
+    const link = (questionId, obsId, text) => c.query(
+      "INSERT INTO question_answer_links(brand_key, question_id, source, observation_id, scan_job_id, engine, asked_text, collected_at, linked_by) VALUES ($1,$2,'scan',$3,$4,'aio',$5,'2026-10-10T10:00:00Z','periodic')",
+      [b, questionId, obsId, job, text]
+    );
+
+    await link(q1, await observation("q1", "answered", { aio_present: true, brand_cited: true, brand_mentioned_in_text: true }), "q1");
+    await link(q2, await observation("q2", "valid_no_aio", { aio_present: false, brand_cited: false, brand_mentioned_in_text: false }), "q2");
+
+    const pr3 = (await c.query(
+      "INSERT INTO prompt_results(job_id, brand, query, engine, answered, brand_cited, mentioned) VALUES ($1,$2,'q3','aio',true,false,true) RETURNING id",
+      [job, b]
+    )).rows[0].id;
+    await c.query(
+      "INSERT INTO question_answer_links(brand_key, question_id, source, prompt_result_id, scan_job_id, engine, asked_text, collected_at, linked_by) VALUES ($1,$2,'legacy',$3,$4,'aio','q3','2026-10-09T10:00:00Z','backfill')",
+      [b, q3, pr3, job]
+    );
+
+    const res = await c.query("SELECT * FROM rank_question_aio_status($1, $2::uuid[]) ORDER BY question_id", [b, [q1, q2, q3]]);
+    assert.equal(res.rowCount, 3);
+    const r1 = res.rows.find((r) => r.question_id === q1);
+    assert.equal(r1.state, "answered");
+    assert.equal(r1.own_cited, true);
+    const r2 = res.rows.find((r) => r.question_id === q2);
+    assert.equal(r2.state, "valid_no_aio");
+    assert.equal(r2.aio_present, false);
+    const r3 = res.rows.find((r) => r.question_id === q3);
+    assert.equal(r3.state, "answered");
+    assert.equal(r3.own_cited, false);
+    assert.equal(r3.own_mentioned, true);
+
+    await c.query("SAVEPOINT sp_aio");
+    try {
+      await c.query("DROP TABLE question_answer_links CASCADE");
+      await assert.rejects(
+        () => c.query("SELECT * FROM rank_question_aio_status($1, $2::uuid[])", [b, [q1]]),
+        (err) => err.code === "42P01"
+      );
+    } finally {
+      await c.query("ROLLBACK TO SAVEPOINT sp_aio");
+    }
+  });
+
+  const expectedCount = onlyGroup ? 1 : 9;
+  assert.equal(passed.length, expectedCount);
+  console.log(`ok ${passed.length} group${passed.length === 1 ? "" : "s"}`);
 }
 main().catch((error) => { console.error(error instanceof Error ? error.message : "F15 DB check failed"); process.exitCode=1; }).finally(async () => { await pool.end(); });

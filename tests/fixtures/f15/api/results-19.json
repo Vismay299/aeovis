@@ -33,6 +33,11 @@
         "previousPosition": 2,
         "rankingUrl": "https://acme.example/coffee",
         "serpFeatures": ["ai_overview", "featured_snippet"]
+      },
+      "aiQuestion": {
+        "questionId": "q-11111111-0000-4000-8000-000000000001",
+        "status": "cited",
+        "measuredAt": "2026-11-13T05:12:00.000Z"
       }
     },
     {

@@ -542,6 +542,10 @@ export function RankTrackingDomainDetail({ configId }: { configId: string }) {
                   languageCode={config.languageCode}
                   locationName={config.locationName}
                   serpDepth={config.serpDepth}
+                  showAiQuestions={Boolean(
+                    features?.rank_tracking_ai_questions &&
+                      features?.question_curation,
+                  )}
                   onAddKeywords={() => setShowAddKeywords(true)}
                   onClearFilters={() =>
                     setSearch({

@@ -762,6 +762,11 @@ SOFTWARE.
 - `src/components/portal/rank-tracking/hooks/useRankRunPolling.ts` (from `openseo:src/client/features/rank-tracking/useRankRunPolling.ts`)
 - `src/components/portal/rank-tracking/hooks/useSetKeywordPinned.ts` (from `openseo:src/client/features/rank-tracking/useSetKeywordPinned.ts`)
 
+### F15 Phase 6 ports
+- `src/lib/rank-tracking/tools.ts` (from `openseo:src/server/mcp/tools/`)
+- `src/components/portal/rank-tracking/AiVisibilityCell.tsx` (from `openseo:src/client/features/rank-tracking/`)
+- `src/components/portal/rank-tracking/TrackAiQuestionDialog.tsx` (from `openseo:src/client/features/rank-tracking/`)
+
 ### F20 Phase 6 ports
 - `src/lib/ga4/tools.ts` (from `openseo:src/server/mcp/tools/google-analytics-tools.ts`)
 
@@ -771,6 +776,17 @@ SOFTWARE.
 - `src/lib/onboarding/website.ts` (from `openseo:src/serverFunctions/projects.ts:67-81`, `openseo:src/server/features/dashboard/services/DashboardFirstAuditService.ts:11-90`)
 - `src/lib/onboarding/steps.ts` (from `openseo:src/serverFunctions/onboarding.ts:77-136`)
 - `src/lib/onboarding/setup.ts` (from `openseo:src/server/features/dashboard/services/DashboardService.ts:52-98`, `openseo:src/serverFunctions/dashboard.ts:55-66`)
+
+### F11 Phase 3 ports
+- `src/components/portal/explore/ExplorePage.tsx` (from `openseo:src/client/features/ai-search/PromptExplorerPage.tsx`)
+- `src/components/portal/explore/ExploreForm.tsx` (from `openseo:src/client/features/ai-search/components/PromptExplorerForm.tsx`)
+- `src/components/portal/explore/ExploreResults.tsx` (from `openseo:src/client/features/ai-search/components/PromptExplorerResults.tsx`)
+- `src/components/portal/explore/ExploreLoadingState.tsx` (from `openseo:src/client/features/ai-search/components/PromptExplorerLoadingState.tsx`)
+- `src/components/portal/explore/RecentQuestions.tsx` (from `openseo:src/client/features/ai-search/PromptExplorerPage.tsx`)
+- `src/components/portal/explore/TrackQuestionButton.tsx` (from `openseo:src/client/features/ai-search/PromptExplorerPage.tsx`)
+- `src/components/portal/explore/engineAccents.ts` (from `openseo:src/client/features/ai-search/platformLabels.ts:13-35`)
+- `src/components/portal/explore/hooks/useExplore.ts` (from `openseo:src/client/features/ai-search/promptExplorerQuery.ts`)
+- `src/app/portal/explore/page.tsx` (from `openseo:src/routes/_app/p/$projectId/prompt-explorer.tsx`)
 
 ### F22 Phase 1 ports
 - `src/lib/tools/links.ts` (from `src/server/mcp/urls.ts`)

@@ -398,6 +398,8 @@ const FULL_CATALOG = [
   "add_rank_tracking_keywords", "claim_rank_config", "try_create_rank_run", "rank_check_reserve",
   "rank_latest_snapshots", "rank_earliest_snapshots", "rank_best_positions", "rank_config_trend",
   "rank_position_matrix", "rank_config_summaries", "prune_rank_tracking",
+  // F15 phase 6 migration 112 objects.
+  "rank_keyword_questions", "rank_question_aio_status",
   // F06 phase 3 migration 065 — private export bucket and audit table.
   "exports", "export_requests", "export_requests_brand_created_idx", "export_requests_cleanup_idx",
   "export_requests_kind_ck", "export_requests_format_ck", "export_requests_status_ck",
