@@ -989,14 +989,14 @@ Shown in the row menu for every keyword, and as a button "Track as AI question" 
 
 **Goal:** a keyword becomes a tracked AI question and shows the Google AI Overview verdict.
 
-- [ ] **P6.T1 Database**
-  - [ ] **P6.T1.S1** *Files:* `supabase/migrations/112_f15_rank_keyword_questions.sql`, `scripts/setup-supabase.mjs` (entry), `tests/customer-uat.sql` (one link per workspace). *Verify:* `node --test src/lib/migrationsRunner.test.mjs src/lib/migrationsLedger.test.mjs` → pass; `node scripts/qa/check-f15-db.mjs --only aio_status` → ok (answered+cited → cited; valid_no_aio → no_overview; legacy row; missing F12 table raises `undefined_table`).
-  - [ ] **P6.T1.S2** *Files:* `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
-- [ ] **P6.T2 Service, route, UI**
-  - [ ] **P6.T2.S1** *Files:* `src/lib/rank-tracking/aiQuestions.ts`, `aiQuestions.test.ts`, `results.ts` (fill `aiQuestion`). *Do:* §6.2.13; injected `add`: arguments (`origin "manual"`, `sourceRef.kind "rank_keyword"`), created/revived passthrough, limits passthrough, link upsert idempotent, no panel function imported; `mapAioStatus` table; `42P01` → `not_measured`. *Verify:* `node --test src/lib/rank-tracking/aiQuestions.test.ts` → pass (F15-AC-19, 20).
-  - [ ] **P6.T2.S2** *Files:* `src/app/api/customer/rank-tracking/configs/[configId]/keywords/[keywordId]/ai-question/route.ts`, contract, route test cases (flag combinations → 404). *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/rank-tracking/rankTracking.route.test.mjs` → pass.
-  - [ ] **P6.T2.S3** *Files:* `src/components/portal/rank-tracking/{TrackAiQuestionDialog,AiVisibilityCell}.tsx`, `RankTrackingColumns.tsx`, `RankTrackingTableParts.tsx`, `scripts/qa/check-f15-browser.mjs` (B9). *Do:* §6.6.5; B9: row menu "Track as AI question" prefilled, created toast with "Open Questions", the column shows "Cited in AI Overview" from fixture data. *Verify:* `node scripts/qa/check-f15-browser.mjs --only B9` → "ok 1 scenario".
-  - [ ] **P6.T2.S4** *Files:* `src/lib/rank-tracking/tools.ts`, `tools.test.ts`. *Do:* §6.2.15; inputs strict; outputs loose; paid tool refuses without `maxUsd`. *Verify:* `node --test src/lib/rank-tracking/tools.test.ts` → pass.
+- [x] **P6.T1 Database**
+  - [x] **P6.T1.S1** *Files:* `supabase/migrations/112_f15_rank_keyword_questions.sql`, `scripts/setup-supabase.mjs` (entry), `tests/customer-uat.sql` (one link per workspace). *Verify:* `node --test src/lib/migrationsRunner.test.mjs src/lib/migrationsLedger.test.mjs` → pass; `node scripts/qa/check-f15-db.mjs --only aio_status` → ok (answered+cited → cited; valid_no_aio → no_overview; legacy row; missing F12 table raises `undefined_table`).
+  - [x] **P6.T1.S2** *Files:* `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+- [x] **P6.T2 Service, route, UI**
+  - [x] **P6.T2.S1** *Files:* `src/lib/rank-tracking/aiQuestions.ts`, `aiQuestions.test.ts`, `results.ts` (fill `aiQuestion`). *Do:* §6.2.13; injected `add`: arguments (`origin "manual"`, `sourceRef.kind "rank_keyword"`), created/revived passthrough, limits passthrough, link upsert idempotent, no panel function imported; `mapAioStatus` table; `42P01` → `not_measured`. *Verify:* `node --test src/lib/rank-tracking/aiQuestions.test.ts` → pass (F15-AC-19, 20).
+  - [x] **P6.T2.S2** *Files:* `src/app/api/customer/rank-tracking/configs/[configId]/keywords/[keywordId]/ai-question/route.ts`, contract, route test cases (flag combinations → 404). *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/rank-tracking/rankTracking.route.test.mjs` → pass.
+  - [x] **P6.T2.S3** *Files:* `src/components/portal/rank-tracking/{TrackAiQuestionDialog,AiVisibilityCell}.tsx`, `RankTrackingColumns.tsx`, `RankTrackingTableParts.tsx`, `scripts/qa/check-f15-browser.mjs` (B9). *Do:* §6.6.5; B9: row menu "Track as AI question" prefilled, created toast with "Open Questions", the column shows "Cited in AI Overview" from fixture data. *Verify:* `node scripts/qa/check-f15-browser.mjs --only B9` → "ok 1 scenario".
+  - [x] **P6.T2.S4** *Files:* `src/lib/rank-tracking/tools.ts`, `tools.test.ts`. *Do:* §6.2.15; inputs strict; outputs loose; paid tool refuses without `maxUsd`. *Verify:* `node --test src/lib/rank-tracking/tools.test.ts` → pass.
 
 **Checkpoint:** full suite, build, `node scripts/qa/check-f15-browser.mjs` → "ok 9 scenarios", `node scripts/qa/check-f15-db.mjs` → "ok 9 groups". Completes F15-AC-19, 20.
 
@@ -1054,9 +1054,9 @@ Fixtures: §6.4 list, written by hand from DataForSEO's public documentation sha
 
 ## 12. Definition of done
 
-- [ ] Phases 1–6 merged; every subtask ticked.
-- [ ] F15-AC-01 … F15-AC-24 covered by passing tests listed in §9.
-- [ ] `npm run build`, `npm run typecheck`, the full test suite, `check-f15-db.mjs` (9 groups) and `check-f15-browser.mjs` (9 scenarios) pass.
-- [ ] Migration paperwork for 110, 111, 112 (README, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`) and `THIRD_PARTY_NOTICES.md` updated.
-- [ ] `features/README.md` status updated (In progress at the first PR, Merged at the last).
-- [ ] Owner-run live check result recorded in the PR of the phase that enables it (or "not run" stated).
+- [x] Phases 1–6 merged; every subtask ticked.
+- [x] F15-AC-01 … F15-AC-24 covered by passing tests listed in §9.
+- [x] `npm run build`, `npm run typecheck`, the full test suite, `check-f15-db.mjs` (9 groups) and `check-f15-browser.mjs` (9 scenarios) pass.
+- [x] Migration paperwork for 110, 111, 112 (README, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`) and `THIRD_PARTY_NOTICES.md` updated.
+- [x] `features/README.md` status updated (In progress at the first PR, Merged at the last).
+- [x] Owner-run live check result recorded in the PR of the phase that enables it (or "not run" stated).
