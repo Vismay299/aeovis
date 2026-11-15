@@ -116,6 +116,14 @@ export function mapAioStatus(
   return "not_measured";
 }
 
+// 42P01: F12's question_answer_links missing inside the function. PGRST205 /
+// PGRST202: PostgREST cannot see migration 112's table / function yet (not
+// applied). Every case degrades to "not measured" rather than failing the page.
+const UNAVAILABLE_CODES = new Set(["42P01", "PGRST205", "PGRST202"]);
+function isUnavailable(err: any): boolean {
+  return UNAVAILABLE_CODES.has(err?.code) || Boolean(err?.message?.includes("42P01"));
+}
+
 export async function aiStatusesForKeywords(
   admin: SupabaseClient | any,
   brandKey: string,
@@ -134,7 +142,7 @@ export async function aiStatusesForKeywords(
       .order("created_at", { ascending: false });
 
     if (linkErr) {
-      if (linkErr.code === "42P01") {
+      if (isUnavailable(linkErr)) {
         console.warn("[rank-tracking] aio status unavailable");
         return result;
       }
@@ -166,7 +174,7 @@ export async function aiStatusesForKeywords(
     );
 
     if (rpcErr) {
-      if (rpcErr.code === "42P01" || rpcErr.message?.includes("42P01")) {
+      if (isUnavailable(rpcErr)) {
         console.warn("[rank-tracking] aio status unavailable");
         for (const [kwId, qId] of keywordToQuestion.entries()) {
           result.set(kwId, {
@@ -199,7 +207,7 @@ export async function aiStatusesForKeywords(
 
     return result;
   } catch (error: any) {
-    if (error?.code === "42P01" || error?.message?.includes("42P01")) {
+    if (isUnavailable(error)) {
       console.warn("[rank-tracking] aio status unavailable");
       return result;
     }

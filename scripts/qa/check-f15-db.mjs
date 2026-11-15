@@ -137,40 +137,39 @@ async function main() {
 
   await group("aio_status", async (c) => {
     const b = await brand(c, "aio-status");
-    const q1 = id(), q2 = id(), q3 = id();
+    const q1 = id(), q2 = id(), q3 = id(), job = id();
     await c.query(
-      "INSERT INTO workspace_questions(id, brand_key, text, topic, origin) VALUES ($1,$2,'q1','General','manual'), ($3,$2,'q2','General','manual'), ($4,$2,'q3','General','manual')",
+      "INSERT INTO workspace_questions(id, brand_key, text, origin) VALUES ($1,$2,'q1','manual'), ($3,$2,'q2','manual'), ($4,$2,'q3','manual')",
       [q1, b, q2, q3]
     );
-
-    const obs1 = id();
     await c.query(
-      "INSERT INTO probe_observations(id, brand_key, job_id, query, engine, state, result) VALUES ($1,$2,'00000000-0000-0000-0000-000000000001','q1','aio','answered',$3::jsonb)",
-      [obs1, b, JSON.stringify({ aio_present: true, brand_cited: true, brand_mentioned_in_text: true })]
+      "INSERT INTO scan_jobs(id, brand, brand_key, status, checkpoint, panel_snapshot) VALUES ($1,$2,$2,'complete',$3,$4)",
+      [job, b, JSON.stringify({ prompt_key: `qa-f15-${job}` }), JSON.stringify({ payload: { prompts: ["q1", "q2"] } })]
     );
-    await c.query(
-      "INSERT INTO question_answer_links(brand_key, question_id, engine, observation_id, source, collected_at) VALUES ($1,$2,'aio',$3,'scan','2026-10-10T10:00:00Z')",
-      [b, q1, obs1]
-    );
-
-    const obs2 = id();
-    await c.query(
-      "INSERT INTO probe_observations(id, brand_key, job_id, query, engine, state, result) VALUES ($1,$2,'00000000-0000-0000-0000-000000000001','q2','aio','valid_no_aio',$3::jsonb)",
-      [obs2, b, JSON.stringify({ aio_present: false, brand_cited: false, brand_mentioned_in_text: false })]
-    );
-    await c.query(
-      "INSERT INTO question_answer_links(brand_key, question_id, engine, observation_id, source, collected_at) VALUES ($1,$2,'aio',$3,'scan','2026-10-10T10:00:00Z')",
-      [b, q2, obs2]
+    const observation = async (query, state, result) => {
+      const obsId = `f15-${id()}`;
+      await c.query(
+        `INSERT INTO probe_observations(id, job_id, purpose, engine, query, context, config_version, circuit_key, state, result, deadline_at, brand_key)
+         VALUES ($1,$2,'scan','aio',$3,'{}'::jsonb,'f15-qa-v1',$4,$5,$6::jsonb,now()+interval '1 hour',$7)`,
+        [obsId, job, query, `f15-ck-${id()}`, state, JSON.stringify(result), b]
+      );
+      return obsId;
+    };
+    const link = (questionId, obsId, text) => c.query(
+      "INSERT INTO question_answer_links(brand_key, question_id, source, observation_id, scan_job_id, engine, asked_text, collected_at, linked_by) VALUES ($1,$2,'scan',$3,$4,'aio',$5,'2026-10-10T10:00:00Z','periodic')",
+      [b, questionId, obsId, job, text]
     );
 
-    const pr3 = id();
+    await link(q1, await observation("q1", "answered", { aio_present: true, brand_cited: true, brand_mentioned_in_text: true }), "q1");
+    await link(q2, await observation("q2", "valid_no_aio", { aio_present: false, brand_cited: false, brand_mentioned_in_text: false }), "q2");
+
+    const pr3 = (await c.query(
+      "INSERT INTO prompt_results(job_id, brand, query, engine, answered, brand_cited, mentioned) VALUES ($1,$2,'q3','aio',true,false,true) RETURNING id",
+      [job, b]
+    )).rows[0].id;
     await c.query(
-      "INSERT INTO prompt_results(id, brand, brand_key, query, engine, answered, brand_cited, mentioned) VALUES ($1,$2,$2,'q3','aio',true,false,true)",
-      [pr3, b]
-    );
-    await c.query(
-      "INSERT INTO question_answer_links(brand_key, question_id, engine, prompt_result_id, source, collected_at) VALUES ($1,$2,'aio',$3,'legacy','2026-10-09T10:00:00Z')",
-      [b, q3, pr3]
+      "INSERT INTO question_answer_links(brand_key, question_id, source, prompt_result_id, scan_job_id, engine, asked_text, collected_at, linked_by) VALUES ($1,$2,'legacy',$3,$4,'aio','q3','2026-10-09T10:00:00Z','backfill')",
+      [b, q3, pr3, job]
     );
 
     const res = await c.query("SELECT * FROM rank_question_aio_status($1, $2::uuid[]) ORDER BY question_id", [b, [q1, q2, q3]]);

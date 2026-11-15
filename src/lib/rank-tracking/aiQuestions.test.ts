@@ -207,3 +207,31 @@ test("aiStatusesForKeywords maps 42P01 to not_measured and handles multiple link
     measuredAt: null,
   });
 });
+
+test("aiStatusesForKeywords returns an empty map while migration 112 is not applied (PGRST205)", async () => {
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    const admin = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            in: () => ({
+              order: async () => ({
+                data: null,
+                error: { code: "PGRST205", message: "Could not find the table 'public.rank_keyword_questions' in the schema cache" },
+              }),
+            }),
+          }),
+        }),
+      }),
+      rpc: async () => {
+        throw new Error("rpc must not run without links");
+      },
+    };
+    const map = await aiStatusesForKeywords(admin as any, "b1", ["kw-1"]);
+    assert.equal(map.size, 0);
+  } finally {
+    console.warn = warn;
+  }
+});
