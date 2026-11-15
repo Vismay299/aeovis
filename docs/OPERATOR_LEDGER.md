@@ -606,6 +606,17 @@ abandoned is not.
 - Refuses disposable email domains at account creation through the Supabase Before User Created hook; invited addresses pass. Until the hook is enabled in the dashboard the migration changes nothing for sign-ups.
 - Objects: `disposable_email_domains` (37-row seed, service role only), `is_disposable_email_domain`, `hook_before_user_created`.
 
+### F24 sign-in hardening
+
+**Owner enabling order (each step is reversible):**
+1. Apply migration 155 (`docs/PROD_MIGRATIONS.md`). Nothing changes yet.
+2. Supabase dashboard → Authentication → Hooks → "Before User Created" → Postgres → schema `public`, function `hook_before_user_created` → enable. Disposable sign-ups are now refused on every path.
+3. Cloudflare dashboard → Turnstile → add a widget for the production hostname (managed mode); keep the secret in the clipboard only.
+4. Vercel → set `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (Production) → redeploy. The widget appears; Supabase does not yet require tokens, so nothing breaks.
+5. Supabase → Authentication → Attack Protection → Enable captcha protection → provider Turnstile → paste the secret → save. Tokens are now required.
+6. Google Cloud console (same project as the Search Console client) → Credentials → new OAuth client "Perceev sign-in" (Web), authorised redirect URI `https://<project-ref>.supabase.co/auth/v1/callback`, scopes `openid email profile` on the consent screen. Supabase → Authentication → Providers → Google → client id and secret → enable. Supabase → URL Configuration → Redirect URLs include `https://<app-domain>/auth/callback` and `http://localhost:3000/auth/callback`.
+7. Vercel → `FEATURE_GOOGLE_SIGN_IN=on` → redeploy.
+
 ### `085_f10_customer_schedules` (F10 phase 2)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply after `080_f09_price_approvals` (the `approval_id` foreign key points at `price_approvals`). Additive; no backfill: existing rows default to `managed_by = 'operator'`.
