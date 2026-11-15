@@ -45,6 +45,9 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/161_f25_email_functions.sql
 \ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
 \ir ../supabase/migrations/170_f27_onboarding.sql
+-- Migration 127 is numbered below 170; re-apply it after 170 to verify late application is safe.
+RESET ROLE;
+\ir ../supabase/migrations/127_f18_site_audit_compare.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',

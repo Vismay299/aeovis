@@ -1857,3 +1857,12 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - **Applied-check:** `select to_regclass('public.question_answer_links');` returns `question_answer_links`; `select count(*) from pg_proc where proname in ('link_question_answers','prune_question_answer_links');` returns 2.
 - **Rollback:** leaving 095 in place after reverting the phase-1 code is harmless (unused table and functions; the periodic stops calling them). `truncate question_answer_links;` is safe — links are rebuilt by the backfill in `docs/runbooks/question-history-backfill.md`.
 - **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f12-db.mjs`. Never run that harness against production.
+
+## `127_f18_site_audit_compare.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply after `126_f18_site_audit_functions.sql` and before deploying F18 phase 8. It is safe to apply on a fresh schema, more than once, and after migration 170.
+- **Additive only.** Creates the service-role-only `site_audit_compare` function, which returns per-issue-type before/after page counts and capped new/fixed page URL lists for two audits in one workspace.
+- **Pre-check:** `select to_regprocedure('public.site_audit_compare(text,uuid,uuid,integer)');` returns null.
+- **Applied-check:** the same query returns `site_audit_compare(text,uuid,uuid,integer)`; `has_function_privilege('authenticated', 'public.site_audit_compare(text,uuid,uuid,integer)', 'EXECUTE')` is false.
+- **Rollback:** leaving the function in place after reverting F18 phase 8 is harmless; it is unused.
+- **Verify locally:** apply it twice to a disposable loopback `*_qa` database and run `scripts/qa/check-f18-db.mjs`. Never run that harness against production.
