@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 import { SpendRefused } from "../spend/errors.ts";
+import { AppError } from "../http/appError.ts";
 import "../pricing/actions/index.ts";
 
 register(new URL("../customerRoutes.test.hooks.mjs", import.meta.url));
@@ -20,6 +21,15 @@ const REFERRING_DOMAINS_ROUTE = await import(
 );
 const TOP_PAGES_ROUTE = await import(
   new URL("../../app/api/customer/backlinks/top-pages/route.ts", import.meta.url).href
+);
+const SNAPSHOT_TARGETS_ROUTE = await import(
+  new URL("../../app/api/customer/backlinks/snapshot-targets/route.ts", import.meta.url).href
+);
+const SNAPSHOT_TARGET_DELETE_ROUTE = await import(
+  new URL("../../app/api/customer/backlinks/snapshot-targets/[targetId]/route.ts", import.meta.url).href
+);
+const SNAPSHOTS_ROUTE = await import(
+  new URL("../../app/api/customer/backlinks/snapshots/route.ts", import.meta.url).href
 );
 
 const USER = { id: "user-1", email: "owner@example.test" };
@@ -541,4 +551,133 @@ test("ahrefs-dr cache is global: workspace B shares workspace A's entry", async 
   assert.equal(resB2.status, 200);
   assert.deepEqual(await resB2.json(), { ratings: { "other-example.com": 61 } });
   assert.equal(calls.length, 2);
+});
+
+test("snapshot target create requires owner before price approval", async () => {
+  let approvalChecked = false;
+  const deps = makeDeps({
+    role: "member",
+    requireApprovedPrice: async () => { approvalChecked = true; throw new Error("unexpected"); },
+  });
+  const req = makeRequest("/api/customer/backlinks/snapshot-targets", {
+    target: "offcult.in", scope: "subdomains", interval: "weekly", maxUsd: 1,
+  });
+  const res = await SNAPSHOT_TARGETS_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 403);
+  assert.equal((await res.json()).code, "owner_required");
+  assert.equal(approvalChecked, false);
+});
+
+test("snapshot target create without maxUsd returns approval_required before any paid work", async () => {
+  let approvalRecorded = false;
+  let targetCreated = false;
+  const deps = makeDeps({
+    role: "owner",
+    recordApproval: async () => { approvalRecorded = true; return "approval-id"; },
+    createSnapshotTarget: async () => { targetCreated = true; throw new Error("unexpected"); },
+  });
+  const req = makeRequest("/api/customer/backlinks/snapshot-targets", {
+    target: "offcult.in", scope: "subdomains", interval: "weekly",
+  });
+  const res = await SNAPSHOT_TARGETS_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 400);
+  assert.equal((await res.json()).code, "approval_required");
+  assert.equal(approvalRecorded, false);
+  assert.equal(targetCreated, false);
+});
+
+test("snapshot target create requires approval before creating a target", async () => {
+  let order = [];
+  const deps = makeDeps({
+    role: "owner",
+    requireApprovedPrice: async (_action, _ctx, input, maxUsd) => {
+      assert.equal(input.interval, "weekly");
+      assert.equal(maxUsd, 0.5);
+      order.push("price");
+      return { quote: { totalUsd: 0.096144 }, approvedMaxUsd: 0.5 };
+    },
+    recordApproval: async (_admin, input) => {
+      assert.equal(input.source, "schedule");
+      assert.equal(input.subject.kind, "backlink_snapshot_target");
+      order.push("approval");
+      return "approval-id";
+    },
+    randomUUID: () => "target-id",
+    computeNextRunAt: () => "2026-11-22T00:00:00.000Z",
+    createSnapshotTarget: async (_admin, input) => {
+      order.push("insert");
+      assert.equal(input.id, "target-id");
+      assert.equal(input.approvalId, "approval-id");
+      return {
+        id: input.id, target: input.target, scope: input.scope, label: input.label ?? null,
+        schedule_interval: input.interval, enabled: true, next_run_at: input.nextRunAt,
+        last_run_at: null, last_skip_reason: null,
+      };
+    },
+  });
+  const req = makeRequest("/api/customer/backlinks/snapshot-targets", {
+    target: "offcult.in", scope: "subdomains", interval: "weekly", maxUsd: 0.5,
+  });
+  const res = await SNAPSHOT_TARGETS_ROUTE.POST(req, {}, deps);
+  assert.equal(res.status, 201);
+  assert.deepEqual(order, ["price", "approval", "insert"]);
+  assert.equal((await res.json()).target.interval, "weekly");
+});
+
+test("duplicate tracked target returns 409 already_tracked", async () => {
+  let targetCreateReached = false;
+  const deps = makeDeps({
+    role: "owner",
+    requireApprovedPrice: async () => ({ quote: { totalUsd: 0.096144 }, approvedMaxUsd: 0.5 }),
+    recordApproval: async () => "approval-id",
+    createSnapshotTarget: async () => {
+      targetCreateReached = true;
+      throw new AppError(409, "already_tracked", "This site's history is already tracked.");
+    },
+  });
+  const req = makeRequest("/api/customer/backlinks/snapshot-targets", {
+    target: "offcult.in", scope: "subdomains", interval: "weekly", maxUsd: 0.5,
+  });
+  const res = await SNAPSHOT_TARGETS_ROUTE.POST(req, {}, deps);
+  assert.equal(targetCreateReached, true);
+  assert.equal(res.status, 409);
+  assert.equal((await res.json()).code, "already_tracked");
+});
+
+test("snapshot feature off returns 404 before target-list storage is read", async () => {
+  let listCalled = false;
+  const deps = makeDeps({ flagOn: false, listSnapshotTargets: async () => { listCalled = true; return []; } });
+  const res = await SNAPSHOT_TARGETS_ROUTE.GET(
+    new Request("https://perceev.test/api/customer/backlinks/snapshot-targets?brand_key=offcult.in"),
+    {}, deps,
+  );
+  assert.equal(res.status, 404);
+  assert.equal((await res.json()).code, "feature_unavailable");
+  assert.equal(listCalled, false);
+});
+
+test("snapshot history query cannot select another workspace", async () => {
+  let listCalled = false;
+  const deps = makeDeps({ listSnapshots: async () => { listCalled = true; return []; } });
+  const res = await SNAPSHOTS_ROUTE.GET(
+    new Request("https://perceev.test/api/customer/backlinks/snapshots?brand_key=workspace-b&target=same.example&scope=domain"),
+    {}, deps,
+  );
+  assert.equal(res.status, 404);
+  assert.equal((await res.json()).code, "workspace_not_found");
+  assert.equal(listCalled, false);
+});
+
+test("snapshot target deletion binds the target id to the authenticated workspace", async () => {
+  let deletedFor = null;
+  const deps = makeDeps({
+    role: "owner",
+    deleteSnapshotTarget: async (_admin, brandKey, targetId) => { deletedFor = { brandKey, targetId }; },
+  });
+  const res = await SNAPSHOT_TARGET_DELETE_ROUTE.DELETE(
+    new Request("https://perceev.test/api/customer/backlinks/snapshot-targets/target-b?brand_key=offcult.in", { method: "DELETE" }),
+    { params: Promise.resolve({ targetId: "target-b" }) }, deps,
+  );
+  assert.equal(res.status, 200);
+  assert.deepEqual(deletedFor, { brandKey: BRAND_KEY, targetId: "target-b" });
 });

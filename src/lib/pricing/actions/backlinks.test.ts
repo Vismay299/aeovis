@@ -4,6 +4,7 @@ import {
   estimateBacklinksLookupRun,
   estimateBacklinksPage,
   estimateBacklinksExpandDomain,
+  estimateBacklinksSnapshotsTrack,
 } from "./backlinks.ts";
 import { getPricedAction } from "../pricedActions.ts";
 import type { PricingContext } from "../pricedActions.ts";
@@ -34,6 +35,11 @@ describe("backlinks pricing actions", () => {
     assert.ok(expand);
     assert.equal(expand.feature, "backlinks.research");
     assert.equal(expand.requireApproval, false);
+
+    const snapshots = getPricedAction("backlinks.snapshots.track");
+    assert.ok(snapshots);
+    assert.equal(snapshots.feature, "backlinks.snapshots");
+    assert.equal(snapshots.requireApproval, true);
   });
 
   it("calculates worked example $0.087012 for offcult.in, subdomains, 50 backlinks with fixed clock", async () => {
@@ -234,5 +240,20 @@ describe("backlinks pricing actions", () => {
       expand.lines[0].label,
       "All links from one domain (up to 100)",
     );
+  });
+
+  it("projects four weekly summary calls per month and requires approval", async () => {
+    const ctx = createMockContext();
+    const quote = await estimateBacklinksSnapshotsTrack(ctx, {
+      target: "offcult.in",
+      scope: "subdomains",
+      interval: "weekly",
+    });
+    assert.equal(quote.blocked, null);
+    assert.equal(quote.monthly?.runsPerMonth, 4);
+    assert.equal(quote.monthly?.totalUsd, quote.totalUsd);
+    assert.equal(quote.lines[0].label, "Backlink summary for offcult.in");
+    assert.equal(quote.lines[0].quantity, 4);
+    assert.equal(quote.totalUsd, 0.096144);
   });
 });

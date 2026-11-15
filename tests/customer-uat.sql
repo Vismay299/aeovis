@@ -45,6 +45,8 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/161_f25_email_functions.sql
 \ir ../supabase/migrations/165_f26_privacy_and_telemetry_ids.sql
 \ir ../supabase/migrations/170_f27_onboarding.sql
+-- Migration 115 sorts before 170; reapply it after 170 as the production order requires.
+\ir ../supabase/migrations/115_f16_backlink_snapshots.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -805,5 +807,68 @@ DO $f27$ BEGIN
 END $f27$;
 RESET ROLE;
 -- End F27 tenant check.
+
+-- F16 phase 5: tenant reads, daily lookup idempotency, and the enabled-target cap.
+RESET ROLE;
+INSERT INTO public.backlink_snapshot_targets
+  (brand_key,target,scope,label,schedule_interval,next_run_at,approved_max_usd,created_by)
+VALUES
+ ('10000000-0000-0000-0000-000000000001','same.example','subdomains','Own site','weekly',now(),0.5,'00000000-0000-0000-0000-000000000001'),
+ ('10000000-0000-0000-0000-000000000002','same.example','subdomains','Own site','weekly',now(),0.5,'00000000-0000-0000-0000-000000000002');
+INSERT INTO public.backlink_snapshots(brand_key,target,scope,captured_on,source,backlinks,referring_domains)
+VALUES ('10000000-0000-0000-0000-000000000001','same.example','subdomains',current_date,'lookup',10,2),
+       ('10000000-0000-0000-0000-000000000002','same.example','subdomains',current_date,'lookup',20,4);
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $f16$ BEGIN
+  IF (SELECT count(*) FROM public.backlink_snapshot_targets) <> 1
+   OR (SELECT brand_key FROM public.backlink_snapshot_targets) <> '10000000-0000-0000-0000-000000000001'
+   OR (SELECT count(*) FROM public.backlink_snapshots) <> 1
+   OR (SELECT brand_key FROM public.backlink_snapshots) <> '10000000-0000-0000-0000-000000000001'
+  THEN RAISE EXCEPTION 'F16 tracked targets or snapshots leaked across workspaces'; END IF;
+END $f16$;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $f16$ BEGIN
+  IF (SELECT count(*) FROM public.backlink_snapshot_targets) <> 1
+   OR (SELECT brand_key FROM public.backlink_snapshot_targets) <> '10000000-0000-0000-0000-000000000002'
+   OR (SELECT count(*) FROM public.backlink_snapshots) <> 1
+   OR (SELECT brand_key FROM public.backlink_snapshots) <> '10000000-0000-0000-0000-000000000002'
+  THEN RAISE EXCEPTION 'F16 tracked targets or snapshots leaked across workspaces'; END IF;
+END $f16$;
+RESET ROLE;
+
+-- A second lookup on the same UTC day must be ignored by the unique key.
+INSERT INTO public.backlink_snapshots(brand_key,target,scope,captured_on,source,backlinks)
+VALUES ('10000000-0000-0000-0000-000000000001','same.example','subdomains',current_date,'lookup',99)
+ON CONFLICT (brand_key,target,scope,captured_on) DO NOTHING;
+DO $f16$ BEGIN
+  IF (SELECT count(*) FROM public.backlink_snapshots
+      WHERE brand_key='10000000-0000-0000-0000-000000000001' AND target='same.example'
+        AND scope='subdomains' AND captured_on=current_date) <> 1
+  THEN RAISE EXCEPTION 'F16 duplicate lookup was not ignored'; END IF;
+END $f16$;
+
+INSERT INTO public.backlink_snapshot_targets
+  (brand_key,target,scope,schedule_interval,next_run_at,approved_max_usd)
+SELECT '10000000-0000-0000-0000-000000000001',format('site-%s.example',lpad(n::text,3,'0')),
+       'domain','weekly',now(),0.5
+FROM generate_series(1,19) AS n;
+DO $f16$ BEGIN
+  BEGIN
+    INSERT INTO public.backlink_snapshot_targets
+      (brand_key,target,scope,schedule_interval,next_run_at,approved_max_usd)
+    VALUES ('10000000-0000-0000-0000-000000000001','twenty-first.example','domain','weekly',now(),0.5);
+    RAISE EXCEPTION 'F16 21st enabled target was accepted';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'backlink_snapshots_cap:targets' THEN RAISE; END IF;
+  END;
+END $f16$;
+UPDATE public.backlink_snapshot_targets SET enabled=false
+WHERE brand_key='10000000-0000-0000-0000-000000000001' AND target='site-001.example';
+INSERT INTO public.backlink_snapshot_targets
+  (brand_key,target,scope,schedule_interval,next_run_at,approved_max_usd)
+VALUES ('10000000-0000-0000-0000-000000000001','twenty-first.example','domain','weekly',now(),0.5);
+-- End F16 tenant/cap check.
 ROLLBACK;
 
