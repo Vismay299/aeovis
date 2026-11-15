@@ -384,7 +384,7 @@ test("the report renders its By engine card from the actual worker payload shape
   const fakeRq = createFakeReactQuery(lifecycle.react);
   const nextLink = { __esModule: true, default: "a" };
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["next/link", nextLink]]), autoNull: ["lucide-react"] });
-  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react", "@/components/portal/questions/history/QuestionHistoryLink"] });
   const { default: ReportPage } = await compileJsx(path.join(here, "../../app/portal/scans/[scanId]/page.jsx"), {
     modules: new Map([
       ["react", lifecycle.react],
@@ -421,7 +421,7 @@ test("the report renders its By engine card from the actual worker payload shape
 
 test("a failed engine is visibly unmeasured even when an older score field contains a number", async () => {
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
-  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react", "@/components/portal/questions/history/QuestionHistoryLink"] });
   const html = renderToHtml(cards.EngineScoresCard, { engineScores: { aio: 73 }, engines: { aio: { visibility_pct: 73, non_branded_queries: 30, non_branded_with_answer: 7, errored_queries: 26, data_source_issue: true } } });
   const text = textOf(html);
   assert.ok(text.includes("Collection incomplete"));
@@ -437,7 +437,7 @@ test("failed engine slices remain in the report even when their visibility is co
 
 test("collection failures are not counted as measured missing-brand answers", async () => {
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
-  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react", "@/components/portal/questions/history/QuestionHistoryLink"] });
   const results = [
     { query: "named brand", engine: "chatgpt", answered: true, mentioned: true },
     { query: "measured gap", engine: "chatgpt", answered: true, mentioned: false },
@@ -457,7 +457,7 @@ test("collection failures are not counted as measured missing-brand answers", as
 
 test("healthy low-sample answers keep their measured score and do not appear as collection failures", async () => {
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
-  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react", "@/components/portal/questions/history/QuestionHistoryLink"] });
   const text = textOf(renderToHtml(cards.EngineScoresCard, { engines: {
     gemini: { visibility_pct: 0, data_source_issue: false, insufficient_sample: true, eliciting_queries: 4, non_branded_queries: 30, non_branded_with_answer: 30, errored_queries: 0 },
     chatgpt: { visibility_pct: null, data_source_issue: false, insufficient_sample: true, eliciting_queries: 0, non_branded_queries: 30, non_branded_with_answer: 30, errored_queries: 0 },
@@ -472,7 +472,7 @@ test("healthy low-sample answers keep their measured score and do not appear as 
 
 test("an unmeasured engine row draws a still 'not measured' rail, not a loading sweep", async () => {
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
-  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react", "@/components/portal/questions/history/QuestionHistoryLink"] });
   const html = renderToHtml(cards.EngineScoresCard, { engines: {
     aio: { visibility_pct: null, data_source_issue: true, non_branded_queries: 30, non_branded_with_answer: 0, errored_queries: 30 },
   } });
@@ -550,7 +550,7 @@ async function renderCustomerReport(t, scan) {
   const body = { scan, results: [] };
   t.mock.method(globalThis, "fetch", async () => response(200, body));
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["next/link", { __esModule: true, default: "a" }]]), autoNull: ["lucide-react"] });
-  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react", "@/components/portal/questions/history/QuestionHistoryLink"] });
   const { default: ReportPage } = await compileJsx(path.join(here, "../../app/portal/scans/[scanId]/page.jsx"), {
     modules: new Map([
       ["react", lifecycle.react],
@@ -655,7 +655,7 @@ test("every planned question is listed, including those with no collected row, w
   assert.deepEqual(reportData.engineOptions(results, planned).map((o) => o.value), ["aio", "chatgpt"]);
   assert.equal(reportData.groupQuestions(results, null).length, 5, "legacy reports without a plan keep their row-only list");
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
-  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react", "@/components/portal/questions/history/QuestionHistoryLink"] });
   const text = textOf(renderToHtml(cards.QuestionsCard, { results, planned }));
   assert.match(text, /All\D*30/);
   assert.ok(text.includes("Planned question 29"));
@@ -672,7 +672,7 @@ test("the finalizer stores the planned question list in panel order with the pla
 
 test("the Google card states the AI Overview trigger count from the terminal outcome, not '0 questions answered'", async () => {
   const ui = await compileJsx(path.join(here, "ui.jsx"), { modules: new Map([["react", React]]), autoNull: ["lucide-react", "next/link"] });
-  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react"] });
+  const cards = await compileJsx(path.join(here, "scans/ReportCards.jsx"), { modules: new Map([["react", React], ["../ui", ui], ["./reportData", reportData], ["./scans.css", {}]]), autoNull: ["lucide-react", "@/components/portal/questions/history/QuestionHistoryLink"] });
   const metric = createMetric({ metricId: "observed_exposure", numerator: null, denominator: 0, eligiblePromptIds: [], collection: { valid: 26, planned: 30 } });
   const engines = { aio: { metrics: { observed_exposure: metric }, non_branded_queries: 30, non_branded_with_answer: 0, errored_queries: 4, data_source_issue: true } };
   const terminalOutcome = { engines: [{ name: "aio", planned: 30, valid: 26, answered: 0, valid_no_aio: 26, failed: 4, not_attempted: 0 }] };
