@@ -9,6 +9,7 @@ import {
   emailKeys,
   onboardingKeys,
   setupKeys,
+  exploreKeys,
   invalidateWorkspace,
   isWorkspaceKey,
   keys,
@@ -98,6 +99,7 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.rankKeywordHistory("acme", "c1", "k1", 30),
     keys.rankSuggestions("acme", "example.com", 2356),
     keys.setup("acme"),
+    keys.explore("acme"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
@@ -281,5 +283,14 @@ test("F27 onboarding and setup keys: onboarding is user-level, setup is workspac
   assert.equal(WORKSPACE_DOMAINS.has("setup"), true);
   assert.equal(isWorkspaceKey(setupKeys.activation("acme"), "acme"), true);
   assert.equal(isWorkspaceKey(setupKeys.activation("acme"), "other"), false);
+});
+
+test("F11 exploreKeys: builder shapes and workspace scoping", () => {
+  assert.deepEqual(exploreKeys.runs("acme"), ["explore", "acme", "runs"]);
+  assert.deepEqual(exploreKeys.run("acme", "r1"), ["explore", "acme", "run", "r1"]);
+  assert.equal(WORKSPACE_DOMAINS.has("explore"), true);
+  assert.equal(isWorkspaceKey(exploreKeys.runs("acme"), "acme"), true);
+  assert.equal(isWorkspaceKey(exploreKeys.run("acme", "r1"), "acme"), true);
+  assert.equal(isWorkspaceKey(exploreKeys.run("acme", "r1"), "other"), false);
 });
 

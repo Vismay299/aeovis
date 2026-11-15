@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { findCustomerBrand, getCustomerContext } from "@/lib/supabase/customer";
+import { isFeatureEnabled } from "@/lib/features/flags.ts";
 
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
@@ -60,6 +61,9 @@ export async function GET(request) {
       scan_jobs: jobs,
       metrics: metricsResult.data || [],
       content_items: contentItems,
+      features: {
+        prompt_explorer: await isFeatureEnabled("prompt_explorer", brand.brandKey),
+      },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error(`[customer] overview query failed for ${brand.brandKey}:`, error);

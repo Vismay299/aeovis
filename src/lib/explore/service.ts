@@ -33,6 +33,7 @@ import { reserveSpend, releaseSpend } from "../spend/index.ts";
 import { enqueueJob } from "../jobs/index.ts";
 import { hashIdentity } from "../db/probeDispatch.js";
 import { captureServerEvent } from "../telemetry/server.ts";
+import { addWorkspaceQuestion } from "../questions/workspaceQuestions.ts";
 import "../pricing/actions/index.ts";
 
 export type ExploreServiceDeps = {
@@ -55,6 +56,7 @@ export type ExploreServiceDeps = {
   enqueueJob?: typeof enqueueJob;
   recordApproval?: typeof recordApproval;
   captureServerEvent?: typeof captureServerEvent;
+  addWorkspaceQuestion?: typeof addWorkspaceQuestion;
   now?: () => Date;
   env?: Record<string, string | undefined>;
 };
@@ -567,10 +569,49 @@ export async function listExploreRuns(
   };
 }
 
-export async function trackExploreQuestion(): Promise<never> {
-  throw new AppError(
-    501,
-    "not_available",
-    "Tracking explore questions will be available in Phase 3.",
-  );
+export type TrackExploreQuestionResult = {
+  questionId: string;
+  created: boolean;
+  status: string;
+};
+
+export async function trackExploreQuestion(
+  ws: {
+    admin: SupabaseClient;
+    brandKey: string;
+    user: { id: string };
+  },
+  runId: string,
+  deps?: ExploreServiceDeps,
+): Promise<TrackExploreQuestionResult> {
+  const store = deps?.store ?? createExploreStore(ws.admin);
+  const run = await store.getRun(ws.brandKey, runId);
+  if (!run) {
+    throw new AppError(
+      404,
+      "explore_run_not_found",
+      "This question does not exist in this workspace.",
+    );
+  }
+
+  const addFn = deps?.addWorkspaceQuestion ?? addWorkspaceQuestion;
+  const res = await addFn(ws.admin, {
+    brandKey: ws.brandKey,
+    text: run.prompt,
+    origin: "manual",
+    createdBy: ws.user.id,
+    sourceRef: { kind: "explore_run", id: runId },
+  });
+
+  if (run.question_id !== res.question.id) {
+    await store.updateRun(ws.brandKey, runId, {
+      question_id: res.question.id,
+    });
+  }
+
+  return {
+    questionId: res.question.id,
+    created: res.created,
+    status: res.question.status,
+  };
 }

@@ -147,6 +147,8 @@ export const keys = {
     ["rankSuggestions", brandKey, domain, locationCode] as const,
   // F27
   setup: (brandKey: string) => ["setup", brandKey] as const,
+  // F11
+  explore: (brandKey: string) => ["explore", brandKey] as const,
 } as const;
 
 // F12 §6.2 — question history reads. Workspace data follows
@@ -179,6 +181,13 @@ export const onboardingKeys = {
 // F27 — setup checklist. Workspace-scoped.
 export const setupKeys = {
   activation: (brandKey: string) => ["setup", brandKey] as const,
+} as const;
+
+// F11 — prompt explorer.
+export const exploreKeys = {
+  runs: (brandKey: string) => ["explore", brandKey, "runs"] as const,
+  run: (brandKey: string, runId: string) =>
+    ["explore", brandKey, "run", runId] as const,
 } as const;
 
 /** Every domain above whose second element is a brandKey. */
@@ -235,6 +244,7 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "rankKeywordHistory",
   "rankSuggestions",
   "setup",
+  "explore",
 ]);
 
 export function isWorkspaceKey(
