@@ -1,0 +1,3 @@
+{
+  "properties": [{ "siteUrl": "sc-domain:acme.example", "permissionLevel": "siteOwner" }]
+}

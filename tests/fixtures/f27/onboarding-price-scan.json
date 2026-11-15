@@ -1,0 +1,8 @@
+{
+  "action": "ai_visibility.scan.run",
+  "totalUsd": 0.15,
+  "blocked": null,
+  "units": [{ "key": "answers", "count": 24, "label": "answers" }, { "key": "questions", "count": 24, "label": "questions" }, { "key": "engines", "count": 1, "label": "engine" }],
+  "lines": [{ "label": "First scan" }],
+  "warnings": []
+}

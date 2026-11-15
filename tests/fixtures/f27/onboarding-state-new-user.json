@@ -1,0 +1,19 @@
+{
+  "enabled": true,
+  "needsOnboarding": true,
+  "completedAt": null,
+  "workspace": null,
+  "visibleSteps": ["website", "search_console", "analytics", "preferences", "first_scan"],
+  "steps": { "website": "todo", "search_console": "todo", "analytics": "todo", "preferences": "todo", "first_scan": "todo" },
+  "market": { "country": "in", "language": "en" },
+  "prefill": { "website": "https://acme.example", "brandName": "Acme", "questionCount": 24 },
+  "handoff": { "domain": "acme.example", "scanId": "0c2a4b1e-8d1f-4f35-9b5e-2e0c6f1a7d90", "importedQuestions": 24 },
+  "audit": { "available": true, "auditId": null, "status": "not_started", "pagesCrawled": 0, "pagesTotal": 50 },
+  "research": { "available": true, "status": "none", "jobId": null },
+  "questions": { "curation": true, "approvedVersion": null, "active": 0, "paused": 24 },
+  "gsc": { "connected": false, "property": null },
+  "ga4": { "available": true, "connected": false },
+  "preferences": { "productUpdatesAvailable": true, "analyticsAvailable": true },
+  "domainOverview": true,
+  "pollAfterSeconds": null
+}

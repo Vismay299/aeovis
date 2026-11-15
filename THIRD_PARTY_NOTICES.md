@@ -788,6 +788,17 @@ SOFTWARE.
 - `src/components/portal/explore/hooks/useExplore.ts` (from `openseo:src/client/features/ai-search/promptExplorerQuery.ts`)
 - `src/app/portal/explore/page.tsx` (from `openseo:src/routes/_app/p/$projectId/prompt-explorer.tsx`)
 
+### F27 Phase 2 ports
+- `src/components/portal/onboarding/OnboardingShell.tsx` (from `src/client/features/onboarding/PostSignupOnboarding.tsx:22-69`, `src/client/features/onboarding/OnboardingCard.tsx:8-51`)
+- `src/components/portal/onboarding/WizardFooter.tsx` (from `src/client/features/onboarding/WizardFooter.tsx`)
+- `src/components/portal/onboarding/SearchConsoleStep.tsx` (from `src/client/features/onboarding/SearchConsoleOnboardingStep.tsx`)
+- `src/components/portal/onboarding/PreferencesStep.tsx` (from `src/client/features/onboarding/AnalyticsOnboardingStep.tsx`)
+- `src/app/onboarding/page.jsx` (from `src/routes/_authenticated.onboarding.index.tsx:18-151`)
+- `src/components/portal/onboarding/OnboardingWizard.tsx` (from `src/routes/_authenticated.onboarding.index.tsx:18-151`)
+- `src/components/portal/onboarding/WebsiteStep.tsx` (from `src/client/features/onboarding/WebsiteOnboardingStep.tsx:28-211`)
+- `src/components/app/onboarding/useOnboardingRedirect.ts` (from `src/client/features/onboarding/useOnboardingRedirect.ts:12-61`, `src/routes/_app/route.tsx:34-39`)
+- `src/components/portal/PortalShell.jsx` (from `src/client/features/onboarding/useOnboardingRedirect.ts:12-61`, `src/routes/_app/route.tsx:34-39`)
+
 ### F22 Phase 1 ports
 - `src/lib/tools/links.ts` (from `src/server/mcp/urls.ts`)
 - `src/lib/tools/capOutput.ts` (from `src/server/features/sam/samToolOutput.ts`)

@@ -158,6 +158,18 @@ const ENGINE_LABEL = {
   gemini: "Gemini",
 };
 
+function freeScanOnboardingHref(result, scanId) {
+  if (result?.isSample || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(scanId || "")) return null;
+  try {
+    const website = /^https?:\/\//i.test(result.website) ? result.website : `https://${result.website}`;
+    const host = new URL(website).hostname.toLowerCase();
+    if (!host || host.includes("@")) return null;
+    return `/signup?domain=${encodeURIComponent(host)}&scan=${encodeURIComponent(scanId)}`;
+  } catch {
+    return null;
+  }
+}
+
 function engineLabel(key) {
   return ENGINE_LABEL[key] || String(key || "").toUpperCase();
 }
@@ -676,6 +688,7 @@ export default function DashboardShell({ scan, scanId, error = null }) {
       ? null
       : scoreTier(heroScore, result.scoringVersion);
   const brandAliases = getBrandAliases(result.brand, result.website);
+  const onboardingHref = freeScanOnboardingHref(result, scanId);
 
   const handleHistoryClick = (scan) => {
     setResult(normalizeResult(scan, result.brand, result.website));
@@ -830,6 +843,7 @@ export default function DashboardShell({ scan, scanId, error = null }) {
         <div className="topbar">
           <h4>{VIEW_TITLE[view] || view}</h4>
           <span className="chip chip--you" data-testid="dashboard-brand">{result.brand}</span>
+          {onboardingHref ? <a className="tag tag--brand" href={onboardingHref}>Track these questions in a workspace →</a> : null}
           <span className="tag">{result.website}</span>
           <span className="chip" title={`Scoring ${result.scoringVersion}`}>
             {probeSources.map(engineLabel).join(" · ")}

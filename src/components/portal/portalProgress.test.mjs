@@ -46,6 +46,7 @@ async function loadTracker() {
       ["@/lib/query/polling", await import("../../lib/query/polling.ts")],
       ["@/lib/query/keys", await import("../../lib/query/keys.ts")],
       ["./scanTrackerModel", await import("./scanTrackerModel.js")],
+      ["@/components/app/onboarding/useOnboardingRedirect", { decideOnboardingRedirect: () => null }],
     ]),
   });
 }

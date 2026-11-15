@@ -760,6 +760,7 @@ test("measurement page displays approved question panel, counts questions, runs 
     modules: new Map([
       ["react", lifecycle.react],
       ["@/components/portal/PortalShell", { usePortal: () => ({ brandKey: "acme", brand: { display_name: "Acme" }, redirectToLogin: noop, scan, features: {} }) }],
+      ["@/components/app/onboarding/useOnboardingRedirect", { decideOnboardingRedirect: () => null }],
       ["@/components/portal/ui", ui],
       ["@/components/portal/questions/QuestionsWorkspace", { QuestionsWorkspace: QuestionsWorkspaceStub }],
     ]),
@@ -872,6 +873,7 @@ test("measurement page swaps legacy question panel for QuestionsWorkspace when q
     modules: new Map([
       ["react", lifecycle.react],
       ["@/components/portal/PortalShell", { usePortal: () => ({ brandKey: "acme", brand: { display_name: "Acme" }, redirectToLogin: noop, scan: { start: noop, starting: false, active: false }, features: { question_curation: true } }) }],
+      ["@/components/app/onboarding/useOnboardingRedirect", { decideOnboardingRedirect: () => null }],
       ["@/components/portal/ui", ui],
       ["@/components/portal/questions/QuestionsWorkspace", { QuestionsWorkspace: QuestionsWorkspaceStub }],
     ]),
