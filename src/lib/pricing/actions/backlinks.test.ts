@@ -242,7 +242,7 @@ describe("backlinks pricing actions", () => {
     );
   });
 
-  it("projects four weekly summary calls per month and requires approval", async () => {
+  it("quotes one weekly summary call and keeps its four-call monthly projection", async () => {
     const ctx = createMockContext();
     const quote = await estimateBacklinksSnapshotsTrack(ctx, {
       target: "offcult.in",
@@ -250,10 +250,22 @@ describe("backlinks pricing actions", () => {
       interval: "weekly",
     });
     assert.equal(quote.blocked, null);
+    assert.equal(quote.totalUsd, 0.024036);
     assert.equal(quote.monthly?.runsPerMonth, 4);
-    assert.equal(quote.monthly?.totalUsd, quote.totalUsd);
+    assert.equal(quote.monthly?.totalUsd, 0.096144);
     assert.equal(quote.lines[0].label, "Backlink summary for offcult.in");
-    assert.equal(quote.lines[0].quantity, 4);
-    assert.equal(quote.totalUsd, 0.096144);
+    assert.equal(quote.lines[0].quantity, 1);
+    assert.equal(quote.lines[0].unitUsd, 0.024036);
+    assert.equal(quote.lines[0].totalUsd, 0.024036);
+    assert.equal(quote.units[0].count, 1);
+
+    const monthly = await estimateBacklinksSnapshotsTrack(ctx, {
+      target: "offcult.in",
+      scope: "subdomains",
+      interval: "monthly",
+    });
+    assert.equal(monthly.totalUsd, 0.024036);
+    assert.equal(monthly.monthly?.runsPerMonth, 1);
+    assert.equal(monthly.monthly?.totalUsd, 0.024036);
   });
 });

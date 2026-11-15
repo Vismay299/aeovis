@@ -361,20 +361,20 @@ export async function estimateBacklinksSnapshotsTrack(
     toMicros(dataforseoPricing.backlinks.summary({})),
   );
   const runsPerMonth = scheduledChecksPerMonth(input.interval);
-  const totalUsd = fromMicros(toMicros(unitUsd * runsPerMonth));
+  const monthlyTotalUsd = fromMicros(toMicros(unitUsd * runsPerMonth));
   return {
-    totalUsd,
+    totalUsd: unitUsd,
     expectedUsd: null,
-    units: [{ key: "summary", label: "Backlink summary", count: runsPerMonth }],
+    units: [{ key: "summary", label: "Backlink summary", count: 1 }],
     lines: [
       {
         label: `Backlink summary for ${input.target}`,
-        quantity: runsPerMonth,
+        quantity: 1,
         unitUsd,
-        totalUsd,
+        totalUsd: unitUsd,
       },
     ],
-    monthly: { interval: input.interval, runsPerMonth, totalUsd },
+    monthly: { interval: input.interval, runsPerMonth, totalUsd: monthlyTotalUsd },
     warnings: [],
     blocked: null,
   };

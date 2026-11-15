@@ -100,11 +100,15 @@ async function runTick(options: HarnessOptions = {}) {
 }
 
 test("due weekly target advances before one approved billed summary is captured", async () => {
-  const { result, events, summaryCalls, recordCalls, stepCalls } = await runTick();
+  const item = { ...due("one"), approvedMaxUsd: 0.024036 };
+  const { result, events, summaryCalls, recordCalls, stepCalls } = await runTick({
+    items: [item],
+    quoteUsd: 0.024036,
+  });
   assert.deepEqual(events.slice(0, 3), ["advance:one", "summary:one", `record:brand-one`]);
   assert.equal(summaryCalls.length, 1);
   assert.equal(summaryCalls[0].ctx.feature, "backlinks.snapshots");
-  assert.equal(summaryCalls[0].ctx.maxUsd, 0.5);
+  assert.equal(summaryCalls[0].ctx.maxUsd, 0.024036);
   assert.equal(summaryCalls[0].ctx.jobId, "job-snapshot-test");
   assert.equal(summaryCalls[0].ctx.idempotencyKey, "backlinks.snapshot:one:2026-11-14T12:00:00.000Z");
   assert.equal(recordCalls[0].source, "scheduled");
@@ -123,9 +127,10 @@ test("flag off records snapshots_disabled without quote or provider call", async
 });
 
 test("price above the approved maximum skips before provider work", async () => {
-  const result = await runTick({ quoteUsd: 0.75 });
+  const item = { ...due("price-rise"), approvedMaxUsd: 0.024036 };
+  const result = await runTick({ items: [item], quoteUsd: 0.024037 });
   assert.equal(result.summaryCalls.length, 0);
-  assert.deepEqual(result.blocked, [{ key: "one", reason: "price_changed", next: "2026-11-21T12:00:00.000Z" }]);
+  assert.deepEqual(result.blocked, [{ key: item.key, reason: "price_changed", next: "2026-11-21T12:00:00.000Z" }]);
 });
 
 test("missed weekly windows collapse to one capture", async () => {

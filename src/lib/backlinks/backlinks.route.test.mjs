@@ -594,7 +594,7 @@ test("snapshot target create requires approval before creating a target", async 
       assert.equal(input.interval, "weekly");
       assert.equal(maxUsd, 0.5);
       order.push("price");
-      return { quote: { totalUsd: 0.096144 }, approvedMaxUsd: 0.5 };
+      return { quote: { totalUsd: 0.024036 }, approvedMaxUsd: 0.5 };
     },
     recordApproval: async (_admin, input) => {
       assert.equal(input.source, "schedule");
@@ -628,7 +628,7 @@ test("duplicate tracked target returns 409 already_tracked", async () => {
   let targetCreateReached = false;
   const deps = makeDeps({
     role: "owner",
-    requireApprovedPrice: async () => ({ quote: { totalUsd: 0.096144 }, approvedMaxUsd: 0.5 }),
+    requireApprovedPrice: async () => ({ quote: { totalUsd: 0.024036 }, approvedMaxUsd: 0.5 }),
     recordApproval: async () => "approval-id",
     createSnapshotTarget: async () => {
       targetCreateReached = true;
