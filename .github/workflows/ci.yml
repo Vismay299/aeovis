@@ -219,7 +219,16 @@ jobs:
           node scripts/qa/check-f20-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f12-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f11-browser.mjs http://127.0.0.1:3328
-          node scripts/qa/check-f27-browser.mjs http://127.0.0.1:3328
+          # F27's /onboarding picks the wizard on the server from FEATURE_ONBOARDING_WIZARD,
+          # while F04-B07 needs the flag off, so the wizard runs on its own server.
+          FEATURE_ONBOARDING_WIZARD=on node node_modules/next/dist/bin/next start -p 3329 > /tmp/perceev-next-f27.log 2>&1 &
+          f27_pid=$!
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3329/robots.txt > /dev/null; then break; fi
+            sleep 1
+          done
+          node scripts/qa/check-f27-browser.mjs http://127.0.0.1:3329
+          kill "$f27_pid"
           npm run qa:public-browser -- http://127.0.0.1:3328 test_reports/public-browser
 
       - name: retain browser acceptance evidence
