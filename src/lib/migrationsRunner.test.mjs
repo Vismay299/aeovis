@@ -414,6 +414,8 @@ const FULL_CATALOG = [
   "question_answer_links", "link_question_answers", "prune_question_answer_links",
   // F27 phase 1 migration 170 — user onboarding progress, dismissals, GSC return path.
   "user_onboarding", "workspace_setup_dismissals", "gsc_oauth_attempts.return_path",
+  // F16 phase 5 migration 115 — tracked backlink targets, daily summaries and retention.
+  "backlink_snapshot_targets", "backlink_snapshots", "prune_backlink_snapshots", "f16_snapshot_target_cap",
 ];
 
 function withRegister(dir) {

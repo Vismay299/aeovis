@@ -28,6 +28,8 @@ export {
   backlinksPageAction,
   backlinksExpandDomainAction,
 } from "./backlinks.ts";
+import { backlinksSnapshotsTrackAction } from "./backlinks.ts";
+export { backlinksSnapshotsTrackAction };
 import "./siteAudit.ts";
 import "./rankTracking.ts";
 import "./exploreRun.ts";

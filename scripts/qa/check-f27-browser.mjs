@@ -230,7 +230,8 @@ try {
       await normal.page.getByRole("button", { name: "Save and continue" }).click();
       const dialog = normal.page.getByRole("dialog");
       await dialog.getByRole("heading", { name: "Research your questions" }).waitFor();
-      assert.match(await dialog.innerText(), /Up to \$1\.23/);
+      // The quote loads after the dialog opens; wait for it instead of reading once.
+      await dialog.getByText(/Up to \$1\.23/).first().waitFor();
       await dialog.getByRole("button", { name: "Start research" }).click();
       await normal.page.getByRole("heading", { name: "Connect Google Search Console" }).waitFor();
       const researchWrite = normal.scenario.writes.find((write) => write.path === "/api/customer/questions/setup");

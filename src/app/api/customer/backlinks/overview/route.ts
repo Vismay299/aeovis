@@ -25,6 +25,12 @@ import {
   formatBacklinksResearchSummary,
 } from "../../../../../lib/backlinks/researchLog.ts";
 import { toResearchError } from "../../../../../lib/research/providerErrors.ts";
+import { keepAlive } from "../../../../../lib/keepAlive.js";
+import {
+  listSnapshotTargets,
+  recordLookupSnapshot,
+  type SnapshotTarget,
+} from "../../../../../lib/backlinks/snapshots.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -37,6 +43,8 @@ export type BacklinksOverviewRouteDeps = RequireWorkspaceDeps & {
   appendResearch?: typeof appendResearch;
   createBacklinksClient?: typeof createBacklinksClient;
   serviceDeps?: Partial<BacklinksServiceDeps>;
+  listSnapshotTargets?: typeof listSnapshotTargets;
+  recordLookupSnapshot?: typeof recordLookupSnapshot;
 };
 
 function json(data: unknown, status = 200): Response {
@@ -117,6 +125,16 @@ export async function POST(
     }
 
     const client = (deps?.createBacklinksClient ?? createBacklinksClient)();
+    const snapshotsEnabled = await checkFlag("backlink_snapshots", workspace.brandKey);
+    let trackedTarget: SnapshotTarget | null = null;
+    if (snapshotsEnabled && (target.scope === "domain" || target.scope === "subdomains")) {
+      try {
+        const rows = await (deps?.listSnapshotTargets ?? listSnapshotTargets)(workspace.admin, workspace.brandKey);
+        trackedTarget = rows.find((row: SnapshotTarget) => row.target === target.apiTarget && row.scope === target.scope) ?? null;
+      } catch {
+        // Optional snapshot storage must not make backlink research unavailable.
+      }
+    }
     const serviceDeps: BacklinksServiceDeps = {
       client,
       brandKey: workspace.brandKey,
@@ -124,6 +142,19 @@ export async function POST(
       maxUsd: body.maxUsd,
       cacheOnly: body.cacheOnly,
       ...deps?.serviceDeps,
+      onFetchedSummary: async (overview) => {
+        await deps?.serviceDeps?.onFetchedSummary?.(overview);
+        if (!snapshotsEnabled || !trackedTarget || (target.scope !== "domain" && target.scope !== "subdomains")) return;
+        await keepAlive(
+          () => (deps?.recordLookupSnapshot ?? recordLookupSnapshot)(workspace.admin, {
+            brandKey: workspace.brandKey,
+            target: target.apiTarget,
+            scope: target.scope as "domain" | "subdomains",
+            overview,
+          }),
+          { label: "backlink-lookup-snapshot" },
+        );
+      },
     };
 
     let result;
@@ -208,7 +239,9 @@ export async function POST(
       summary: result.overview.summary,
       trends: result.overview.trends,
       newLostTrends: result.overview.newLostTrends,
-      tracked: null,
+      tracked: trackedTarget
+        ? { interval: trackedTarget.schedule_interval, nextRunAt: trackedTarget.next_run_at }
+        : null,
       isOwnSite,
       isDeclaredCompetitor,
       cached: result.cached,

@@ -279,6 +279,10 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
     "/api/customer/backlinks/rows",
     "/api/customer/backlinks/top-pages",
     "/api/customer/backlinks/ahrefs-dr",
+    // F16 phase 5 — tracked-history routes are customer-authenticated.
+    "/api/customer/backlinks/snapshot-targets",
+    "/api/customer/backlinks/snapshot-targets/[targetId]",
+    "/api/customer/backlinks/snapshots",
     // F04 — the client-visible feature flags. Self-gated like every other
     // customer route: it answers only for a workspace the caller belongs to.
     "/api/customer/features",
