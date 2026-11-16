@@ -4,6 +4,7 @@ import { requireApprovedPrice } from "../../../../lib/pricing/pricedActions.ts";
 import "../../../../lib/pricing/actions/index.ts";
 import { startCustomerScan } from "../../../../lib/pricing/startCustomerScan.ts";
 import { scanRouteBody } from "../../../../lib/pricing/scanRoute.contract.ts";
+import { captureServerEvent } from "../../../../lib/telemetry/server.ts";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -92,7 +93,7 @@ export async function POST(request, _ctx, deps) {
       deps,
     );
 
-    return jsonOk(
+    const response = jsonOk(
       {
         job_id: result.jobId,
         brand: workspace.brand.display_name,
@@ -102,6 +103,20 @@ export async function POST(request, _ctx, deps) {
       },
       201,
     );
+
+    // F26 §6.2.7 `scan:started`: after the 201, never before it, and never able
+    // to change the response.
+    try {
+      void captureServerEvent({
+        name: "scan:started",
+        props: { approved_usd: result.approvedMaxUsd ?? null },
+        userId: workspace.user?.id ?? null,
+        brandKey: workspace.brandKey,
+      }).catch(() => {});
+    } catch {
+      // Telemetry never changes the response.
+    }
+    return response;
   } catch (err) {
     return toErrorResponse(err);
   }

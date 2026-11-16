@@ -9,6 +9,8 @@ import {
   researchQuestions,
   type PromptResearchDeps,
 } from "../../../../../lib/questions/promptResearch.ts";
+import { cached } from "../../../../../lib/cache/providerCache.ts";
+import { captureServerEvent } from "../../../../../lib/telemetry/server.ts";
 import "../../../../../lib/pricing/actions/index.ts";
 
 export const maxDuration = 120;
@@ -84,12 +86,41 @@ export async function POST(
     );
 
     const researchFn = deps?.researchQuestions ?? researchQuestions;
+    // F26 §6.2.7 `questions:researched { results, cached }`: the service does not
+    // return its cache outcome, so count the two `cached()` reads it makes and
+    // call the lookup cached only when both hit (no provider call happened).
+    const cacheReads = { calls: 0, hits: 0 };
+    const baseCached = deps?.cached ?? cached;
+    const countedCached = (async (
+      input: Parameters<typeof cached>[0],
+      fetcher: () => Promise<unknown>,
+      cacheDeps?: Parameters<typeof cached>[2],
+    ) => {
+      const outcome = await baseCached(input, fetcher, cacheDeps);
+      cacheReads.calls += 1;
+      if (outcome.hit) cacheReads.hits += 1;
+      return outcome;
+    }) as unknown as typeof cached;
     const result = await researchFn(
       ws.admin,
       ws,
       { ...body, maxUsd: approval.approvedMaxUsd },
-      deps,
+      { ...deps, cached: countedCached },
     );
+
+    try {
+      void captureServerEvent({
+        name: "questions:researched",
+        props: {
+          results: result.questions.length,
+          cached: cacheReads.calls > 0 && cacheReads.hits === cacheReads.calls,
+        },
+        userId: ws.user.id,
+        brandKey: ws.brandKey,
+      }).catch(() => {});
+    } catch {
+      // Telemetry never changes the response.
+    }
 
     return new Response(JSON.stringify(result), {
       status: 200,

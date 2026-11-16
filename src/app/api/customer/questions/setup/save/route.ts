@@ -3,6 +3,7 @@ import { toErrorResponse } from "../../../../../../lib/http/errors.ts";
 import { requireWorkspace, type Workspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
 import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
 import { aiQuestionFeatureGateError } from "../../../../../../lib/questions/questions.contract.ts";
+import { captureServerEvent } from "../../../../../../lib/telemetry/server.ts";
 import {
   saveSetupBodySchema,
   saveSetupReview,
@@ -66,6 +67,22 @@ export async function POST(
 
     const saveFn = deps?.saveSetupReview ?? saveSetupReview;
     const result = await saveFn(ws.admin, ws, body, deps);
+
+    try {
+      void captureServerEvent({
+        name: "questions:setup_saved",
+        props: {
+          questions: result.saved.questionsAdded,
+          competitors: result.saved.competitorsSaved,
+          // Only a panel that was actually approved; `approveError` means it was not.
+          approved: result.panel !== null,
+        },
+        userId: ws.user.id,
+        brandKey: ws.brandKey,
+      }).catch(() => {});
+    } catch {
+      // Telemetry never changes the response.
+    }
 
     return new Response(JSON.stringify(result), {
       status: 200,

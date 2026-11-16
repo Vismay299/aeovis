@@ -62,12 +62,14 @@ test("ai_visibility.schedules.tick handler processes due items via step.do", asy
       observedNextRunAt: "2026-10-20T03:30:00.000Z",
       interval: "weekly",
       approvedMaxUsd: 20,
+      userId: null,
     },
     {
       key: "due-skip.com",
       observedNextRunAt: "2026-10-20T03:30:00.000Z",
       interval: "weekly",
       approvedMaxUsd: 20,
+      userId: null,
     },
   ];
 

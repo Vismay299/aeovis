@@ -23,7 +23,9 @@ import {
   maybeImportBrandBrief,
 } from "../../../../lib/projectContext/service.ts";
 import type { ProjectContextDeps } from "../../../../lib/projectContext/service.ts";
+import { captureServerEvent } from "../../../../lib/telemetry/server.ts";
 import { updateProjectContextBody } from "../../../../shared/project-context.ts";
+import type { ProjectContextUpdate } from "../../../../shared/project-context.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +57,33 @@ function queryBrandKey(request: Request): string | undefined {
   const parsed = contextGetQuery.safeParse(raw);
   if (!parsed.success) throw new AppError(400, "invalid_request", "Check the query and try again.");
   return parsed.data.brand_key;
+}
+
+/**
+ * F26 §6.2.7 `project_context:updated`: the update kinds present in this batch,
+ * from the closed vocabulary only, deduplicated and capped at the registry's 20.
+ */
+const CONTEXT_UPDATE_KINDS = new Set([
+  "section",
+  "customSection",
+  "deleteCustomSection",
+  "addCompetitors",
+  "removeCompetitors",
+  "addKeyPages",
+  "removeKeyPages",
+  "removeResearchLog",
+  "appendResearchLog",
+]);
+
+function appliedKinds(updates: readonly ProjectContextUpdate[]): string[] {
+  const kinds: string[] = [];
+  for (const update of updates) {
+    for (const [kind, value] of Object.entries(update)) {
+      if (value === undefined || !CONTEXT_UPDATE_KINDS.has(kind) || kinds.includes(kind)) continue;
+      kinds.push(kind);
+    }
+  }
+  return kinds.slice(0, 20);
 }
 
 export async function GET(request: Request, _ctx?: unknown, deps?: ContextRouteDeps): Promise<Response> {
@@ -102,6 +131,16 @@ export async function PATCH(request: Request, _ctx?: unknown, deps?: ContextRout
       workspace.user.id,
       deps,
     );
+    try {
+      void captureServerEvent({
+        name: "project_context:updated",
+        props: { ops: parsed.data.updates.length, kinds: appliedKinds(parsed.data.updates) },
+        userId: workspace.user.id,
+        brandKey: workspace.brandKey,
+      }).catch(() => {});
+    } catch {
+      // Telemetry never changes the response.
+    }
     return json(context);
   } catch (err) {
     return toErrorResponse(err);

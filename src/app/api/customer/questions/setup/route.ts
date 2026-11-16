@@ -6,6 +6,7 @@ import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
 import { aiQuestionFeatureGateError } from "../../../../../lib/questions/questions.contract.ts";
 import { requireApprovedPrice, recordApproval } from "../../../../../lib/pricing/pricedActions.ts";
 import { enqueueJob } from "../../../../../lib/jobs/enqueue.ts";
+import { captureServerEvent } from "../../../../../lib/telemetry/server.ts";
 import {
   readQuestionSettings,
 } from "../../../../../lib/questions/workspaceQuestions.ts";
@@ -154,6 +155,17 @@ export async function POST(
       }
     });
     await saveJob(ws.admin, ws.brandKey, jobId, ws.user.id);
+
+    try {
+      void captureServerEvent({
+        name: "questions:setup_started",
+        props: {},
+        userId: ws.user.id,
+        brandKey: ws.brandKey,
+      }).catch(() => {});
+    } catch {
+      // Telemetry never changes the response.
+    }
 
     return new Response(
       JSON.stringify({

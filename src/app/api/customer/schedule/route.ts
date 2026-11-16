@@ -8,12 +8,14 @@ import { isFeatureEnabled, type FeatureFlagDeps } from "../../../../lib/features
 import {
   getCustomerSchedule,
   saveCustomerSchedule,
+  type CustomerScheduleView,
   type SaveCustomerScheduleDeps,
 } from "../../../../lib/schedules/customerSchedule.ts";
 import {
   getScheduleQuery,
   saveScheduleBody,
 } from "../../../../lib/schedules/schedule.contract.ts";
+import { captureServerEvent } from "../../../../lib/telemetry/server.ts";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -98,8 +100,45 @@ export async function PUT(request: Request, _ctx: unknown, deps?: ScheduleRouteD
       throw new AppError(404, "feature_unavailable", "This page is not available for your workspace yet.");
     }
 
+    // F26 §6.2.7 `schedule:changed` needs the previous interval, and the save
+    // returns only the new view. This read is best effort: it never fails or
+    // changes the save, and when it fails the event is `schedule:enabled`.
+    let previous: CustomerScheduleView | null = null;
+    if (body.enabled) {
+      try {
+        previous = await (deps?.getCustomerSchedule ?? getCustomerSchedule)(ws.admin, ws);
+      } catch {
+        previous = null;
+      }
+    }
+
     const saveFn = deps?.saveCustomerSchedule ?? saveCustomerSchedule;
     const result = await saveFn(ws.admin, ws, body, deps);
+
+    try {
+      const identity = { userId: ws.user.id, brandKey: ws.brandKey };
+      if (!body.enabled) {
+        void captureServerEvent({ name: "schedule:paused", props: {}, ...identity }).catch(() => {});
+      } else if (body.interval) {
+        const intervalChanged = Boolean(previous?.interval) && previous?.interval !== body.interval;
+        if (intervalChanged) {
+          void captureServerEvent({
+            name: "schedule:changed",
+            props: { interval: body.interval },
+            ...identity,
+          }).catch(() => {});
+        } else {
+          void captureServerEvent({
+            name: "schedule:enabled",
+            props: { interval: body.interval, approved_usd: result.approvedMaxUsd ?? body.maxUsd ?? 0 },
+            ...identity,
+          }).catch(() => {});
+        }
+      }
+    } catch {
+      // Telemetry never changes the response.
+    }
+
     return jsonOk(result);
   } catch (err) {
     return toErrorResponse(err);
