@@ -80,14 +80,14 @@ export default function PropertyPicker({ brandKey, attemptId, website, onConnect
         ? `Pick the property that matches ${website.replace(/^https?:\/\//, "").replace(/\/$/, "")}.`
         : "Pick the property this workspace should read."}
       footer={status === "ready" ? (
-        <div className="pv-gsc-footer">
+        <div className="flex flex-wrap items-center gap-2">
           <Button type="submit" form="pv-gsc-property-form" icon={Link2} loading={saving} disabled={!selected}>
             Connect selected property
           </Button>
           <Button variant="ghost" onClick={onCancel} disabled={saving}>Cancel</Button>
         </div>
       ) : status === "loading" ? null : (
-        <div className="pv-gsc-footer">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" onClick={onCancel}>Cancel</Button>
         </div>
       )}
@@ -108,21 +108,22 @@ export default function PropertyPicker({ brandKey, attemptId, website, onConnect
       ) : null}
 
       {status === "ready" ? (
-        <form id="pv-gsc-property-form" className="pv-gsc-radios" onSubmit={connectSelected}>
-          <fieldset className="pv-gsc-radios__set">
+        <form id="pv-gsc-property-form" onSubmit={connectSelected}>
+          <fieldset className="grid min-w-0 gap-2 border-0 p-0">
             <legend className="sr-only">Search Console properties</legend>
             {properties.map((property) => {
               const label = PERMISSION_LABELS[property.permissionLevel] || property.permissionLevel || "Access";
               return (
-                <label key={property.siteUrl} className={`pv-gsc-option${selected === property.siteUrl ? " is-selected" : ""}`}>
+                <label key={property.siteUrl} className={"flex items-center gap-3 rounded-lg border px-3.5 py-3 transition-colors " + (selected === property.siteUrl ? "border-primary/40 bg-primary/5" : "border-border bg-card hover:bg-muted/40")}>
                   <input
                     type="radio"
                     name="gsc-property"
+                    className="m-0 size-4 shrink-0 accent-primary"
                     value={property.siteUrl}
                     checked={selected === property.siteUrl}
                     onChange={() => setSelected(property.siteUrl)}
                   />
-                  <span className="pv-gsc-option__site">{property.siteUrl}</span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-foreground">{property.siteUrl}</span>
                   <Badge tone={property.permissionLevel === "siteOwner" ? "brand" : "neutral"}>{label}</Badge>
                 </label>
               );

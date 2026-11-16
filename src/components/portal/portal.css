@@ -78,7 +78,7 @@
 @keyframes pv-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .pv-app *, .pv-topbar::after, .pv-progress__fill, .pv-progress__fill::after, .pv-step__bar, .pv-step__icon::after {
+  .pv-topbar::after, .pv-progress__fill, .pv-progress__fill::after, .pv-step__bar, .pv-step__icon::after {
     animation-duration: 0s !important;
     animation-iteration-count: 1 !important;
     transition: none !important;

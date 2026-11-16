@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Info } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { consumeCustomerAuthFragment } from "@/lib/supabase/authLink";
 import AuthLayout from "@/components/portal/AuthLayout";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 export default function AcceptInvitePage() {
   const [password, setPassword] = useState("");
@@ -49,22 +52,20 @@ export default function AcceptInvitePage() {
       titleId="accept-title"
       subtitle="Choose a password to finish setting up your Perceev account."
     >
-      <form onSubmit={savePassword}>
-        <div className="pv-field">
-          <label className="pv-label" htmlFor="password">New password</label>
-          <input className="pv-input" id="password" type="password" minLength={8} autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} />
-          <span className="pv-hint">At least 8 characters.</span>
-        </div>
-        <button className="pv-btn pv-btn--primary pv-btn--block" type="submit" disabled={busy || !ready}>
-          {busy ? <span className="pv-spinner" aria-hidden="true" /> : null}
+      <form onSubmit={savePassword} className="space-y-4">
+        <Field>
+          <FieldLabel htmlFor="password">New password</FieldLabel>
+          <Input id="password" type="password" minLength={8} autoComplete="new-password" required value={password} onChange={(event) => setPassword(event.target.value)} className="border-foreground/20 bg-card text-base md:text-base" />
+          <span className="text-xs text-muted-foreground">At least 8 characters.</span>
+        </Field>
+        <Button className="w-full font-semibold" type="submit" pending={busy} disabled={busy || !ready}>
           {busy ? "Saving…" : "Set password"}
-        </button>
+        </Button>
       </form>
       {message ? (
-        <div className="pv-banner pv-banner--info" role="status">
-          <Info aria-hidden="true" />
-          <div className="pv-banner__body">{message}</div>
-        </div>
+        <Alert variant="info" role="status">
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
       ) : null}
     </AuthLayout>
   );

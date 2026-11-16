@@ -7,7 +7,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Eye, MousePointerClick, Percent, Hash, Search } from "lucide-react";
-import { Banner, Card, EmptyState, SkeletonRows, Stat } from "../ui";
+import { Banner, EmptyState, SkeletonRows, Stat } from "../ui";
+import {
+  Table,
+  TableBody,
+  TableCard,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const WINDOW_DAYS = 28;
 const ROW_LIMIT = 1000;
@@ -74,59 +83,61 @@ export default function PerformanceCard({ brandKey, syncKey, redirectToLogin }) 
   const position = totals && typeof totals.avg_position === "number" ? totals.avg_position.toFixed(1) : null;
 
   return (
-    <Card
-      title="Search performance"
-      description={`Last ${state.body?.days || WINDOW_DAYS} days of query data for this property.`}
-      flush
-      footer={hasData && totals?.note ? <p className="pv-hint pv-gsc-note">{totals.note}</p> : null}
-    >
+    <TableCard>
+      <div className="border-b border-border px-4 py-3">
+        <h2 className="text-base font-semibold">Search performance</h2>
+        <p className="text-sm text-muted-foreground">{`Last ${state.body?.days || WINDOW_DAYS} days of query data for this property.`}</p>
+      </div>
       {state.loading && !state.body ? (
-        <div className="pv-gsc-perf__pad"><SkeletonRows rows={4} /></div>
+        <div className="p-4"><SkeletonRows rows={4} /></div>
       ) : state.error ? (
-        <div className="pv-gsc-perf__pad"><Banner tone="error">{state.error}</Banner></div>
+        <div className="p-4"><Banner tone="error">{state.error}</Banner></div>
       ) : !hasData ? (
-        <EmptyState icon={Search} title="No search data yet">
-          Data arrives after the first daily sync.
-        </EmptyState>
+        <div className="p-4">
+          <EmptyState icon={Search} title="No search data yet">
+            Data arrives after the first daily sync.
+          </EmptyState>
+        </div>
       ) : (
         <>
-          <div className="pv-grid pv-grid--4 pv-gsc-perf__stats">
+          <div className="grid grid-cols-2 gap-3 p-4 lg:grid-cols-4">
             <Stat label="Clicks" icon={MousePointerClick} value={clicks} />
             <Stat label="Impressions" icon={Eye} value={impressions} />
             <Stat label="CTR" icon={Percent} value={ctr} suffix={ctr === null ? undefined : "%"} />
             <Stat label="Avg. position" icon={Hash} value={position} />
           </div>
-          <div className="pv-gsc-perf__table">
-            <h3 className="pv-gsc-perf__heading">Top queries</h3>
+          <div className="border-t border-border">
+            <h3 className="px-4 pt-4 pb-1 text-xs font-medium text-muted-foreground">Top queries</h3>
             {queries.length ? (
-              <div className="pv-table-wrap">
-                <table className="pv-table">
-                  <thead>
-                    <tr>
-                      <th scope="col">Query</th>
-                      <th scope="col" className="pv-num">Clicks</th>
-                      <th scope="col" className="pv-num">Impressions</th>
-                      <th scope="col" className="pv-num">CTR</th>
-                      <th scope="col" className="pv-num">Position</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {queries.map((item) => (
-                      <tr key={item.query || "(anonymized)"}>
-                        <td>{item.query || <span className="pv-muted">Anonymized queries</span>}</td>
-                        <td className="pv-num">{countFormat.format(item.clicks)}</td>
-                        <td className="pv-num">{countFormat.format(item.impressions)}</td>
-                        <td className="pv-num">{item.ctr === null ? "—" : `${(item.ctr * 100).toFixed(1)}%`}</td>
-                        <td className="pv-num">{item.position === null ? "—" : item.position.toFixed(1)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead scope="col">Query</TableHead>
+                    <TableHead scope="col" className="text-right">Clicks</TableHead>
+                    <TableHead scope="col" className="text-right">Impressions</TableHead>
+                    <TableHead scope="col" className="text-right">CTR</TableHead>
+                    <TableHead scope="col" className="text-right">Position</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {queries.map((item) => (
+                    <TableRow key={item.query || "(anonymized)"}>
+                      <TableCell>{item.query || <span className="text-muted-foreground">Anonymized queries</span>}</TableCell>
+                      <TableCell className="text-right tabular-nums">{countFormat.format(item.clicks)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{countFormat.format(item.impressions)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{item.ctr === null ? "—" : `${(item.ctr * 100).toFixed(1)}%`}</TableCell>
+                      <TableCell className="text-right tabular-nums">{item.position === null ? "—" : item.position.toFixed(1)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             ) : null}
           </div>
         </>
       )}
-    </Card>
+      {hasData && totals?.note ? (
+        <p className="border-t border-border px-4 py-3 text-xs text-muted-foreground">{totals.note}</p>
+      ) : null}
+    </TableCard>
   );
 }

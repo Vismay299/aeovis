@@ -573,22 +573,58 @@ Branch names `feat/f04-design-system-p<N>`. Every phase ends with the full suite
 
 **Goal:** every remaining surface is migrated; legacy layout CSS is gone.
 
-- [ ] **P6.T1 Content Studio** — *Files:* `src/app/portal/content/page.jsx`, `src/components/portal/content/{ContentStudio,ComposerCard,GenerationQueue,DraftsLibrary,DraftEditor,ReviewFindings}.jsx`, `content/content.css`.
-  - [ ] **P6.T1.S1** *Do:* rule 5; `ComposerCard` native `<select>`/`<textarea>` keep their elements (test asserts `<option>`) with Input classes; Studio canvas components under `src/components/studio/` are not edited (dark mode reaches them through the legacy bridge). *Verify:* `node --test src/components/portal/tenantWorkspace.test.mjs src/components/portal/portalRegressions.test.mjs` → pass.
-- [ ] **P6.T2 Search Console** — *Files:* `src/components/portal/gsc/{GscPage,PerformanceCard,PropertyPicker}.jsx`, `gsc/gsc.css`.
-  - [ ] **P6.T2.S1** *Do:* restyle only (Mixed row): facade components and rule 5; the query table uses `src/components/ui/table.tsx` primitives (`TableCard`, `Table`, `TableHeader`, `TableRow`, `TableHead`, `TableCell`) with the same columns and numbers. *Verify:* build → exit 0; browser `F04-B07` on `/portal/search-console`.
-- [ ] **P6.T3 Team** — *Files:* `src/components/portal/team/TeamPage.jsx`, `team/team.css` (deleted).
-  - [ ] **P6.T3.S1** *Do:* restyle only (Mixed row); member and invite lists as `Table` primitives; remove action uses `InlineConfirm` with `label="Remove {email}"` and the same API call. *Verify:* browser `F04-B07` on `/portal/team`.
-- [ ] **P6.T4 Auth** — *Files:* `src/components/portal/AuthLayout.jsx`, `auth.css` (deleted), `src/app/login/page.jsx`, `src/app/signup/page.jsx`, `src/app/onboarding/page.jsx`, `src/app/auth/accept/page.jsx`, `src/app/auth/reset/page.jsx`, new `src/app/{login,signup,onboarding}/layout.jsx`, `src/app/auth/layout.jsx`.
-  - [ ] **P6.T4.S1** *Do:* §6.6.7; copy and handlers unchanged. *Verify:* `check-f04-browser.mjs` sign-in still reaches `/portal`; `F04-B07` on `/login`, `/signup`, `/onboarding` (fixture `GET /api/customer/onboard` → `{ has_workspace: false }`).
-- [ ] **P6.T5 Ops providers**
-  - [ ] **P6.T5.S1** *Files:* `src/app/ops/layout.jsx` (new). *Do:* `AppProviders` wrapper only (no shell, no metadata change). *Verify:* build → exit 0; `/ops/measurement` renders light with `data-surface="app"`.
-- [ ] **P6.T6 Cleanup and guards**
-  - [ ] **P6.T6.S1** *Files:* `src/components/portal/legacyMarkupGuard.test.mjs` (new). *Do:* `git grep` over `src/app/portal`, `src/components/portal`, `src/app/{login,signup,onboarding,auth}` (excluding tests and `ui.jsx`) fails on `pv-app`, `pv-sidebar`, `pv-page-header`, `pv-auth`, `pv-stack`, `pv-grid`, `pv-center`. *Verify:* `node --test src/components/portal/legacyMarkupGuard.test.mjs` → pass (F04-AC-11 unit half).
-  - [ ] **P6.T6.S2** *Files:* `DESIGN.md`. *Do:* add an "Implementation" list of the final file paths. *Verify:* `node --test src/lib/docStatus.test.mjs` → pass.
-  - [ ] **P6.T6.S3** *Files:* `features/README.md`. *Do:* F04 status → Merged. *Verify:* `git grep -n "F04-design" -- features/README.md` shows "Merged".
+- [x] **P6.T1 Content Studio** — *Files:* `src/app/portal/content/page.jsx`, `src/components/portal/content/{ContentStudio,ComposerCard,GenerationQueue,DraftsLibrary,DraftEditor,ReviewFindings}.jsx`, `content/content.css`.
+  - [x] **P6.T1.S1** *Do:* rule 5; `ComposerCard` native `<select>`/`<textarea>` keep their elements (test asserts `<option>`) with Input classes; Studio canvas components under `src/components/studio/` are not edited (dark mode reaches them through the legacy bridge). *Verify:* `node --test src/components/portal/tenantWorkspace.test.mjs src/components/portal/portalRegressions.test.mjs` → pass.
+- [x] **P6.T2 Search Console** — *Files:* `src/components/portal/gsc/{GscPage,PerformanceCard,PropertyPicker}.jsx`, `gsc/gsc.css`.
+  - [x] **P6.T2.S1** *Do:* restyle only (Mixed row): facade components and rule 5; the query table uses `src/components/ui/table.tsx` primitives (`TableCard`, `Table`, `TableHeader`, `TableRow`, `TableHead`, `TableCell`) with the same columns and numbers. *Verify:* build → exit 0; browser `F04-B07` on `/portal/search-console`.
+- [x] **P6.T3 Team** — *Files:* `src/components/portal/team/TeamPage.jsx`, `team/team.css` (deleted).
+  - [x] **P6.T3.S1** *Do:* restyle only (Mixed row); member and invite lists as `Table` primitives; remove action uses `InlineConfirm` with `label="Remove {email}"` and the same API call. *Verify:* browser `F04-B07` on `/portal/team`.
+- [x] **P6.T4 Auth** — *Files:* `src/components/portal/AuthLayout.jsx`, `auth.css` (deleted), `src/app/login/page.jsx`, `src/app/signup/page.jsx`, `src/app/onboarding/page.jsx`, `src/app/auth/accept/page.jsx`, `src/app/auth/reset/page.jsx`, new `src/app/{login,signup,onboarding}/layout.jsx`, `src/app/auth/layout.jsx`.
+  - [x] **P6.T4.S1** *Do:* §6.6.7; copy and handlers unchanged. *Verify:* `check-f04-browser.mjs` sign-in still reaches `/portal`; `F04-B07` on `/login`, `/signup`, `/onboarding` (fixture `GET /api/customer/onboard` → `{ has_workspace: false }`).
+- [x] **P6.T5 Ops providers**
+  - [x] **P6.T5.S1** *Files:* `src/app/ops/layout.jsx` (new). *Do:* `AppProviders` wrapper only (no shell, no metadata change). *Verify:* build → exit 0; `/ops/measurement` renders light with `data-surface="app"`.
+- [x] **P6.T6 Cleanup and guards**
+  - [x] **P6.T6.S1** *Files:* `src/components/portal/legacyMarkupGuard.test.mjs` (new). *Do:* `git grep` over `src/app/portal`, `src/components/portal`, `src/app/{login,signup,onboarding,auth}` (excluding tests and `ui.jsx`) fails on `pv-app`, `pv-sidebar`, `pv-page-header`, `pv-auth`, `pv-stack`, `pv-grid`, `pv-center`. *Verify:* `node --test src/components/portal/legacyMarkupGuard.test.mjs` → pass (F04-AC-11 unit half).
+  - [x] **P6.T6.S2** *Files:* `DESIGN.md`. *Do:* add an "Implementation" list of the final file paths. *Verify:* `node --test src/lib/docStatus.test.mjs` → pass.
+  - [x] **P6.T6.S3** *Files:* `features/README.md`. *Do:* F04 status → Merged. *Verify:* `git grep -n "F04-design" -- features/README.md` shows "Merged".
 
 **Checkpoint:** suite, typecheck, build, `check-f04-browser.mjs` all cases (F04-B07 on every portal and auth page), `check-public-browser.mjs`, public layout diff with the P5 allowlist only. Completes F04-AC-11 and F04-AC-14 (browser `F04-B09`: an input on `/login` computes `font-size: 16px` at 390; a `reveal-on-hover` button on `/portal/scans` has opacity 0 until its row is hovered and 1 after; `getComputedStyle(document.body).fontFamily` on `/portal` starts with `ui-sans-serif`, and on `/` starts with `Archivo`).
+
+**Phase 6 notes (deviations and gaps):**
+
+- Accepted PM-brief gaps 1–6 as written: the legacy onboarding form is restyled at
+  `src/components/portal/onboarding/LegacyOnboardingForm.jsx` (the F27 page and wizard are untouched); the
+  login layout is extended in place and signup/onboarding/auth layouts are new; ComposerCard keeps its native
+  `<select>`/`<textarea>` with the `Input` class list; Search Console imports `TableBody`; the portal harness
+  answers `/api/customer/onboard` explicitly; B07 covers the pages F04 migrates (8 workspace routes including
+  `/portal/settings`, `/onboarding` and the 7 signed-out auth routes).
+- New gap (reveal-on-hover): `src/app/portal/scans/page.jsx` placed `reveal-on-hover` on the row action, but the
+  F06 `DataTable` row carries no `.group`, so the utility could never reach opacity 1. Fixed in F04's own
+  primitive by adding `group` to `TableRow` in `src/components/ui/table.tsx` (one token, no visual change);
+  `F04-B09` now proves the 0 → 1 transition against the real page.
+- New gap (guard residue): `src/components/portal/portal.css` still named `.pv-app *` in its reduced-motion
+  selector, which the P6.T6.S1 source guard reads. Dropped that selector arm; the remaining motion rules are
+  unchanged.
+- `content.css` was empty once the rule-5 helpers became utilities, so it is deleted with `gsc.css`, `team.css`
+  and `auth.css` (rule 6). The queue's visually-hidden step labels are expressed with a Tailwind child variant
+  instead of the old CSS rule.
+- The PM verify line `node --test src/components/portal/` does not resolve a directory under Node 26.3 on
+  Windows; the same suite runs as `node --test "src/components/portal/*.test.mjs"`.
+- `ContentStudio`'s drafts panel keeps the `hidden` attribute and adds an inline `display:none` when another
+  tab is active, because the Tailwind `grid` display utility overrides the `[hidden]` UA rule; visibility
+  behaviour is unchanged.
+- `F04-B07` covers 8 workspace routes (`/portal/settings` included), `/onboarding` and the 7 signed-out auth
+  routes at 1440 and 390. `F04-B09` adds the 16 px login input, the `reveal-on-hover` 0 → 1 transition on
+  `/portal/scans` and the app/public font-stack assertions.
+- The four page files named in P6.T4 (`src/app/{login,signup,onboarding}/page.jsx`, `src/app/auth/reset/page.jsx`)
+  are unchanged: they already render `AuthLayout`, and the subtask requires their copy and handlers to stay
+  unchanged. The auth-shell changes live in `AuthLayout.jsx` and the four layout files.
+
+**Phase 6 review outcome (CTO):** APPROVE after two corrections. `F04-B07` now renders `/portal/settings`
+(8 workspace routes), and the three inputs migrated in `src/app/auth/accept/page.jsx` and
+`LegacyOnboardingForm.jsx` carry §6.6.7's `authInputClassName`. QA re-ran the full suite on the corrected
+tree: 6152 tests, 6077 pass, 0 fail, 75 skipped; F04-B01–B10 and the public browser cases pass. No migrations,
+flags, spend, telemetry or production-control changes.
 
 ## 9. Test plan
 
