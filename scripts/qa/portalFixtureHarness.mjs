@@ -307,7 +307,17 @@ export async function openPortal(browser, origin, options = {}) {
   /** The brand_key of every feature-flags read. */
   const featureRequests = [];
 
-  await context.route("**/*", async (route) => {
+  await context.route("**/*", (route) =>
+    answer(route).catch((error) => {
+      // A handler that awaited (a fixture read, a membership delay) can find the
+      // request already settled: the page navigated or a scenario re-routed it
+      // meanwhile. That request has no reader left, so it is not a failure.
+      if (/Route is already handled|Target .*closed/.test(String(error?.message))) return;
+      throw error;
+    }),
+  );
+
+  async function answer(route) {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
@@ -374,7 +384,7 @@ export async function openPortal(browser, origin, options = {}) {
     }
 
     return route.continue();
-  });
+  }
 
   const page = await context.newPage();
 
