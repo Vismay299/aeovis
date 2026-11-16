@@ -196,6 +196,10 @@ async function customerApiFixture(url) {
   if (pathname === "/api/customer/team") {
     return brandFixture("team", brand, { members: [], invites: [] });
   }
+  if (pathname === "/api/customer/onboard") {
+    // The legacy onboarding form renders when the account has no workspace.
+    return (await readFixture("onboard.json")) ?? { has_workspace: false };
+  }
   if (pathname === "/api/customer/content") {
     return brandFixture("content", brand, { items: [], jobs: [] });
   }
@@ -209,6 +213,67 @@ async function customerApiFixture(url) {
     return { observations: [], windows: [] };
   }
   return {};
+}
+
+/**
+ * A signed-out context for the auth routes: the session read answers 401, so
+ * the sign-in, sign-up, forgot, reset, verify, error and accept pages render in
+ * their signed-out state. Customer APIs still come from the fixture files, and
+ * a non-GET is aborted and counted exactly as in `openPortal`.
+ *
+ * @param {import("playwright").Browser} browser
+ * @param {string|URL} origin the local app
+ * @param {{ viewport?: { width: number, height: number } }} [options]
+ * @returns {Promise<{ context: import("playwright").BrowserContext, page: import("playwright").Page, blockedWrites: string[] }>}
+ */
+export async function openAuth(browser, origin, options = {}) {
+  const { viewport = { width: 1440, height: 1000 } } = options;
+
+  const base = typeof origin === "string" ? origin : origin.href;
+  const appOrigin = new URL(base).origin;
+
+  const context = await browser.newContext({ viewport, reducedMotion: "reduce" });
+  const blockedWrites = [];
+
+  await context.route("**/*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const method = request.method();
+
+    if (url.origin === SUPABASE_URL || url.hostname.endsWith(".supabase.co")) {
+      if (url.pathname.startsWith("/auth/v1/")) {
+        return route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ message: "Not signed in", code: 401 }),
+        });
+      }
+      return route.fulfill({ status: 200, contentType: "application/json", body: "null" });
+    }
+
+    if (url.pathname.startsWith("/api/customer/")) {
+      if (method !== "GET" && method !== "HEAD") {
+        blockedWrites.push(`${method} ${url.pathname}`);
+        return route.abort("blockedbyclient");
+      }
+      const body = await customerApiFixture(url);
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(body),
+      });
+    }
+
+    if (url.origin !== appOrigin) {
+      // No third party is reached from the auth pages.
+      return route.abort("blockedbyclient");
+    }
+
+    return route.continue();
+  });
+
+  const page = await context.newPage();
+  return { context, page, blockedWrites };
 }
 
 /**
