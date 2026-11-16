@@ -650,6 +650,65 @@ test("saveCrawlerCredential returns a signature problem without storing anything
   assert.equal(admin.calls.upserts.length, 0);
 });
 
+test("saveCrawlerCredential trims pasted whitespace and refuses non-header-safe values", async () => {
+  const env = testEnv();
+  const admin = memoryCredentialsAdmin([]);
+  const checked: string[] = [];
+  const saved = await saveCrawlerCredential(
+    admin,
+    {
+      brandKey: "brand-a",
+      userId: "user-a",
+      host: "shop.example.com",
+      signatureInput: `  ${SIGNATURE_INPUT_SECRET}\n`,
+      signature: `${SIGNATURE_SECRET}\r\n`,
+      workspaceHost: "example.com",
+    },
+    {
+      env,
+      checkShopifySignature: async (input) => {
+        checked.push(input.signatureInput, input.signature);
+        return null;
+      },
+    },
+  );
+  assert.ok("credential" in saved);
+  assert.deepEqual(checked, [SIGNATURE_INPUT_SECRET, SIGNATURE_SECRET]);
+  const row = [...admin.rows.values()][0];
+  assert.equal(
+    decryptCrawlerField(
+      row.encrypted_signature,
+      crawlerAccessAad("brand-a", "shop.example.com", "signature"),
+      env,
+    ),
+    SIGNATURE_SECRET,
+  );
+
+  for (const [signatureInput, signature] of [
+    [`${SIGNATURE_INPUT_SECRET}\u0000x`, SIGNATURE_SECRET],
+    [SIGNATURE_INPUT_SECRET, `sig1=:\nEXAMPLE:`],
+    [SIGNATURE_INPUT_SECRET, "sig1=:EXAMPLE\u00e9:"],
+  ]) {
+    const empty = memoryCredentialsAdmin([]);
+    let checks = 0;
+    const result = await saveCrawlerCredential(
+      empty,
+      {
+        brandKey: "brand-a",
+        userId: "user-a",
+        host: "shop.example.com",
+        signatureInput,
+        signature,
+        workspaceHost: "example.com",
+      },
+      { env, checkShopifySignature: async () => { checks += 1; return null; } },
+    );
+    assert.deepEqual(result, { problem: { reason: "invalid", host: "shop.example.com" } });
+    assert.equal(checks, 0);
+    assert.equal(empty.calls.upserts.length, 0);
+  }
+});
+
 test("saveCrawlerCredential fails closed with 503 before any DB read when the key is missing", async () => {
   const admin = memoryCredentialsAdmin([]);
   let checks = 0;
@@ -709,6 +768,55 @@ test("resolveCrawlerAccess returns an unexpired row and skips an expired one", a
     credentialRow({ expires_at: "2020-01-01T00:00:00.000Z" }),
   ]);
   assert.equal(await resolveCrawlerAccess(expired, "brand-a", "shop.example.com"), null);
+});
+
+test("resolveCrawlerAccess treats a table missing before migration 128 as no credential", async () => {
+  for (const code of ["PGRST205", "42P01"]) {
+    const admin = {
+      from() {
+        const chain: any = {
+          select: () => chain,
+          eq: () => chain,
+          maybeSingle: async () => ({ data: null, error: { code, message: "relation missing" } }),
+        };
+        return chain;
+      },
+    };
+    assert.equal(await resolveCrawlerAccess(admin, "brand-a", "shop.example.com"), null, code);
+  }
+  const broken = {
+    from() {
+      const chain: any = {
+        select: () => chain,
+        eq: () => chain,
+        maybeSingle: async () => ({ data: null, error: { code: "57014", message: "timeout" } }),
+      };
+      return chain;
+    },
+  };
+  await assert.rejects(() => resolveCrawlerAccess(broken, "brand-a", "shop.example.com"));
+});
+
+test("openCrawlerAccess refuses a decrypted value that is not header-safe", async () => {
+  const env = testEnv();
+  const warnings: string[] = [];
+  const sealed: SealedCrawlerAccess = {
+    brandKey: "brand-a",
+    host: "shop.example.com",
+    signatureInput: encryptCrawlerField(
+      `${SIGNATURE_INPUT_SECRET}\u0000`,
+      crawlerAccessAad("brand-a", "shop.example.com", "signature_input"),
+      env,
+    ),
+    signature: encryptCrawlerField(
+      SIGNATURE_SECRET,
+      crawlerAccessAad("brand-a", "shop.example.com", "signature"),
+      env,
+    ),
+    expiresAt: null,
+  };
+  assert.equal(await openCrawlerAccess(sealed, { env, warn: (m) => warnings.push(m) }), null);
+  assert.deepEqual(warnings, ["[audit] crawler access unreadable host=shop.example.com"]);
 });
 
 test("openCrawlerAccess decrypts the replay headers in memory only", async () => {

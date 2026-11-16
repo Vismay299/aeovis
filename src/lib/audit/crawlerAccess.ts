@@ -37,6 +37,23 @@ export const MAX_SIGNATURE_VALUE_LENGTH = 4096;
 export const CRAWLER_CREDENTIALS_TABLE = "site_audit_crawler_credentials";
 
 /**
+ * RFC 9421 signature fields are visible ASCII. Anything else (a control byte,
+ * a pasted newline in the middle) would make the HTTP client reject the header,
+ * and undici's error text quotes the rejected value, so it is refused at save.
+ */
+const HEADER_SAFE_VALUE = /^[\x20-\x7E]+$/;
+
+export function isHeaderSafeValue(value: string): boolean {
+  return HEADER_SAFE_VALUE.test(value);
+}
+
+/**
+ * Before migration 128 is applied the table does not exist: Postgres reports
+ * 42P01 and PostgREST PGRST205. Audits must keep starting unsigned then.
+ */
+const MISSING_TABLE_CODES = new Set(["42P01", "PGRST205"]);
+
+/**
  * Credential headers bound to the host they were issued for. The binding is the
  * security boundary: these values are bot-protection credentials and must never
  * be sent to another site, including across a redirect hop.
@@ -266,21 +283,28 @@ export async function saveCrawlerCredential(
     };
   }
 
+  // Copy-paste from Shopify admin often carries surrounding whitespace.
+  const signatureInput = input.signatureInput.trim();
+  const signature = input.signature.trim();
+  if (!isHeaderSafeValue(signatureInput) || !isHeaderSafeValue(signature)) {
+    return { problem: { reason: "invalid", host } };
+  }
+
   const check = deps?.checkShopifySignature ?? checkShopifySignature;
   const problem = await check(
-    { host, signatureInput: input.signatureInput, signature: input.signature },
+    { host, signatureInput, signature },
     { safeFetch: deps?.safeFetch as any },
   );
   if (problem) return { problem };
 
   const encrypt = deps?.encryptCrawlerField ?? encryptCrawlerField;
   const encryptedSignatureInput = encrypt(
-    input.signatureInput,
+    signatureInput,
     crawlerAccessAad(input.brandKey, host, CRAWLER_ACCESS_FIELDS[0]),
     deps?.env,
   );
   const encryptedSignature = encrypt(
-    input.signature,
+    signature,
     crawlerAccessAad(input.brandKey, host, CRAWLER_ACCESS_FIELDS[1]),
     deps?.env,
   );
@@ -296,7 +320,7 @@ export async function saveCrawlerCredential(
       encrypted_signature_input: encryptedSignatureInput,
       encrypted_signature: encryptedSignature,
       key_version: 1,
-      expires_at: parseSignatureExpiry(input.signatureInput),
+      expires_at: parseSignatureExpiry(signatureInput),
       created_by: input.userId,
     },
     { onConflict: "brand_key,host" },
@@ -347,7 +371,10 @@ export async function resolveCrawlerAccess(
     .eq("brand_key", brandKey)
     .eq("host", host)
     .maybeSingle();
-  if (error) throw error;
+  if (error) {
+    if (MISSING_TABLE_CODES.has(String(error.code ?? ""))) return null;
+    throw error;
+  }
   if (!data) return null;
   const row = data as CredentialRow;
   if (isCrawlerAccessExpired(row.expires_at, deps?.now?.() ?? Date.now())) return null;
@@ -388,6 +415,9 @@ export async function openCrawlerAccess(
       crawlerAccessAad(sealed.brandKey, sealed.host, CRAWLER_ACCESS_FIELDS[1]),
       deps?.env,
     );
+    if (!isHeaderSafeValue(signatureInput) || !isHeaderSafeValue(signature)) {
+      throw new Error("Crawler access value is not header-safe.");
+    }
     return {
       host: sealed.host,
       expiresAt: sealed.expiresAt,
