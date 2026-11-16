@@ -33,3 +33,13 @@ keep the page itself within the viewport. Respect reduced motion.
 ## Retired
 
 Do not restore the split-screen auth showcase, the native workspace `<select>`, the `pv-*` layout classes, OS-driven dark mode on the public website, or a theme switch on public pages.
+
+## Implementation
+
+- Tokens, theme and utilities: `src/styles/app-theme.css`, `src/lib/theme/theme.ts`, `src/components/app/theme/SurfaceSync.tsx`, `src/components/app/theme/useThemePreference.ts`, `src/components/app/theme/ThemePreferenceRadio.tsx`.
+- Primitives: `src/components/ui/*.tsx` (the 31 base-nova primitives), `src/lib/utils.ts`, `components.json`.
+- Shared app components: `src/components/app/` — `PageHeader`, `PageFrame`, `EmptyState`, `ErrorState`, `QueryState`, `SkeletonPresets`, `CardShell`, `InlineConfirm`, `NavTabs`, `Markdown`, `StatusScreen`, `PermissionHint`, `AppBanner`, `NotFound`, `ErrorBoundaryCard`, `brand/PerceevLogo`, `shell/*`, `navigation/*`, `providers/AppProviders.tsx`, `hooks/use-mobile.ts`.
+- Shell and workspace routes: `src/app/portal/layout.jsx`, `src/components/portal/PortalShell.jsx`, `src/app/portal/not-found.tsx`, `src/app/portal/error.tsx`, `src/app/portal/settings/layout.tsx`, `src/app/api/customer/features/route.ts`.
+- Migrated workspace pages: `src/app/portal/page.jsx`, `src/app/portal/scans/page.jsx`, `src/app/portal/scans/[scanId]/page.jsx`, `src/app/portal/measurement/page.jsx`, `src/app/portal/content/page.jsx` with `src/components/portal/content/*`, `src/components/portal/gsc/*`, `src/components/portal/team/TeamPage.jsx`.
+- Auth shell and routes: `src/components/portal/AuthLayout.jsx`, `src/app/login/layout.jsx`, `src/app/signup/layout.jsx`, `src/app/onboarding/layout.jsx`, `src/app/auth/layout.jsx`, `src/components/portal/onboarding/LegacyOnboardingForm.jsx`.
+- Operator surfaces: `src/app/ops/layout.jsx`.
