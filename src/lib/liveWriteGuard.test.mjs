@@ -295,8 +295,8 @@ test("CUSTOMER TABLES CANNOT BE OPTED INTO — the allow list refuses them at in
 test("EVERY NEVER_WRITABLE TABLE IS REFUSED — at install and at both transports, not just the four in the case above", async () => {
   // R6.5.7. The case above names four tables; this loop exercises the complete
   // data roster, including the customer identity and tenant-isolation tables.
-  assert.equal(NEVER_WRITABLE.length, 99, "the roster changed size - see the classification walk below");
-  assert.equal(new Set(NEVER_WRITABLE).size, 99, "a duplicated entry hides a missing one");
+  assert.equal(NEVER_WRITABLE.length, 104, "the roster changed size - see the classification walk below");
+  assert.equal(new Set(NEVER_WRITABLE).size, 104, "a duplicated entry hides a missing one");
   assert.ok(Object.isFrozen(NEVER_WRITABLE), "the roster must not be mutable at runtime");
   for (const t of WRITABLE_BY_OPT_IN) {
     assert.ok(!NEVER_WRITABLE.includes(t), `${t} cannot be both writable by opt-in and never writable`);

@@ -50,6 +50,11 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 -- Migration 127 is numbered below 170; re-apply it after 170 to verify late application is safe.
 RESET ROLE;
 \ir ../supabase/migrations/127_f18_site_audit_compare.sql
+\ir ../supabase/migrations/145_f22_assistant_sessions.sql
+\ir ../supabase/migrations/146_f22_assistant_stream_chunks.sql
+\ir ../supabase/migrations/147_f22_assistant_approvals.sql
+\ir ../supabase/migrations/148_f22_gsc_query_summary.sql
+\ir ../supabase/migrations/149_f22_assistant_milestone_fix.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -873,5 +878,122 @@ INSERT INTO public.backlink_snapshot_targets
   (brand_key,target,scope,schedule_interval,next_run_at,approved_max_usd)
 VALUES ('10000000-0000-0000-0000-000000000001','twenty-first.example','domain','weekly',now(),0.5);
 -- End F16 tenant/cap check.
+-- F22: assistant sessions, messages, turns and approvals are private to the user
+-- who created them. Workspace A has two members (users 1 and 3); workspace B has
+-- one (user 2). Each sees exactly their own rows and nobody else's.
+RESET ROLE;
+INSERT INTO public.assistant_sessions(id, brand_key, user_id) VALUES
+ ('23000000-0000-4000-8000-000000000001', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001'),
+ ('23000000-0000-4000-8000-000000000002', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003'),
+ ('23000000-0000-4000-8000-000000000003', '10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002');
+
+INSERT INTO public.assistant_turns(id, session_id, brand_key, user_id, status, stop_reason, finished_at) VALUES
+ ('24000000-0000-4000-8000-000000000001', '23000000-0000-4000-8000-000000000001', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'completed', 'finished', now()),
+ ('24000000-0000-4000-8000-000000000002', '23000000-0000-4000-8000-000000000002', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003', 'completed', 'finished', now()),
+ ('24000000-0000-4000-8000-000000000003', '23000000-0000-4000-8000-000000000003', '10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', 'completed', 'finished', now());
+
+INSERT INTO public.assistant_messages(session_id, id, brand_key, role, parts, metadata, turn_id) VALUES
+ ('23000000-0000-4000-8000-000000000001', 'uat-a1-message', '10000000-0000-0000-0000-000000000001', 'user',
+  '[{"type":"text","text":"Synthetic question for workspace A member 1"}]'::jsonb, '{"kind":"chat"}'::jsonb, '24000000-0000-4000-8000-000000000001'),
+ ('23000000-0000-4000-8000-000000000002', 'uat-a2-message', '10000000-0000-0000-0000-000000000001', 'user',
+  '[{"type":"text","text":"Synthetic question for workspace A member 2"}]'::jsonb, '{"kind":"chat"}'::jsonb, '24000000-0000-4000-8000-000000000002'),
+ ('23000000-0000-4000-8000-000000000003', 'uat-b1-message', '10000000-0000-0000-0000-000000000002', 'user',
+  '[{"type":"text","text":"Synthetic question for workspace B member 1"}]'::jsonb, '{"kind":"chat"}'::jsonb, '24000000-0000-4000-8000-000000000003');
+
+INSERT INTO public.assistant_approvals(id, session_id, turn_id, brand_key, user_id, tool_name, tool_call_id, kind, input, input_sha256, label, expires_at) VALUES
+ ('25000000-0000-4000-8000-000000000001', '23000000-0000-4000-8000-000000000001', '24000000-0000-4000-8000-000000000001',
+  '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'list_scans', 'uat-a1-call', 'confirm',
+  '{}'::jsonb, repeat('a',64), 'List scans', now() + interval '15 minutes'),
+ ('25000000-0000-4000-8000-000000000002', '23000000-0000-4000-8000-000000000002', '24000000-0000-4000-8000-000000000002',
+  '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003', 'list_scans', 'uat-a2-call', 'confirm',
+  '{}'::jsonb, repeat('b',64), 'List scans', now() + interval '15 minutes'),
+ ('25000000-0000-4000-8000-000000000003', '23000000-0000-4000-8000-000000000003', '24000000-0000-4000-8000-000000000003',
+  '10000000-0000-0000-0000-000000000002', '00000000-0000-0000-0000-000000000002', 'list_scans', 'uat-b1-call', 'confirm',
+  '{}'::jsonb, repeat('c',64), 'List scans', now() + interval '15 minutes');
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $f22$ BEGIN
+  IF (SELECT count(*) FROM public.assistant_sessions) <> 1
+   OR (SELECT id FROM public.assistant_sessions) <> '23000000-0000-4000-8000-000000000001'
+  THEN RAISE EXCEPTION 'F22 assistant_sessions leaked across users or workspaces'; END IF;
+  IF (SELECT count(*) FROM public.assistant_messages) <> 1
+   OR (SELECT id FROM public.assistant_messages) <> 'uat-a1-message'
+  THEN RAISE EXCEPTION 'F22 assistant_messages leaked across users or workspaces'; END IF;
+  IF (SELECT count(*) FROM public.assistant_turns) <> 1
+   OR (SELECT id FROM public.assistant_turns) <> '24000000-0000-4000-8000-000000000001'
+  THEN RAISE EXCEPTION 'F22 assistant_turns leaked across users or workspaces'; END IF;
+  IF (SELECT count(*) FROM public.assistant_approvals) <> 1
+   OR (SELECT id FROM public.assistant_approvals) <> '25000000-0000-4000-8000-000000000001'
+  THEN RAISE EXCEPTION 'F22 assistant_approvals leaked across users or workspaces'; END IF;
+END $f22$;
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',true);
+DO $f22$ BEGIN
+  IF (SELECT count(*) FROM public.assistant_sessions) <> 1
+   OR (SELECT id FROM public.assistant_sessions) <> '23000000-0000-4000-8000-000000000002'
+  THEN RAISE EXCEPTION 'F22 second workspace member saw another member''s sessions'; END IF;
+  IF (SELECT count(*) FROM public.assistant_messages) <> 1
+   OR (SELECT id FROM public.assistant_messages) <> 'uat-a2-message'
+  THEN RAISE EXCEPTION 'F22 second workspace member saw another member''s messages'; END IF;
+  IF (SELECT count(*) FROM public.assistant_turns) <> 1
+   OR (SELECT id FROM public.assistant_turns) <> '24000000-0000-4000-8000-000000000002'
+  THEN RAISE EXCEPTION 'F22 second workspace member saw another member''s turns'; END IF;
+  IF (SELECT count(*) FROM public.assistant_approvals) <> 1
+   OR (SELECT id FROM public.assistant_approvals) <> '25000000-0000-4000-8000-000000000002'
+  THEN RAISE EXCEPTION 'F22 second workspace member saw another member''s approvals'; END IF;
+  IF EXISTS (SELECT 1 FROM public.assistant_sessions WHERE id = '23000000-0000-4000-8000-000000000001')
+   OR EXISTS (SELECT 1 FROM public.assistant_messages WHERE id = 'uat-a1-message')
+   OR EXISTS (SELECT 1 FROM public.assistant_turns WHERE id = '24000000-0000-4000-8000-000000000001')
+   OR EXISTS (SELECT 1 FROM public.assistant_approvals WHERE id = '25000000-0000-4000-8000-000000000001')
+  THEN RAISE EXCEPTION 'F22 second workspace member can read the first member''s rows'; END IF;
+END $f22$;
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $f22$ BEGIN
+  IF (SELECT count(*) FROM public.assistant_sessions) <> 1
+   OR (SELECT id FROM public.assistant_sessions) <> '23000000-0000-4000-8000-000000000003'
+  THEN RAISE EXCEPTION 'F22 assistant_sessions leaked across workspaces'; END IF;
+  IF (SELECT count(*) FROM public.assistant_messages) <> 1
+   OR (SELECT id FROM public.assistant_messages) <> 'uat-b1-message'
+  THEN RAISE EXCEPTION 'F22 assistant_messages leaked across workspaces'; END IF;
+  IF (SELECT count(*) FROM public.assistant_turns) <> 1
+   OR (SELECT id FROM public.assistant_turns) <> '24000000-0000-4000-8000-000000000003'
+  THEN RAISE EXCEPTION 'F22 assistant_turns leaked across workspaces'; END IF;
+  IF (SELECT count(*) FROM public.assistant_approvals) <> 1
+   OR (SELECT id FROM public.assistant_approvals) <> '25000000-0000-4000-8000-000000000003'
+  THEN RAISE EXCEPTION 'F22 assistant_approvals leaked across workspaces'; END IF;
+  IF EXISTS (SELECT 1 FROM public.assistant_sessions WHERE brand_key = '10000000-0000-0000-0000-000000000001')
+   OR EXISTS (SELECT 1 FROM public.assistant_messages WHERE brand_key = '10000000-0000-0000-0000-000000000001')
+   OR EXISTS (SELECT 1 FROM public.assistant_turns WHERE brand_key = '10000000-0000-0000-0000-000000000001')
+   OR EXISTS (SELECT 1 FROM public.assistant_approvals WHERE brand_key = '10000000-0000-0000-0000-000000000001')
+  THEN RAISE EXCEPTION 'F22 workspace B can read workspace A rows'; END IF;
+END $f22$;
+
+SET LOCAL ROLE anon;
+DO $f22$ BEGIN
+  BEGIN
+    PERFORM count(*) FROM public.assistant_sessions;
+    RAISE EXCEPTION 'F22 anon read of assistant_sessions was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.assistant_messages;
+    RAISE EXCEPTION 'F22 anon read of assistant_messages was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.assistant_turns;
+    RAISE EXCEPTION 'F22 anon read of assistant_turns was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.assistant_approvals;
+    RAISE EXCEPTION 'F22 anon read of assistant_approvals was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $f22$;
+RESET ROLE;
+-- End F22 tenant check.
 ROLLBACK;
 

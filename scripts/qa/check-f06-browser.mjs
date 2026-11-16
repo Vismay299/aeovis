@@ -250,7 +250,20 @@ try {
         const match = text.match(/(-?\d+(?:\.\d+)?)%/);
         return match ? Number(match[1]) : null;
       }));
-      let values = await visibilityValues();
+      // The URL updates before the table re-sorts; poll until the rows match the order.
+      const sortedValues = async (direction) => {
+        const deadline = Date.now() + 5000;
+        for (;;) {
+          const current = await visibilityValues();
+          const known = current.filter((value) => value !== null);
+          const expected = [...known].sort((a, b) => (direction === "desc" ? b - a : a - b));
+          const settled = current.slice(-2).every((value) => value === null)
+            && JSON.stringify(known) === JSON.stringify(expected);
+          if (settled || Date.now() > deadline) return current;
+          await page.waitForTimeout(100);
+        }
+      };
+      let values = await sortedValues("desc");
       assert.deepEqual(values.slice(-2), [null, null], "descending sort keeps missing visibility last");
       assert.deepEqual(values.filter((value) => value !== null), [...values.filter((value) => value !== null)].sort((a, b) => b - a));
 
@@ -259,7 +272,7 @@ try {
         const params = new URLSearchParams(location.search);
         return params.get("order") === "asc" && params.get("sort") === "visibility";
       });
-      values = await visibilityValues();
+      values = await sortedValues("asc");
       assert.deepEqual(values.slice(-2), [null, null], "ascending sort keeps missing visibility last");
       assert.deepEqual(values.filter((value) => value !== null), [...values.filter((value) => value !== null)].sort((a, b) => a - b));
       await page.reload({ waitUntil: "networkidle" });

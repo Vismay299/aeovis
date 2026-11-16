@@ -629,6 +629,29 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "site_audit_compare" },
     { kind: "function", name: "site_audit_compare", signature: "text, uuid, uuid, integer" },
   ],
+  "145_f22_assistant_sessions.sql": [
+    { kind: "table", name: "assistant_sessions" },
+    { kind: "table", name: "assistant_messages" },
+    { kind: "table", name: "assistant_turns" },
+    { kind: "function", name: "begin_assistant_turn" },
+    { kind: "function", name: "rewind_assistant_session" },
+    { kind: "function", name: "prune_assistant_sessions" },
+  ],
+  "146_f22_assistant_stream_chunks.sql": [
+    { kind: "table", name: "assistant_stream_chunks" },
+    { kind: "function", name: "prune_assistant_stream_chunks" },
+  ],
+  "147_f22_assistant_approvals.sql": [
+    { kind: "table", name: "assistant_approvals" },
+    { kind: "function", name: "claim_assistant_approval" },
+    { kind: "function", name: "expire_assistant_approvals" },
+  ],
+  "148_f22_gsc_query_summary.sql": [
+    { kind: "function", name: "assistant_gsc_query_summary" },
+  ],
+  "149_f22_assistant_milestone_fix.sql": [
+    { kind: "column", name: "assistant_turns.created_at" },
+  ],
 };
 
 /**
