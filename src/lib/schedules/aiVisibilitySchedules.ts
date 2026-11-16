@@ -14,10 +14,17 @@ import { dispatchBudget } from "../workers/durableProbing.js";
 import { probeDaySpendToday } from "../pricing/probeDaySpend.ts";
 import { reserveSpend, releaseSpend, SpendRefused } from "../spend/index.ts";
 import { makeSelfContinue } from "../selfContinue.js";
+import { captureServerEvent } from "../telemetry/server.ts";
 import { runDueSchedules, type DueItem, type Evaluation, type WindowPlan } from "./runDue.ts";
 
 export type DueCustomerSchedule = DueItem & {
   approvedMaxUsd: number;
+  /**
+   * The person who last saved the schedule (`scan_schedules.customer_updated_by`,
+   * migration 085). A scheduled window has no acting user, so this is the
+   * consenting identity `schedule:skipped` carries; null sends nothing.
+   */
+  userId: string | null;
 };
 
 export type ScanStartContext = {
@@ -83,7 +90,7 @@ export async function listDueCustomerSchedules(
 
   const { data, error } = await admin
     .from("scan_schedules")
-    .select("brand, next_run_at, schedule_interval, approved_max_usd")
+    .select("brand, next_run_at, schedule_interval, approved_max_usd, customer_updated_by")
     .eq("managed_by", "customer")
     .eq("enabled", true)
     .lte("next_run_at", nowIso)
@@ -97,6 +104,7 @@ export async function listDueCustomerSchedules(
     observedNextRunAt: new Date(row.next_run_at).toISOString(),
     interval: row.schedule_interval as ScheduleInterval,
     approvedMaxUsd: Number(row.approved_max_usd),
+    userId: row.customer_updated_by ?? null,
   }));
 }
 
@@ -307,6 +315,23 @@ export async function blockScheduledScan(
 ): Promise<void> {
   const nowIso = (deps?.now ? deps.now() : new Date()).toISOString();
 
+  // F26 §6.2.7 `schedule:skipped { reason }`, after the skip is recorded. A
+  // scheduled window has no acting user; the person who last saved the schedule
+  // (`customer_updated_by`) is the consenting identity. A row with no user still
+  // sends nothing — that is the consent gate working, not a missing event.
+  const captureSkip = () => {
+    try {
+      void captureServerEvent({
+        name: "schedule:skipped",
+        props: { reason },
+        userId: row.userId ?? null,
+        brandKey: row.key,
+      }).catch(() => {});
+    } catch {
+      // Telemetry never changes whether the window is blocked.
+    }
+  };
+
   if (deps?.blockWindowRpc) {
     await deps.blockWindowRpc(admin, {
       brand: row.key,
@@ -317,6 +342,7 @@ export async function blockScheduledScan(
       next: plan.next,
       reason,
     });
+    captureSkip();
     return;
   }
 
@@ -331,6 +357,7 @@ export async function blockScheduledScan(
   });
 
   if (error) throw error;
+  captureSkip();
 }
 
 export function createAiVisibilityScheduleAdapter(

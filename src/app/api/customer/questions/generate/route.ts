@@ -9,6 +9,7 @@ import {
   generateQuestions,
   type GenerateDeps,
 } from "../../../../../lib/questions/generate.ts";
+import { captureServerEvent } from "../../../../../lib/telemetry/server.ts";
 import "../../../../../lib/pricing/actions/index.ts";
 
 export const maxDuration = 90;
@@ -90,6 +91,17 @@ export async function POST(
       { ...body, maxUsd: approval.approvedMaxUsd },
       deps,
     );
+
+    try {
+      void captureServerEvent({
+        name: "questions:generated",
+        props: { count: result.questions.length },
+        userId: ws.user.id,
+        brandKey: ws.brandKey,
+      }).catch(() => {});
+    } catch {
+      // Telemetry never changes the response.
+    }
 
     return new Response(JSON.stringify(result), {
       status: 200,

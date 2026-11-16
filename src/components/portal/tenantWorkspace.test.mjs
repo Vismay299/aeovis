@@ -81,7 +81,7 @@ test("tenant Scans renders a runnable mock inside the tenant page rather than li
 
 test("a selected FAQ agent shows its output format rather than the base article pipeline", async () => {
   const composer = await compileJsx(path.join(here,"content/ComposerCard.jsx"),{
-    modules:new Map([["react",React],["../ui",await primitives()],["./shared",contentShared],["@/lib/content/agents/formats",{FORMATS}]]),
+    modules:new Map([["react",React],["../ui",await primitives()],["./shared",contentShared],["@/lib/content/agents/formats",{FORMATS}],["@/lib/telemetry/client",{trackEvent(){}}]]),
     autoNull:["lucide-react"],
   });
   const html=renderToHtml(composer.default,{brandKey:"workspace-trace",selectedAgent:{id:"own-agent",name:"FAQ Writer",format:"faq",base:"geo_article"}});

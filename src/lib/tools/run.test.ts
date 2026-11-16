@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { z } from "zod";
+import { AppError } from "../http/appError.ts";
 import { runTool } from "./run.ts";
 import type { ToolHandlerContext, ToolRegistration } from "./types.ts";
 
@@ -121,4 +122,174 @@ test("untrusted fields are cleaned, output is capped, and summary is at most 300
   assert.deepEqual(result.untrusted, ["rows[0].text", ...Array.from({ length: 10 }, (_, i) => "rows[" + (i + 1) + "].text")]);
   assert.equal((result.output as any).rows[0].text, "thirdparty");
   assert.ok(result.truncated);
+});
+
+// ---------------------------------------------------------------------------
+// F26 §6.2.8 — tool:call and error reports (F26-AC-12)
+// ---------------------------------------------------------------------------
+
+type RecordedEvent = {
+  name: string;
+  props: Record<string, unknown>;
+  userId?: string | null;
+  brandKey?: string | null;
+};
+
+type RecordedError = {
+  error: unknown;
+  props: Record<string, unknown>;
+  userId?: string | null;
+};
+
+function recorder() {
+  const events: RecordedEvent[] = [];
+  const errors: RecordedError[] = [];
+  return {
+    events,
+    errors,
+    telemetry: {
+      captureServerEvent: async (input: any) => {
+        events.push(input);
+      },
+      captureServerError: async (
+        error: unknown,
+        props?: any,
+        userId?: string | null,
+      ) => {
+        errors.push({ error, props: props ?? {}, userId });
+      },
+    },
+  };
+}
+
+function liveContext(source: ToolHandlerContext["source"] = "assistant"): ToolHandlerContext {
+  return { ...context(), source };
+}
+
+test("tool:call carries the seven registry props on success", async () => {
+  const recorded = recorder();
+  const reg = registration(async () => ({ value: 7 }));
+  const result = await runTool(reg, liveContext(), { value: 1 }, { telemetry: recorded.telemetry });
+
+  assert.equal(result.ok, true);
+  assert.equal(recorded.events.length, 1);
+  const [event] = recorded.events;
+  assert.equal(event.name, "tool:call");
+  assert.deepEqual(Object.keys(event.props).sort(), [
+    "duration_ms",
+    "error_code",
+    "output_invalid",
+    "source",
+    "success",
+    "tool",
+    "truncated",
+  ]);
+  assert.equal(event.props.tool, "get_test_value");
+  assert.equal(event.props.source, "assistant");
+  assert.equal(event.props.success, true);
+  assert.equal(event.props.error_code, null);
+  assert.equal(event.props.output_invalid, false);
+  assert.equal(event.props.truncated, false);
+  assert.ok(Number.isInteger(event.props.duration_ms));
+  assert.ok(Number(event.props.duration_ms) >= 0);
+  assert.equal(event.userId, "user-a");
+  assert.equal(event.brandKey, "brand-a");
+  assert.deepEqual(recorded.errors, []);
+});
+
+test("a reportable handler exception emits tool:call and one error report with the tool", async () => {
+  const recorded = recorder();
+  const reg = registration(async () => {
+    throw new AppError(500, "internal_error", "boom");
+  });
+  const result = await runTool(reg, liveContext(), { value: 1 }, { telemetry: recorded.telemetry });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "internal_error");
+  assert.equal(recorded.events.length, 1);
+  assert.equal(recorded.events[0].props.success, false);
+  assert.equal(recorded.events[0].props.error_code, "internal_error");
+  assert.equal(recorded.errors.length, 1);
+  assert.equal(recorded.errors[0].props.tool, "get_test_value");
+  assert.equal(recorded.errors[0].props.error_code, "internal_error");
+  assert.equal(recorded.errors[0].userId, "user-a");
+});
+
+test("a non-reportable handler code still emits tool:call but no error report", async () => {
+  const recorded = recorder();
+  const reg = registration(async () => {
+    throw new AppError(409, "price_changed", "Price changed");
+  });
+  const result = await runTool(reg, liveContext(), { value: 1 }, { telemetry: recorded.telemetry });
+
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.code, "price_changed");
+  assert.equal(recorded.events.length, 1);
+  assert.equal(recorded.events[0].props.success, false);
+  assert.equal(recorded.events[0].props.error_code, "price_changed");
+  assert.deepEqual(recorded.errors, []);
+});
+
+test("an output mismatch reports path-style issues and never the output value", async () => {
+  const recorded = recorder();
+  const output = z.looseObject({
+    value: z.number(),
+    data: z.looseObject({ rows: z.array(z.looseObject({ score: z.number() })) }),
+  });
+  const reg = registration(
+    async () => ({ value: 1, data: { rows: [{ score: "never-report-this-value" }] } }) as any,
+    output,
+  );
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const result = await runTool(reg, liveContext(), { value: 1 }, { telemetry: recorded.telemetry });
+
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error.code, "tool_output_invalid");
+    assert.equal(recorded.events.length, 1);
+    assert.equal(recorded.events[0].props.error_code, "tool_output_invalid");
+    assert.equal(recorded.events[0].props.output_invalid, true);
+    assert.equal(recorded.errors.length, 1);
+    assert.equal(recorded.errors[0].props.error_code, "tool_output_invalid");
+    assert.equal(recorded.errors[0].props.issues, "data.rows.0.score");
+    assert.ok(!JSON.stringify(recorded.errors[0].props).includes("never-report-this-value"));
+  } finally {
+    console.error = originalError;
+  }
+});
+
+test("source test captures nothing", async () => {
+  const recorded = recorder();
+  const reg = registration(async () => ({ value: 1 }));
+  const result = await runTool(reg, context(), { value: 1 }, { telemetry: recorded.telemetry });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(recorded.events, []);
+  assert.deepEqual(recorded.errors, []);
+});
+
+test("a capture that throws leaves the returned outcome unchanged", async () => {
+  const reg = registration(async () => ({ value: 3 }));
+  const result = await runTool(
+    reg,
+    liveContext(),
+    { value: 1 },
+    {
+      telemetry: {
+        captureServerEvent: () => {
+          throw new Error("capture boom");
+        },
+        captureServerError: () => {
+          throw new Error("report boom");
+        },
+      },
+    },
+  );
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.deepEqual(result.output, { value: 3 });
+  assert.equal(result.summary, "value");
+  assert.equal(result.truncated, null);
 });

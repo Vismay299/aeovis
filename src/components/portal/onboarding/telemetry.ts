@@ -1,6 +1,6 @@
 "use client";
 
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "../../../lib/telemetry/client.ts";
 import type { ClientEventName, EventProps } from "@/lib/telemetry/events";
 
 type OnboardingEventName = Extract<ClientEventName, `onboarding:${string}`>;

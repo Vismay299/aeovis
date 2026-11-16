@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { pollIntervalMs } from "@/lib/query/polling";
 import { keys } from "@/lib/query/keys";
+import { trackEvent } from "@/lib/telemetry/client";
 import {
   ACTIVE_SCAN_STATUSES,
   PANEL_NOT_APPROVED,
@@ -210,6 +211,7 @@ export function useScanTracker({ brandKey, jobs, onFinished, onUnauthorized, pri
 
   const start = useCallback(() => {
     if (!brandKey || state.starting) return;
+    trackEvent("scan:start_clicked", {});
     if (priceReview) {
       setReview({ open: true, priceChanged: null, error: null });
       return;

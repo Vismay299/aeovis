@@ -642,6 +642,51 @@ abandoned is not.
 - Apply 160 then 161; no data backfill: defaults apply to existing users, outbox starts empty, sweeps look back 30 minutes only.
 - Objects (160): `user_email_preferences` (per-user preferences across workspaces, RLS read-own), `email_outbox` (service-role only delivery queue with unique `dedupe_key`), `workspace_milestones` (workspace milestones reached, member readable).
 - Objects (161): `claim_email_outbox` (concurrent safe skip-locked claim), `close_exhausted_email_outbox` (closes 5-attempt exhausted claims as failed), `email_milestone_candidates` (dynamic query tolerant of optional F10/F18/F22 tables), `prune_email_outbox` (retention prune).
+
+### F25 lifecycle email (F25 phase 4)
+
+Copied verbatim from `features/F25-lifecycle-email.md` §10 (enabling steps, defaults, rollback)
+and §6.4 (the template tables), so the runbook cannot drift from the spec.
+
+**Env names:** `FEATURE_LIFECYCLE_EMAIL`, `LOOPS_API_KEY`, `LOOPS_PRODUCT_UPDATES_LIST_ID`, `LOOPS_TX_SCAN_FINISHED_ID`, `LOOPS_TX_SCHEDULE_SKIPPED_ID`, `LOOPS_TX_SPEND_CAP_ID`, `EMAIL_LINK_SECRET`. Values go into Vercel by piping from the owner's local file (CLAUDE.md), never printed.
+
+**Defaults:** flag off in production; periodics enqueue nothing while off; existing users have no preferences row (defaults apply); no backfill emails (sweeps look back 30 minutes only; milestone sweeps update contact properties for existing members but never send a drip, which starts only from `signed_up`).
+
+**Owner steps:**
+1. Apply migrations 160 and 161.
+2. In Loops: verify the sending domain; create the mailing list "Product updates" (id → `LOOPS_PRODUCT_UPDATES_LIST_ID`); create the three transactional templates from §6.4 with exactly those variable names (ids → `LOOPS_TX_*`); create contact properties `workspaceCreated`, `firstScanCompleted`, `scheduleSet`, `gscConnected`, `auditRun`, `draftApproved`, `assistantUsed` (boolean) and `workspaceCount` (number); create the Loop "Perceev onboarding" triggered by event `signed_up` with D1–D7 (leave D5/D7 paused until F18/F22 are enabled for most workspaces); create an API key.
+3. Set the env vars in Vercel (Production), generate `EMAIL_LINK_SECRET` with `openssl rand -base64 48 | tr -d '\n' | vercel env add EMAIL_LINK_SECRET production` (the value is never shown).
+4. `FEATURE_LIFECYCLE_EMAIL=on` → redeploy.
+5. Run E1–E6.
+
+**Onboarding drip** — a Loop named "Perceev onboarding" triggered by event `signed_up`, built by the owner. Each email has a Loops audience filter evaluated at send time; Loops adds its own unsubscribe footer.
+
+| # | Delay after trigger | Send only if | Subject | Body (one short paragraph + button) | Button → |
+|---|---|---|---|---|---|
+| D1 | 1 day | `workspaceCreated` is false | "Finish setting up Perceev" | "Add your website and we'll start checking how AI assistants talk about your brand. It takes two minutes." | "Finish setup" → `/onboarding` |
+| D2 | 2 days | `workspaceCreated` true and `firstScanCompleted` false | "Approve your questions and run your first scan" | "Your first scan asks ChatGPT, Gemini, Perplexity and Google's AI Overviews the questions your buyers ask, and shows which brands they name. You see the price before it runs." | "Review questions" → `/portal/measurement` |
+| D3 | 4 days | `gscConnected` false | "See which Google searches bring people to your site" | "Connect Google Search Console to compare what people search for with what AI assistants answer." | "Connect Search Console" → `/portal/search-console` |
+| D4 | 6 days | `firstScanCompleted` true and `scheduleSet` false | "Track your AI visibility every week" | "Schedule scans so you can see whether you're gaining or losing ground. You approve the monthly cost once." | "Schedule scans" → `/portal/settings/schedule` |
+| D5 | 8 days | `auditRun` false | "Check whether AI crawlers can read your site" | "A site audit finds blocked AI crawlers, missing llms.txt and structured-data problems that keep you out of answers." | "Audit your site" → `/portal/audit` |
+| D6 | 11 days | `draftApproved` false | "Turn a question you're losing into content" | "Content Studio drafts an article for a question where competitors get named and you don't." | "Open Content Studio" → `/portal/content` |
+| D7 | 14 days | `assistantUsed` false | "Ask Perceev's assistant" | "Ask about your scans, competitors and site in plain language. It shows a price before any paid step." | "Open the assistant" → `/portal/assistant` |
+
+D5 and D7 point to pages behind F18/F22 flags; the owner enables those emails only when the features are on for most workspaces (§10).
+
+**Schedule-skip actions** (`schedule_skipped` button, §6.4):
+
+| Reason(s) | `actionLabel` | `actionUrl` path |
+|---|---|---|
+| `panel_not_approved` | Approve your questions | `/portal/measurement` |
+| `price_changed`, `over_scan_limit` | Review the price | `/portal/settings/schedule` |
+| `scheduling_disabled`, `feature_disabled`, `brand_not_allowlisted`, `dispatch_paused`, `no_engines`, `daily_capacity_reached`, `workspace_inactive`, `start_failed` | View schedule | `/portal/settings/schedule` |
+
+The three transactional templates' variables, subject, preview and body copy are specified in `features/F25-lifecycle-email.md` §6.4 items 1–3 and must be created with exactly those variable names.
+
+**Live checklist:** `scripts/qa/check-f25-live.md` (E1–E6). Owner-only; record only pass/fail and dates.
+
+**Rollback:** `FEATURE_LIFECYCLE_EMAIL=off` stops enqueueing and delivery immediately (pending rows are skipped as `flag_off` if the flag is off at send time; to keep them for later, pause by removing `LOOPS_API_KEY` instead, which leaves them `skipped loops_not_configured` — prefer the flag). Pause the Loop in Loops to stop drip emails already scheduled. Data cleanup: `DELETE FROM email_outbox WHERE status = 'pending';` (operator). Tables can stay; dropping them requires removing the spend hook first (P2.T2.S1 line).
+
 ### `135_f20_ga4` and `136_f20_ga4_functions` (F20 phase 1)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply 135 and 136 before deploying F20 phase 1.

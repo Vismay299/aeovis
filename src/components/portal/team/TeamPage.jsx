@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { UserPlus, Users } from "lucide-react";
 import { usePortal } from "../PortalShell";
 import { Badge, Banner, Button, Card, PageHeader, SkeletonRows, formatRelative } from "../ui";
+import { trackEvent } from "@/lib/telemetry/client";
 import { InlineConfirm } from "@/components/app/InlineConfirm";
 import { Input } from "@/components/ui/input";
 import {
@@ -75,6 +76,10 @@ export default function TeamPage() {
       if (response.status === 401) { redirectToLogin(); return; }
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Could not invite this person.");
+      trackEvent("team:invite_sent", {
+        role: body.role === "owner" ? "owner" : "member",
+        user_exists: body.user_exists === true,
+      });
       setBanner({
         tone: "success",
         text: body.added ? `${address} already has an account and was added to the workspace.` : `Invite sent to ${address}.`,

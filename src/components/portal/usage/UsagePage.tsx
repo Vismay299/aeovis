@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +18,7 @@ import { ErrorState } from "@/components/app/ErrorState";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { formatUsd } from "@/shared/money";
 import type { WorkspaceUsage } from "@/shared/costs";
+import { trackEvent } from "@/lib/telemetry/client";
 import {
   useUsage,
   viewerTimeZone,
@@ -149,6 +151,18 @@ export function UsagePage({ brandKey }: { brandKey: string }) {
   const range = search.range;
   const timeZone = viewerTimeZone();
   const usageQuery = useUsage(brandKey, range, timeZone);
+
+  const lastRangeRef = useRef<UsageRange | null>(null);
+  useEffect(() => {
+    const previous = lastRangeRef.current;
+    if (previous === range) return;
+    lastRangeRef.current = range;
+    if (previous === null) {
+      trackEvent("usage:page_viewed", { range });
+      return;
+    }
+    trackEvent("usage:range_changed", { from: previous, to: range });
+  }, [range]);
 
   const errorView = (
     <ErrorState

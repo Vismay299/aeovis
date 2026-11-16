@@ -96,6 +96,7 @@ function makeRow(over: Partial<DueCustomerSchedule> = {}): DueCustomerSchedule {
     observedNextRunAt: "2026-10-20T03:30:00.000Z",
     interval: "weekly",
     approvedMaxUsd: 25,
+    userId: null,
     ...over,
   };
 }
@@ -137,6 +138,31 @@ test("listDueCustomerSchedules respects limit and orders by next_run_at asc", as
   assert.equal(due.length, 10);
   assert.equal(due[0].key, "brand-1.com");
   assert.equal(due[9].key, "brand-10.com");
+});
+
+test("listDueCustomerSchedules maps customer_updated_by into userId", async () => {
+  const dueAt = new Date(Date.now() - 60_000).toISOString();
+  const admin = makeFakeAdmin({
+    schedules: [
+      {
+        brand: "with-user.com",
+        next_run_at: dueAt,
+        schedule_interval: "weekly",
+        approved_max_usd: 20,
+        customer_updated_by: "user-schedule-owner",
+      },
+      {
+        brand: "no-user.com",
+        next_run_at: dueAt,
+        schedule_interval: "weekly",
+        approved_max_usd: 20,
+        customer_updated_by: null,
+      },
+    ],
+  });
+  const due = await listDueCustomerSchedules(admin, new Date(), 10);
+  assert.equal(due.find((row) => row.key === "with-user.com")?.userId, "user-schedule-owner");
+  assert.equal(due.find((row) => row.key === "no-user.com")?.userId, null);
 });
 
 test("skip reason 1: scheduling_disabled when isFeatureEnabled is false", async () => {

@@ -259,7 +259,7 @@ export const EVENTS = {
   "rank_tracking:check_complete": {
     side: "server",
     owner: "F15",
-    consent: "required",
+    consent: "anonymous",
     props: z.strictObject({ status: code, trigger: code, keywords_checked: count }),
   },
   "rank_tracking:pin": {
@@ -421,7 +421,7 @@ export const EVENTS = {
   "site_audit:complete": {
     side: "server",
     owner: "F18",
-    consent: "required",
+    consent: "anonymous",
     props: z.strictObject({ status: code, pages_crawled: count, pages_total: count, crawl_completed: flag, pages_blocked: count, pages_rate_limited: count, pages_abandoned: count, lighthouse: flag, render_js: flag, error_code: code.nullable(), failed_phase: code.nullable() }),
   },
   "indexnow:setup": {
@@ -571,7 +571,7 @@ export const EVENTS = {
   "tool:call": {
     side: "server",
     owner: "F22",
-    consent: "required",
+    consent: "anonymous",
     props: z.strictObject({ tool: code, source: oneOf(["assistant", "approval", "mcp"]), success: flag, error_code: code.nullable(), duration_ms: durationMs, output_invalid: flag, truncated: flag }),
   },
   "report:saved": {
@@ -688,6 +688,12 @@ export const EVENTS = {
     consent: "required",
     props: z.strictObject({ issue_type: oneOf(["link_expired", "unknown"]) }),
   },
+  "auth:verification_success": {
+    side: "client",
+    owner: "F24",
+    consent: "required",
+    props: z.strictObject({}),
+  },
   "auth:password_reset_requested": {
     side: "client",
     owner: "F24",
@@ -703,19 +709,19 @@ export const EVENTS = {
   "email:sent": {
     side: "server",
     owner: "F25",
-    consent: "required",
+    consent: "anonymous",
     props: z.strictObject({ template: code, kind: oneOf(["transactional", "event", "contact"]), duplicate: flag }),
   },
   "email:skipped": {
     side: "server",
     owner: "F25",
-    consent: "required",
+    consent: "anonymous",
     props: z.strictObject({ template: code, reason: code }),
   },
   "email:failed": {
     side: "server",
     owner: "F25",
-    consent: "required",
+    consent: "anonymous",
     props: z.strictObject({ template: code, error_code: code }),
   },
   "email:unsubscribed": {
@@ -893,4 +899,4 @@ export function validateEventProps(
 }
 
 /** Spec table row count; kept for the registry test (F26-AC-01). */
-export const EVENT_REGISTRY_COUNT = 143 as const;
+export const EVENT_REGISTRY_COUNT = 144 as const;
