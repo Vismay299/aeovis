@@ -37,3 +37,21 @@ test("paid registrations declare maxUsd and map their example to a priced action
   }
  }
 });
+test("registrations whose input declares maxUsd are paid and map to a priced action",async()=>{
+ let checked=0;
+ for(const reg of TOOL_REGISTRY){
+  const schema=z.toJSONSchema(reg.def.input,{io:"input"}) as {properties?:Record<string,unknown>};
+  if(!schema.properties||!("maxUsd" in schema.properties))continue;
+  checked+=1;
+  assert.equal(reg.effect,"paid",reg.def.name+" declares maxUsd and must be paid");
+  const input=reg.def.input.parse(reg.example.input) as Record<string,unknown>;
+  const decision=await reg.approval({} as never,input);
+  assert.equal(decision.kind,"price",reg.def.name+" must map maxUsd to a price approval");
+  if(decision.kind!=="price")continue;
+  const action=getPricedAction(decision.action);
+  assert.ok(action,reg.def.name+" priced action must be registered");
+  if(!action)continue;
+  assert.doesNotThrow(()=>action.input.parse(decision.quoteInput),reg.def.name+" quote input");
+ }
+ assert.ok(checked>0,"the registry must contain at least one maxUsd tool");
+});

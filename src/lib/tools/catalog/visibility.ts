@@ -1,6 +1,11 @@
 import { defineRegistration, type ToolRegistration } from "../types.ts";
 import { getMeasurementStatusTool } from "../own/measurement.ts";
 import {
+  exploreQuestionTool,
+  getExploreRunTool,
+} from "../own/explore.ts";
+import { runScanTool } from "../own/scans.ts";
+import {
   getScanAnswerTool,
   getScanReportTool,
   getScanSourcesTool,
@@ -11,6 +16,7 @@ import {
   getQuestionAnswerTool,
   getQuestionHistoryTool,
 } from "../own/questionsHistory.ts";
+import { actionQuoteInput, paidAnnotations } from "./quote.ts";
 
 const questionId = "0b9c2d4e-6f70-4a81-9b2c-3d4e5f607182";
 const answerId = "6a1f0000-0000-4000-8000-000000000001";
@@ -243,5 +249,90 @@ export const registrations: ToolRegistration[] = [
       "Answer for " + (output?.execution?.engineLabel ?? "question") + ".",
     (_output, input) => "/portal/questions/" + input.questionId,
     { untrustedPaths: ["text", "markdown"] },
+  ),
+  registration(
+    runScanTool,
+    {
+      input: { panelKey: "default", maxUsd: 0.5 },
+      output: { jobId: "job-example", status: "pending", approvedMaxUsd: 0.5 },
+    },
+    (_output, input) => "Scan started (" + (input?.panelKey ?? "default") + ").",
+    () => "/portal/scans",
+    {
+      effect: "paid",
+      approval: (_ctx: any, input: any) => ({
+        kind: "price",
+        action: "ai_visibility.scan.run",
+        quoteInput: actionQuoteInput("ai_visibility.scan.run", input),
+        label: "Start a visibility scan",
+      }),
+      annotations: paidAnnotations(),
+    },
+  ),
+  registration(
+    exploreQuestionTool,
+    {
+      input: {
+        prompt: "best running shoes",
+        models: ["chatgpt"],
+        webSearch: true,
+        country: null,
+        highlightBrand: null,
+        fresh: false,
+        maxUsd: 0.4,
+      },
+      output: { runId: "run-example", status: "queued", pollAfterSeconds: 3 },
+    },
+    () => "Explore run started.",
+    () => "/portal/explore",
+    {
+      feature: "prompt_explorer",
+      effect: "paid",
+      approval: (_ctx: any, input: any) => ({
+        kind: "price",
+        action: "ai_visibility.explore.run",
+        quoteInput: actionQuoteInput("ai_visibility.explore.run", input),
+        label: "Ask answer engines “" + String(input?.prompt ?? "") + "”",
+      }),
+      annotations: paidAnnotations(),
+    },
+  ),
+  registration(
+    getExploreRunTool,
+    {
+      input: { runId: "0b9c2d4e-6f70-4a81-9b2c-3d4e5f607182" },
+      output: {
+        runId: "0b9c2d4e-6f70-4a81-9b2c-3d4e5f607182",
+        status: "completed",
+        pollAfterSeconds: null,
+        results: [
+          { status: "success", model: "chatgpt", text: "A synthetic answer." },
+          { status: "error", model: "gemini" },
+        ],
+        completedModels: 2,
+      },
+    },
+    (output) => {
+      const results = output?.results ?? [];
+      const answered = results.filter(
+        (result: any) => result?.status === "success",
+      ).length;
+      return answered + " of " + results.length + " models answered.";
+    },
+    () => "/portal/explore",
+    {
+      feature: "prompt_explorer",
+      untrustedPaths: [
+        "results[*].text",
+        "results[*].citations[*].title",
+        "results[*].fanOutQueries[*]",
+      ],
+      waitForProgress: {
+        statusPath: "status",
+        runningValues: ["queued", "running"],
+        progressPath: "completedModels",
+        budgetMs: 45_000,
+      },
+    },
   ),
 ];

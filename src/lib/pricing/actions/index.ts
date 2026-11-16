@@ -34,3 +34,5 @@ import "./siteAudit.ts";
 import "./rankTracking.ts";
 import "./exploreRun.ts";
 export { exploreRunAction } from "./exploreRun.ts";
+import "./contentDraft.ts";
+export { contentDraftAction } from "./contentDraft.ts";

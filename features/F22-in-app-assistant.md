@@ -1081,18 +1081,18 @@ Branches `feat/f22-in-app-assistant-p<n>`. Every phase ends green on the full su
 
 **Goal:** every tool in `TOOL_NAMES` is registered and passes the contract.
 
-- [ ] **P3.T1 Feature tool catalogs**
-  - [ ] **P3.T1.S1** *Files:* `src/lib/tools/catalog/{keywords,domain,rankTracking,backlinks,local,audit,indexnow,analytics}.ts`. *Do:* §6.2.5 rows with `quote` mappings and examples (synthetic values; no real customer data). *Verify:* `node --test src/lib/tools/contract.test.ts` → pass.
-- [ ] **P3.T2 Extractions**
-  - [ ] **P3.T2.S1** *Files:* `src/lib/scans/startCustomerScan.ts`, `src/app/api/customer/scan/route.ts`. *Do:* §6.2.9 row 1 (pure move). *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/customerRoutes.test.mjs src/lib/scanRoute.route.test.mjs` and F09's scan route tests → pass unchanged.
-  - [ ] **P3.T2.S2** *Files:* `src/lib/keywords/serpRequest.ts`, F13's serp route; `src/lib/domain/competitorsRequest.ts`, F14's competitors route. *Do:* §6.2.9 rows 2–3. *Verify:* F13 and F14 route tests → pass unchanged.
-- [ ] **P3.T3 Own tools that call other features**
-  - [ ] **P3.T3.S1** *Files:* `src/lib/tools/own/{scans.ts (run_scan),explore.ts,questionsResearch.ts,serp.ts,searchConsole.ts,content.ts}` and tests. *Do:* §6.2.6 rows; `start_content_draft` refuses a topic already generating (`content_in_progress`); `get_search_console_performance` returns `connected: false` without a query when disconnected. *Verify:* `node --test src/lib/tools/own/` → pass.
-  - [ ] **P3.T3.S2** *Files:* `src/lib/tools/own/siteReading.ts` (PORT header), `siteReading.test.ts`, `src/lib/tools/own/aiCrawlers.ts`, `aiCrawlers.test.ts`. *Do:* allow rule cases: own host and subdomain allowed; `evil.example` → `host_not_allowed`; declared competitor homepage allowed, competitor deep URL allowed only after `map_site_pages` returned it in the same turn memory; stored citation URL exact match allowed, same host other path refused; `htmlToText` parity with `scrape.ts:143-154`; crawler check uses the workspace website only (input has no host). *Verify:* `node --test src/lib/tools/own/siteReading.test.ts src/lib/tools/own/aiCrawlers.test.ts` → pass (F22-AC-20 part).
-  - [ ] **P3.T3.S3** *Files:* `src/lib/pricing/actions/contentDraft.ts`, `src/lib/pricing/actions/index.ts`, `contentDraft.test.ts`. *Do:* §6.2.6 priced action; env cap 0.25 → quote 0.25; unset → 0.15; warning present. *Verify:* `node --test src/lib/pricing/actions/contentDraft.test.ts` → pass.
-- [ ] **P3.T4 Registrations and equality**
-  - [ ] **P3.T4.S1** *Files:* `src/shared/spend-features.ts`, `src/lib/features/names.ts`, `.env.example` (§6.2.7). *Verify:* `node --test src/lib/features/ src/lib/spend/` → pass.
-  - [ ] **P3.T4.S2** *Files:* `src/lib/tools/registry.test.ts`. *Do:* switch to `set(registry) === set(TOOL_NAMES)` (AC-01). *Verify:* `node --test src/lib/tools/registry.test.ts` → pass.
+- [x] **P3.T1 Feature tool catalogs**
+  - [x] **P3.T1.S1** *Files:* `src/lib/tools/catalog/{keywords,domain,rankTracking,backlinks,local,audit,indexnow,analytics}.ts`. *Do:* §6.2.5 rows with `quote` mappings and examples (synthetic values; no real customer data). *Verify:* `node --test src/lib/tools/contract.test.ts` → pass.
+- [x] **P3.T2 Extractions**
+  - [x] **P3.T2.S1** *Files:* `src/lib/scans/startCustomerScan.ts`, `src/app/api/customer/scan/route.ts`. *Do:* §6.2.9 row 1 (pure move). *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/customerRoutes.test.mjs src/lib/scanRoute.route.test.mjs` and F09's scan route tests → pass unchanged. **Note:** already extracted before this phase at `src/lib/pricing/startCustomerScan.ts`; routes and tests are unchanged.
+  - [x] **P3.T2.S2** *Files:* `src/lib/keywords/serpRequest.ts`, F13's serp route; `src/lib/domain/competitorsRequest.ts`, F14's competitors route. *Do:* §6.2.9 rows 2–3. *Verify:* F13 and F14 route tests → pass unchanged. **Note:** already extracted before this phase at `src/lib/keywords/serp.ts` and `src/lib/domain/serpCompetitors.ts`; routes and tests are unchanged.
+- [x] **P3.T3 Own tools that call other features**
+  - [x] **P3.T3.S1** *Files:* `src/lib/tools/own/{scans.ts (run_scan),explore.ts,questionsResearch.ts,serp.ts,searchConsole.ts,content.ts}` and tests. *Do:* §6.2.6 rows; `start_content_draft` refuses a topic already generating (`content_in_progress`); `get_search_console_performance` returns `connected: false` without a query when disconnected. *Verify:* `node --test src/lib/tools/own/` → pass.
+  - [x] **P3.T3.S2** *Files:* `src/lib/tools/own/siteReading.ts` (PORT header), `siteReading.test.ts`, `src/lib/tools/own/aiCrawlers.ts`, `aiCrawlers.test.ts`. *Do:* allow rule cases: own host and subdomain allowed; `evil.example` → `host_not_allowed`; declared competitor homepage allowed, competitor deep URL allowed only after `map_site_pages` returned it in the same turn memory; stored citation URL exact match allowed, same host other path refused; `htmlToText` parity with `scrape.ts:143-154`; crawler check uses the workspace website only (input has no host). *Verify:* `node --test src/lib/tools/own/siteReading.test.ts src/lib/tools/own/aiCrawlers.test.ts` → pass (F22-AC-20 part).
+  - [x] **P3.T3.S3** *Files:* `src/lib/pricing/actions/contentDraft.ts`, `src/lib/pricing/actions/index.ts`, `contentDraft.test.ts`. *Do:* §6.2.6 priced action; env cap 0.25 → quote 0.25; unset → 0.15; warning present. *Verify:* `node --test src/lib/pricing/actions/contentDraft.test.ts` → pass.
+- [x] **P3.T4 Registrations and equality**
+  - [x] **P3.T4.S1** *Files:* `src/shared/spend-features.ts`, `src/lib/features/names.ts`, `.env.example` (§6.2.7). *Verify:* `node --test src/lib/features/ src/lib/spend/` → pass.
+  - [x] **P3.T4.S2** *Files:* `src/lib/tools/registry.test.ts`. *Do:* switch to `set(registry) === set(TOOL_NAMES)` (AC-01). *Verify:* `node --test src/lib/tools/registry.test.ts` → pass.
 
 **Checkpoint:** full suite → pass; `npm run build` → exit 0. Completes F22-AC-01, 04.
 

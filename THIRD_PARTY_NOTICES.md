@@ -822,3 +822,6 @@ SOFTWARE.
 
 ### F04 Phase 6 ports
 - `src/components/portal/AuthLayout.jsx` (from `src/client/features/auth/AuthPage.tsx:131-175`)
+
+### F22 Phase 3 ports
+- `src/lib/tools/own/siteReading.ts` (from `src/server/lib/scrape.ts`, `src/server/features/sam/samChatTools.ts`)

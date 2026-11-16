@@ -1,6 +1,14 @@
 import { z } from "zod";
 import { AppError } from "../../http/appError.ts";
 import type { ToolDefinition, ToolHandlerContext } from "../types.ts";
+import {
+  requireApprovedPrice,
+  type PricingContext,
+} from "../../pricing/pricedActions.ts";
+import {
+  startCustomerScan,
+  type ScanStartDeps,
+} from "../../pricing/startCustomerScan.ts";
 
 const listInput = z.strictObject({
   limit: z.int().min(1).max(50).default(10),
@@ -428,3 +436,69 @@ export const getScanStatusTool: ToolDefinition = {
     });
   },
 };
+
+const runScanInput = z.strictObject({
+  panelKey: z.string().min(1).max(80).default("default"),
+  maxUsd: z.number().positive().max(1000),
+});
+
+const runScanOutput = z.looseObject({
+  jobId: z.string(),
+  status: z.literal("pending"),
+  approvedMaxUsd: z.number(),
+});
+
+export type RunScanDeps = ScanStartDeps & {
+  requireApprovedPrice?: typeof requireApprovedPrice;
+  startCustomerScan?: typeof startCustomerScan;
+};
+
+export function createRunScanTool(deps: RunScanDeps = {}): ToolDefinition {
+  return {
+    name: "run_scan",
+    description:
+      "Start a paid AI-visibility scan of the workspace's approved question panel.",
+    input: runScanInput,
+    output: runScanOutput,
+    handler: async (ctx, raw) => {
+      const input = runScanInput.parse(raw);
+      const pricingCtx: PricingContext = {
+        brandKey: ctx.brand.brandKey,
+        admin: ctx.admin,
+        env: process.env,
+        now: new Date(),
+      };
+      const approveFn = deps.requireApprovedPrice ?? requireApprovedPrice;
+      const approval = await approveFn(
+        "ai_visibility.scan.run",
+        pricingCtx,
+        { panelKey: input.panelKey },
+        input.maxUsd,
+      );
+
+      const startFn = deps.startCustomerScan ?? startCustomerScan;
+      const result = await startFn(
+        {
+          admin: ctx.admin,
+          brandKey: ctx.brand.brandKey,
+          userId: ctx.userId,
+          quote: approval.quote,
+          approvedMaxUsd: approval.approvedMaxUsd,
+          source: "dialog",
+          panelKey: input.panelKey,
+          brandDisplayName: ctx.brand.display_name,
+          url: ctx.brand.website || "",
+        },
+        deps,
+      );
+
+      return runScanOutput.parse({
+        jobId: result.jobId,
+        status: "pending",
+        approvedMaxUsd: result.approvedMaxUsd,
+      });
+    },
+  };
+}
+
+export const runScanTool = createRunScanTool();

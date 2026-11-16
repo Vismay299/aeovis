@@ -1,7 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { AppError } from "../../http/appError.ts";
-import { getScanAnswerTool, getScanReportTool, getScanSourcesTool, getScanStatusTool } from "./scans.ts";
+import {
+  createRunScanTool,
+  getScanAnswerTool,
+  getScanReportTool,
+  getScanSourcesTool,
+  getScanStatusTool,
+} from "./scans.ts";
 import type { ToolHandlerContext } from "../types.ts";
 
 type Row = Record<string, any>;
@@ -262,4 +268,54 @@ test("get_scan_status reads the finished scan from scan_jobs.result_id", async (
   assert.equal(output.scanId, SCAN);
   assert.equal(output.progressPct, 100);
   assert.ok(calls.some((call) => call === "scan_jobs.select:id,brand_key,status,progress_pct,result_id"));
+});
+
+test("run_scan refuses without maxUsd before it quotes or starts anything", async () => {
+  let quotes = 0;
+  let starts = 0;
+  const tool = createRunScanTool({
+    requireApprovedPrice: (async () => {
+      quotes += 1;
+      return { quote: {}, approvedMaxUsd: 1, source: "dialog" };
+    }) as any,
+    startCustomerScan: (async () => {
+      starts += 1;
+      return { jobId: "job-1", approvedMaxUsd: 1, quotedUsd: 1 };
+    }) as any,
+  });
+
+  await assert.rejects(() => tool.handler({} as any, { panelKey: "default" }));
+  assert.equal(quotes, 0);
+  assert.equal(starts, 0);
+});
+
+test("run_scan quotes the scan before starting it and passes the approved maximum", async () => {
+  const { context } = fakeAdmin({});
+  const order: string[] = [];
+  let startArgs: any;
+
+  const tool = createRunScanTool({
+    requireApprovedPrice: (async (key: string, _ctx: any, quoteInput: any, maxUsd: number) => {
+      order.push("quote");
+      assert.equal(key, "ai_visibility.scan.run");
+      assert.deepEqual(quoteInput, { panelKey: "default" });
+      assert.equal(maxUsd, 0.5);
+      return { quote: { totalUsd: 0.4 }, approvedMaxUsd: maxUsd, source: "dialog" };
+    }) as any,
+    startCustomerScan: (async (args: any) => {
+      order.push("start");
+      startArgs = args;
+      return { jobId: "job-42", approvedMaxUsd: args.approvedMaxUsd, quotedUsd: 0.4 };
+    }) as any,
+  });
+
+  const output = (await tool.handler(context, { maxUsd: 0.5 })) as any;
+
+  assert.deepEqual(order, ["quote", "start"]);
+  assert.deepEqual(output, { jobId: "job-42", status: "pending", approvedMaxUsd: 0.5 });
+  assert.equal(startArgs.brandKey, "brand-a");
+  assert.equal(startArgs.userId, "user");
+  assert.equal(startArgs.panelKey, "default");
+  assert.equal(startArgs.brandDisplayName, "A");
+  assert.equal(startArgs.url, "https://a.test");
 });
