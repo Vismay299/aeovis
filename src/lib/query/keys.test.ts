@@ -294,3 +294,13 @@ test("F11 exploreKeys: builder shapes and workspace scoping", () => {
   assert.equal(isWorkspaceKey(exploreKeys.run("acme", "r1"), "other"), false);
 });
 
+test("F18 phase 9 crawler-access key is scoped to its workspace", () => {
+  assert.deepEqual(keys.siteAuditCrawlerAccess("acme"), [
+    "siteAuditCrawlerAccess",
+    "acme",
+  ]);
+  assert.notDeepEqual(
+    keys.siteAuditCrawlerAccess("acme"),
+    keys.siteAuditCrawlerAccess("other"),
+  );
+});

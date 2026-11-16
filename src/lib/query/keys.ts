@@ -149,6 +149,9 @@ export const keys = {
   setup: (brandKey: string) => ["setup", brandKey] as const,
   // F11
   explore: (brandKey: string) => ["explore", brandKey] as const,
+  // F18 phase 9 — the owner-only Shopify crawler-access list for one workspace.
+  siteAuditCrawlerAccess: (brandKey: string) =>
+    ["siteAuditCrawlerAccess", brandKey] as const,
 } as const;
 
 // F12 §6.2 — question history reads. Workspace data follows

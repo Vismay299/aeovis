@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { ConfirmDialog } from "@/components/app/ConfirmDialog";
 import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
 import { usePortal } from "@/components/portal/PortalShell";
+import { CrawlerAccessCard } from "../crawlerAccess/CrawlerAccessCard";
 import { AuditHistoryTable } from "./AuditHistoryTable";
 import { LaunchFormCard } from "./LaunchFormCard";
 import { useLaunchController } from "./useLaunchController";
@@ -22,6 +23,7 @@ export function LaunchView({ brandKey }: { brandKey: string }) {
   const controller = useLaunchController({ brandKey });
   const { brand, features } = usePortal();
   const websiteHost = hostOf(brand?.website ?? "");
+  const crawlerAccessEnabled = features?.site_audit_crawler_access === true;
 
   useEffect(() => {
     trackAuditEvent("site_audit:launch_open");
@@ -39,6 +41,14 @@ export function LaunchView({ brandKey }: { brandKey: string }) {
         websiteHost={websiteHost}
         renderAvailable={features?.site_audit_render === true}
       />
+
+      {brand?.role === "owner" && crawlerAccessEnabled ? (
+        <CrawlerAccessCard
+          brandKey={brandKey}
+          host={websiteHost}
+          enabled={crawlerAccessEnabled}
+        />
+      ) : null}
 
       <AuditHistoryTable controller={controller} />
 
