@@ -13,6 +13,16 @@ export type ToolHandlerContext = {
   sessionId?: string;
   source: "assistant" | "approval" | "mcp" | "test";
   signal?: AbortSignal;
+  /** Per-turn scratch state, populated by the assistant runtime. Never module-global. */
+  turnMemory?: TurnMemory;
+};
+
+/**
+ * URLs the current assistant turn has already mapped, keyed by normalised host.
+ * `read_pages` may read those competitor URLs; P4 creates one object per turn.
+ */
+export type TurnMemory = {
+  mappedUrls?: Record<string, readonly string[]>;
 };
 
 export type ToolDefinition<I extends ZodType = ZodType, O extends ZodType = ZodType> = {
