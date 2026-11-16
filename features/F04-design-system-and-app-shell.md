@@ -616,6 +616,9 @@ Branch names `feat/f04-design-system-p<N>`. Every phase ends with the full suite
 - `F04-B07` covers 8 workspace routes (`/portal/settings` included), `/onboarding` and the 7 signed-out auth
   routes at 1440 and 390. `F04-B09` adds the 16 px login input, the `reveal-on-hover` 0 → 1 transition on
   `/portal/scans` and the app/public font-stack assertions.
+- The four page files named in P6.T4 (`src/app/{login,signup,onboarding}/page.jsx`, `src/app/auth/reset/page.jsx`)
+  are unchanged: they already render `AuthLayout`, and the subtask requires their copy and handlers to stay
+  unchanged. The auth-shell changes live in `AuthLayout.jsx` and the four layout files.
 
 **Phase 6 review outcome (CTO):** APPROVE after two corrections. `F04-B07` now renders `/portal/settings`
 (8 workspace routes), and the three inputs migrated in `src/app/auth/accept/page.jsx` and
