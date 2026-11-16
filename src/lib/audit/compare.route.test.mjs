@@ -67,7 +67,7 @@ test("compare route returns per-type counts and coverage metadata without cachin
     audit(baseId, { pages_crawled: 10 }),
     audit(headId, { created_at: "2026-11-02T00:00:00.000Z", pages_crawled: 10 }),
   ], rows);
-  const response = await GET(request(), deps(admin));
+  const response = await GET(request(), undefined, deps(admin));
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(await response.json(), {
@@ -88,7 +88,7 @@ test("comparison refuses another workspace's audit id as 404 before the compare 
       audit(headId),
       audit(foreignId, { brand_key: "brand-b", start_host: "secret.example" }),
     ]);
-    const response = await GET(request(query), deps(admin));
+    const response = await GET(request(query), undefined, deps(admin));
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: "Audit not found.", code: "audit_not_found" });
     assert.deepEqual(admin.calls.rpc, []);
@@ -100,7 +100,7 @@ test("mismatched hosts return the specified 422 before comparing", async () => {
     audit(baseId),
     audit(headId, { start_host: "other.example" }),
   ]);
-  const response = await GET(request(), deps(admin));
+  const response = await GET(request(), undefined, deps(admin));
   assert.equal(response.status, 422);
   assert.deepEqual(await response.json(), {
     error: "Choose two finished audits of the same site.",
@@ -111,7 +111,7 @@ test("mismatched hosts return the specified 422 before comparing", async () => {
 
 test("queued or running audits return 422 before comparing", async () => {
   const admin = memoryAdmin([audit(baseId), audit(headId, { status: "running" })]);
-  const response = await GET(request(), deps(admin));
+  const response = await GET(request(), undefined, deps(admin));
   assert.equal(response.status, 422);
   assert.equal((await response.json()).code, "audits_not_comparable");
   assert.deepEqual(admin.calls.rpc, []);
@@ -122,7 +122,7 @@ test("coverage warning follows the specified 10 percent and incomplete-crawl rul
     audit(baseId, { pages_crawled: 8, max_pages: 50 }),
     audit(headId, { pages_crawled: 10, max_pages: 50 }),
   ]);
-  const response = await GET(request(), deps(admin));
+  const response = await GET(request(), undefined, deps(admin));
   const body = await response.json();
   assert.equal(body.comparable, false);
   assert.deepEqual(body.warnings, [{
@@ -136,7 +136,7 @@ test("an exact 10 percent page-count difference does not warn", async () => {
     audit(baseId, { pages_crawled: 9 }),
     audit(headId, { pages_crawled: 10 }),
   ]);
-  const response = await GET(request(), deps(admin));
+  const response = await GET(request(), undefined, deps(admin));
   const body = await response.json();
   assert.equal(body.host, "example.test");
   assert.equal(body.comparable, true);
@@ -148,7 +148,7 @@ test("a max_pages mismatch alone does not warn when crawled counts and completen
     audit(baseId, { pages_crawled: 10, max_pages: 50 }),
     audit(headId, { pages_crawled: 10, max_pages: 100 }),
   ]);
-  const response = await GET(request(), deps(admin));
+  const response = await GET(request(), undefined, deps(admin));
   const body = await response.json();
   assert.equal(body.comparable, true);
   assert.deepEqual(body.warnings, []);
@@ -156,11 +156,11 @@ test("a max_pages mismatch alone does not warn when crawled counts and completen
 
 test("invalid query and disabled feature refuse before loading the comparison", async () => {
   let compareCalls = 0;
-  const invalid = await GET(request(`base=${baseId}&head=not-a-uuid`), deps({}, { getAuditCompare: async () => { compareCalls += 1; return {}; } }));
+  const invalid = await GET(request(`base=${baseId}&head=not-a-uuid`), undefined, deps({}, { getAuditCompare: async () => { compareCalls += 1; return {}; } }));
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).code, "invalid_request");
 
-  const disabled = await GET(request(), deps({}, {
+  const disabled = await GET(request(), undefined, deps({}, {
     isFeatureEnabled: async () => false,
     getAuditCompare: async () => { compareCalls += 1; return {}; },
   }));

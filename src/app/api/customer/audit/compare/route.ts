@@ -19,7 +19,7 @@ export type AuditCompareRouteDeps = RequireWorkspaceDeps & {
   getAuditCompare?: typeof getAuditCompare;
 };
 
-export async function GET(request: Request, deps?: AuditCompareRouteDeps): Promise<Response> {
+export async function GET(request: Request, _ctx?: unknown, deps?: AuditCompareRouteDeps): Promise<Response> {
   try {
     const params = Object.fromEntries(new URL(request.url).searchParams.entries());
     const input = compareQuery.parse(params);
