@@ -47,6 +47,7 @@ async function loadTracker() {
       ["@/lib/query/keys", await import("../../lib/query/keys.ts")],
       ["./scanTrackerModel", await import("./scanTrackerModel.js")],
       ["@/components/app/onboarding/useOnboardingRedirect", { decideOnboardingRedirect: () => null }],
+      ["@/lib/telemetry/client", { trackEvent() {} }],
     ]),
   });
 }

@@ -12,6 +12,7 @@ import {
 import { questionsApproveBody } from "../../../../../lib/questions/questions.contract.ts";
 import { approveQuestionPanel, type ApproveQuestionPanelDeps } from "../../../../../lib/questions/panel.ts";
 import { getQuestionsState, type StateDeps } from "../../../../../lib/questions/state.ts";
+import { captureServerEvent } from "../../../../../lib/telemetry/server.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +76,16 @@ export async function POST(
     );
 
     const state = await getQuestionsState(workspace.admin, workspace, deps);
+    try {
+      void captureServerEvent({
+        name: "questions:approved",
+        props: { version: panel.version, count: panel.questionCount },
+        userId: workspace.user.id,
+        brandKey: workspace.brandKey,
+      }).catch(() => {});
+    } catch {
+      // Telemetry never changes the response.
+    }
     return json({ panel, state }, 201);
   } catch (error) {
     return toErrorResponse(error);

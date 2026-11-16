@@ -17,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUsd } from "@/shared/pricing";
 import type { PriceQuote } from "@/shared/pricing";
+import { trackEvent } from "@/lib/telemetry/client";
 
 export type CostReviewDialogProps = {
   open: boolean;
@@ -98,6 +99,41 @@ export function CostReviewDialog({
   const bulletWarnings = (currentQuote?.warnings ?? []).filter(
     (w) => !ALERT_WARNING_CODES.has(w.code),
   );
+
+  // `price:quote_shown` once per open, the first time a quote is ready.
+  const quoteShownForOpen = React.useRef(false);
+  React.useEffect(() => {
+    if (!open) {
+      quoteShownForOpen.current = false;
+      return;
+    }
+    if (!currentQuote || quoteShownForOpen.current) return;
+    quoteShownForOpen.current = true;
+    trackEvent("price:quote_shown", {
+      action: currentQuote.action,
+      total_usd: currentQuote.totalUsd,
+      blocked_code: currentQuote.blocked?.code ?? null,
+    });
+  }, [open, currentQuote]);
+
+  // `price:changed` once per distinct changed quote.
+  const priceChangedKey = priceChanged
+    ? `${priceChanged.quote.action}|${priceChanged.approvedMaxUsd}|${priceChanged.quote.priceVersion}`
+    : null;
+  const priceChangedEmitted = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!open || !priceChanged || !priceChangedKey) {
+      priceChangedEmitted.current = null;
+      return;
+    }
+    if (priceChangedEmitted.current === priceChangedKey) return;
+    priceChangedEmitted.current = priceChangedKey;
+    trackEvent("price:changed", {
+      action: priceChanged.quote.action,
+      old_usd: priceChanged.approvedMaxUsd,
+      new_usd: priceChanged.quote.totalUsd,
+    });
+  }, [open, priceChanged, priceChangedKey]);
 
   return (
     <Dialog
@@ -256,6 +292,11 @@ export function CostReviewDialog({
             disabled={confirmDisabled}
             onClick={() => {
               if (currentQuote && !confirmDisabled) {
+                trackEvent("price:approved", {
+                  action: currentQuote.action,
+                  approved_usd: currentQuote.totalUsd,
+                  source: "dialog",
+                });
                 onConfirm(currentQuote.totalUsd);
               }
             }}

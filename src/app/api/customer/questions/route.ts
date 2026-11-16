@@ -21,6 +21,7 @@ import {
   saveQuestionPatch,
 } from "../../../../lib/questions/workspaceQuestions.ts";
 import { getQuestionsState, type StateDeps } from "../../../../lib/questions/state.ts";
+import { captureServerEvent } from "../../../../lib/telemetry/server.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -149,6 +150,16 @@ export async function PATCH(
     });
 
     const state = await getQuestionsState(workspace.admin, workspace, deps);
+    try {
+      void captureServerEvent({
+        name: "questions:added",
+        props: { origin: body.addOrigin, count: created },
+        userId: workspace.user.id,
+        brandKey: workspace.brandKey,
+      }).catch(() => {});
+    } catch {
+      // Telemetry never changes the response.
+    }
     return json(
       {
         ...state,
