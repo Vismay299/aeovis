@@ -17,6 +17,10 @@ import {
   BacklinksNewLostChart,
   BacklinksTrendChart,
 } from "./BacklinksPageCharts";
+import { TrackHistoryControl } from "./TrackHistoryControl";
+import { TrackedHistoryPanel } from "./TrackedHistoryPanel";
+import type { BacklinksSnapshot } from "@/shared/backlinks";
+import type { SnapshotInterval } from "./hooks/useSnapshotTargets";
 
 type SummaryStat = { label: string; value: string; description: string };
 
@@ -41,13 +45,22 @@ export function BacklinksScopeAlert({
     </Alert>
   );
 }
-
 export function BacklinksOverviewPanels({
   data,
   summaryStats,
+  brandKey,
+  isOwner,
+  snapshotsEnabled,
+  snapshots,
+  snapshotInterval,
 }: {
   data: BacklinksOverview;
   summaryStats: SummaryStat[];
+  brandKey: string;
+  isOwner: boolean;
+  snapshotsEnabled: boolean;
+  snapshots: BacklinksSnapshot[];
+  snapshotInterval?: SnapshotInterval | null;
 }) {
   return (
     <>
@@ -62,12 +75,27 @@ export function BacklinksOverviewPanels({
             <Badge variant="outline">Competitor</Badge>
           ) : null}
         </div>
-        <p className="ml-auto text-xs text-muted-foreground">
-          Updated {formatRelativeTimestamp(data.fetchedAt)}
-        </p>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+          {snapshotsEnabled ? (
+            <TrackHistoryControl
+              brandKey={brandKey}
+              data={data}
+              isOwner={isOwner}
+              snapshotsEnabled={snapshotsEnabled}
+            />
+          ) : null}
+          <p className="text-xs text-muted-foreground">
+            Updated {formatRelativeTimestamp(data.fetchedAt)}
+          </p>
+        </div>
       </div>
       <div className="px-4 pb-4">
-        <OverviewGrid data={data} summaryStats={summaryStats} />
+        <OverviewGrid
+          data={data}
+          summaryStats={summaryStats}
+          snapshots={snapshots}
+          snapshotInterval={snapshotInterval}
+        />
       </div>
     </>
   );
@@ -76,9 +104,13 @@ export function BacklinksOverviewPanels({
 function OverviewGrid({
   data,
   summaryStats,
+  snapshots,
+  snapshotInterval,
 }: {
   data: BacklinksOverview;
   summaryStats: SummaryStat[];
+  snapshots: BacklinksSnapshot[];
+  snapshotInterval?: SnapshotInterval | null;
 }) {
   const domainScope = data.scope === "domain" || data.scope === "subdomains";
 
@@ -115,6 +147,14 @@ function OverviewGrid({
             <BacklinksNewLostChart data={data.newLostTrends} />
           </TrendPanel>
         </>
+      ) : null}
+      {domainScope && snapshots.length > 0 ? (
+        <div className="md:col-span-2 xl:col-span-3">
+          <TrackedHistoryPanel
+            snapshots={snapshots}
+            interval={data.tracked?.interval ?? snapshotInterval}
+          />
+        </div>
       ) : null}
     </div>
   );

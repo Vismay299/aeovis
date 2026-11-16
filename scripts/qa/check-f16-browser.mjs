@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * F16 Phase 3 browser verification (F16-AC-07 browser half, F16-AC-10, F16-AC-11).
+ * F16 browser verification (F16-AC-07 browser half, F16-AC-10, F16-AC-11, F16-AC-14).
  *
  * Scenarios:
  *   B1: flag off -> empty state copy ("This page is not available for your workspace yet." / "Ask Perceev support to turn on backlinks."), sidebar link hidden.
@@ -12,8 +12,9 @@
  *   B6: expand domain -> "Loading links…" then links; second domain error shows "Couldn't load this domain's links.".
  *   B7: Ahrefs DR flag off -> no menu item and no column; on -> menu item, column fills, export gains "Ahrefs DR", failure toast.
  *   B8: 375 px viewport has no horizontal scroll; the 200-row estimate displays $0.04; export CSV includes headers.
+ *   B9: owner price-approves weekly history, views a gapped stored chart, stops tracking while preserving the chart; member has no tracking control.
  *
- * Output: "ok 9 scenarios" on pass.
+ * Output: "ok 10 scenarios" on pass.
  */
 
 import assert from "node:assert/strict";
@@ -56,7 +57,7 @@ function parseScenarioList(raw) {
   return result;
 }
 
-let requestedScenarios = ["B1", "B2", "B3", "B2A", "B4", "B5", "B6", "B7", "B8"];
+let requestedScenarios = ["B1", "B2", "B3", "B2A", "B4", "B5", "B6", "B7", "B8", "B9"];
 for (let i = 0; i < process.argv.length; i++) {
   if (process.argv[i].startsWith("--only=")) {
     requestedScenarios = parseScenarioList(process.argv[i].split("=")[1]);
@@ -1145,6 +1146,233 @@ try {
         csvContent.includes(h),
         `Exported CSV must include header "${h}"`,
       );
+    }
+  });
+
+  await recordScenario("B9", "owner approves tracked history, stored chart keeps gaps after stopping, member cannot manage tracking", async () => {
+    const snapshots = [
+      {
+        target: "offcult.in",
+        scope: "subdomains",
+        capturedOn: "2026-10-01",
+        source: "scheduled",
+        rank: 21,
+        backlinks: 4100,
+        referringDomains: 310,
+        referringPages: 2950,
+        brokenBacklinks: 13,
+        brokenPages: 3,
+        newBacklinks: 70,
+        lostBacklinks: 35,
+        newReferringDomains: 7,
+        lostReferringDomains: 4,
+        backlinksSpamScore: 12,
+        targetSpamScore: 4,
+      },
+      {
+        target: "offcult.in",
+        scope: "subdomains",
+        capturedOn: "2026-10-15",
+        source: "scheduled",
+        rank: 22,
+        backlinks: 4120,
+        referringDomains: 312,
+        referringPages: 2980,
+        brokenBacklinks: 14,
+        brokenPages: 3,
+        newBacklinks: 85,
+        lostBacklinks: 40,
+        newReferringDomains: 9,
+        lostReferringDomains: 5,
+        backlinksSpamScore: 12,
+        targetSpamScore: 4,
+      },
+    ];
+
+    const activeTarget = {
+      id: "snapshot-target-1",
+      target: "offcult.in",
+      scope: "subdomains",
+      label: null,
+      interval: "weekly",
+      enabled: true,
+      nextRunAt: "2026-10-22T00:00:00.000Z",
+      lastRunAt: "2026-10-15T00:00:00.000Z",
+      lastSkipReason: null,
+      lastSkipMessage: null,
+    };
+
+    async function runRolePage({ member = false } = {}) {
+      const membership = member
+        ? [{
+            brand_key: "beta",
+            role: "member",
+            customer_brands: { brand_key: "beta", display_name: "Beta", website: "https://beta.example", is_active: true },
+          }]
+        : undefined;
+      const { context, page } = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+        ...(membership ? { fixtures: { memberships: membership } } : {}),
+      });
+      let isTracked = member;
+      const writes = [];
+      const overviewRequests = [];
+
+      await page.route(/\/api\/customer\/features/, async (route) => {
+        const brandKey = new URL(route.request().url()).searchParams.get("brand_key") || (member ? "beta" : "acme");
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            brandKey,
+            features: { backlinks: true, backlinks_ahrefs_dr: false, backlink_snapshots: true },
+          }),
+        });
+      });
+
+      await page.route(/\/api\/customer\/price\/estimate/, async (route) => {
+        const body = route.request().postDataJSON() || {};
+        if (body.action === "backlinks.snapshots.track") {
+          const interval = body.input?.interval ?? "weekly";
+          const totalUsd = 0.024036;
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              ...lookupQuoteFixture,
+              action: "backlinks.snapshots.track",
+              totalUsd,
+              expectedUsd: totalUsd,
+              monthly: {
+                interval,
+                runsPerMonth: interval === "weekly" ? 4 : 1,
+                totalUsd: interval === "weekly" ? 0.096144 : totalUsd,
+              },
+              lines: [{ label: "Backlink summary", quantity: 1, unitUsd: totalUsd, totalUsd }],
+            }),
+          });
+        }
+        return route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify(lookupQuoteFixture),
+        });
+      });
+
+      await page.route(/\/api\/customer\/backlinks\//, async (route) => {
+        const req = route.request();
+        const url = new URL(req.url());
+        const postData = req.postDataJSON() || {};
+        if (url.pathname === "/api/customer/backlinks/overview") {
+          overviewRequests.push(postData);
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({
+              ...overviewOkFixture,
+              tracked: isTracked ? { interval: "weekly", nextRunAt: activeTarget.nextRunAt } : null,
+            }),
+          });
+        }
+        if (url.pathname === "/api/customer/backlinks/snapshot-targets") {
+          if (req.method() === "GET") {
+            return route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify({ targets: isTracked ? [activeTarget] : [] }),
+            });
+          }
+          if (req.method() === "POST") {
+            const body = postData;
+            writes.push({ method: "POST", body });
+            assert.equal(body.interval, "weekly");
+            assert.equal(body.scope, "subdomains");
+            assert.equal(body.maxUsd, 0.024036);
+            isTracked = true;
+            return route.fulfill({
+              status: 201,
+              contentType: "application/json",
+              body: JSON.stringify({ target: activeTarget }),
+            });
+          }
+        }
+        if (url.pathname === "/api/customer/backlinks/snapshot-targets/snapshot-target-1" && req.method() === "DELETE") {
+          writes.push({ method: "DELETE" });
+          isTracked = false;
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ deleted: true }),
+          });
+        }
+        if (url.pathname === "/api/customer/backlinks/snapshots") {
+          return route.fulfill({
+            status: 200,
+            contentType: "application/json",
+            body: JSON.stringify({ snapshots }),
+          });
+        }
+        if (url.pathname === "/api/customer/backlinks/rows") {
+          return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(rowsOkFixture) });
+        }
+        if (url.pathname === "/api/customer/backlinks/referring-domains") {
+          return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(referringDomainsOkFixture) });
+        }
+        if (url.pathname === "/api/customer/backlinks/top-pages") {
+          return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(topPagesOkFixture) });
+        }
+        return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ status: "ok" }) });
+      });
+
+      await page.goto(new URL("/portal/backlinks?target=offcult.in&scope=subdomains", origin).href);
+      await page.getByText("4,120").waitFor({ state: "visible", timeout: 15000 });
+      await page.getByRole("columnheader", { name: "Source" }).waitFor({ state: "visible", timeout: 10000 });
+      return { context, page, writes, overviewRequests };
+    }
+
+    {
+      const owner = await runRolePage();
+      try {
+        const trackButton = owner.page.getByRole("button", { name: /Track history/i });
+        await trackButton.waitFor({ state: "visible", timeout: 10000 });
+        await trackButton.click();
+        await owner.page.getByRole("heading", { name: "Track backlink history" }).waitFor({ state: "visible" });
+        assert.equal(await owner.page.getByRole("radio", { name: "Weekly" }).getAttribute("aria-checked"), "true");
+        const monthlyProjection = owner.page.getByText(/estimated per month if it runs weekly\./);
+        await monthlyProjection.waitFor({ state: "visible", timeout: 10000 });
+        assert.match(await monthlyProjection.innerText(), /\$0\.0961 estimated per month if it runs weekly\./);
+        assert.ok(await owner.page.getByText("Takes one backlink summary per period for offcult.in. Viewing saved history is free.", { exact: true }).isVisible());
+        await owner.page.getByRole("button", { name: "Start tracking" }).click();
+
+        await owner.page.getByText("History tracked · Weekly", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+        await owner.page.getByText("Saved weekly since Oct 1, 2026. Free to view.", { exact: true }).waitFor({ state: "visible", timeout: 10000 });
+        const accessibleTable = owner.page.locator("table").filter({ has: owner.page.getByText("Tracked backlink trend data") });
+        const gapRow = accessibleTable.getByRole("row").filter({ hasText: "2026-10-08" });
+        await gapRow.waitFor({ state: "attached", timeout: 5000 });
+        assert.match(await gapRow.innerText(), /2026-10-08\s+—\s+—/);
+
+        await owner.page.getByRole("button", { name: "History tracking actions" }).click();
+        await owner.page.getByRole("menuitem", { name: "Stop tracking" }).click();
+        await owner.page.getByRole("heading", { name: "Stop tracking history?" }).waitFor({ state: "visible" });
+        await owner.page.getByText("Saved snapshots are kept for 25 months.", { exact: true }).waitFor({ state: "visible" });
+        await owner.page.getByRole("button", { name: "Stop tracking", exact: true }).click();
+        await owner.page.getByRole("button", { name: /Track history/i }).waitFor({ state: "visible", timeout: 10000 });
+        assert.equal(await accessibleTable.getByRole("row").filter({ hasText: "2026-10-08" }).count(), 1, "stored chart and its gap remain after tracking stops");
+        assert.equal(owner.writes.length, 2, "B9 performs only the fixture POST and DELETE writes");
+        assert.ok(owner.overviewRequests.every((request) => request.cacheOnly === true), "snapshot controls must not trigger a paid overview fetch");
+      } finally {
+        await owner.context.close().catch(() => {});
+      }
+    }
+
+    {
+      const member = await runRolePage({ member: true });
+      try {
+        assert.equal(await member.page.getByRole("button", { name: /Track history|History tracking actions/ }).count(), 0);
+        assert.equal(await member.page.getByText("History tracked · Weekly", { exact: true }).count(), 1);
+      } finally {
+        await member.context.close().catch(() => {});
+      }
     }
   });
 

@@ -6,6 +6,7 @@ import {
   getBacklinksOverviewTool,
   listBacklinksTool,
   listReferringDomainsTool,
+  getBacklinkHistoryTool,
   type BacklinksToolContext,
 } from "./tools.ts";
 
@@ -23,7 +24,7 @@ function makeContext(over: Partial<BacklinksToolContext> = {}): BacklinksToolCon
 test("backlinks tools carry expected names and descriptions", () => {
   assert.deepEqual(
     backlinksTools.map((t) => t.name),
-    ["get_backlinks_overview", "list_backlinks", "list_referring_domains"],
+    ["get_backlinks_overview", "list_backlinks", "list_referring_domains", "get_backlink_history"],
   );
   assert.equal(
     getBacklinksOverviewTool.description,
@@ -36,6 +37,14 @@ test("backlinks tools carry expected names and descriptions", () => {
   assert.equal(
     listReferringDomainsTool.description,
     "Fetch referring domains pointing to a domain or subdomains target. Paid tool; pass maxUsd to confirm approval.",
+  );
+});
+
+test("get_backlink_history is closed and refuses without workspace storage", async () => {
+  assert.equal(getBacklinkHistoryTool.input.safeParse({ target: "offcult.in", scope: "subdomains", extra: true }).success, false);
+  await assert.rejects(
+    getBacklinkHistoryTool.handler(makeContext(), { target: "offcult.in", scope: "subdomains" }),
+    (error: any) => error.code === "snapshots_unavailable",
   );
 });
 

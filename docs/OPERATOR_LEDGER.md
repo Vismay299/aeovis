@@ -686,6 +686,17 @@ abandoned is not.
 - Migration 112 creates `rank_keyword_questions` with tenant RLS and foreign keys, plus `rank_question_aio_status` returning latest Google AI Overview status per question.
 - Verify with scripts/qa/check-f15-db.mjs against a loopback _qa database and tests/customer-uat.sql.
 
+### `115_f16_backlink_snapshots` (F16 phase 5)
+- Status: implemented in repo; NOT YET APPLIED to production.
+- Apply 115 before deploying F16 phase 5.
+- Creates `backlink_snapshot_targets` and `backlink_snapshots`, the `f16_snapshot_target_cap` trigger function (20 enabled targets per workspace), and `prune_backlink_snapshots` (25-month retention). Both tables use tenant-scoped member read policies; writes are service-role only.
+- Verify with `scripts/qa/check-f16-db.mjs` against a loopback `_qa` database and `tests/customer-uat.sql`.
+
+### `127_f18_site_audit_compare` (F18 phase 8)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply after `126_f18_site_audit_functions.sql` before deploying F18 phase 8. The migration is additive and safe to re-apply, including after migration 170; it creates the service-role-only `site_audit_compare` function.
+- Verify locally on a disposable loopback database by applying it twice and running `scripts/qa/check-f18-db.mjs`.
+
 ### `145_f22_assistant_sessions`, `146_f22_assistant_stream_chunks`, `147_f22_assistant_approvals`, `148_f22_gsc_query_summary` and `149_f22_assistant_milestone_fix` (F22 phase 2)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply 145, 146, 147, then 148, **before deploying F22 phase 2**. All additive; no data backfill.
