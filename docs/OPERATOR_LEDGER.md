@@ -692,6 +692,11 @@ abandoned is not.
 - Creates `backlink_snapshot_targets` and `backlink_snapshots`, the `f16_snapshot_target_cap` trigger function (20 enabled targets per workspace), and `prune_backlink_snapshots` (25-month retention). Both tables use tenant-scoped member read policies; writes are service-role only.
 - Verify with `scripts/qa/check-f16-db.mjs` against a loopback `_qa` database and `tests/customer-uat.sql`.
 
+### `127_f18_site_audit_compare` (F18 phase 8)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply after `126_f18_site_audit_functions.sql` before deploying F18 phase 8. The migration is additive and safe to re-apply, including after migration 170; it creates the service-role-only `site_audit_compare` function.
+- Verify locally on a disposable loopback database by applying it twice and running `scripts/qa/check-f18-db.mjs`.
+
 ## D. Content approval — the human gate, and what it does not yet do
 
 The content pipeline is human-in-the-loop by design. `POST /api/content-items/[id]/decision`

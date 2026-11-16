@@ -1865,3 +1865,12 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - **Pre-check:** `select to_regclass('public.backlink_snapshot_targets'), to_regclass('public.backlink_snapshots');` returns two nulls.
 - **Applied-check:** both table names resolve; `pg_proc` contains `f16_snapshot_target_cap` and `prune_backlink_snapshots`.
 - **Apply:** migration 115 is numerically below 170. It is safe after 170 as well as on a fresh database; apply it twice in local QA before deployment. Do not use the loopback QA harness against production.
+
+## `127_f18_site_audit_compare.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply after `126_f18_site_audit_functions.sql` and before deploying F18 phase 8. It is safe to apply on a fresh schema, more than once, and after migration 170.
+- **Additive only.** Creates the service-role-only `site_audit_compare` function, which returns per-issue-type before/after page counts and capped new/fixed page URL lists for two audits in one workspace.
+- **Pre-check:** `select to_regprocedure('public.site_audit_compare(text,uuid,uuid,integer)');` returns null.
+- **Applied-check:** the same query returns `site_audit_compare(text,uuid,uuid,integer)`; `has_function_privilege('authenticated', 'public.site_audit_compare(text,uuid,uuid,integer)', 'EXECUTE')` is false.
+- **Rollback:** leaving the function in place after reverting F18 phase 8 is harmless; it is unused.
+- **Verify locally:** apply it twice to a disposable loopback `*_qa` database and run `scripts/qa/check-f18-db.mjs`. Never run that harness against production.

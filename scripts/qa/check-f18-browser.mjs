@@ -19,8 +19,9 @@
  *   B10 375 px viewport has no horizontal page scroll
  *   B11 lighthouse detail renders scores and filters by category
  *   B12 render switch shows the estimate; disabled copy when not configured
+ *   B13 two same-host audits compare in chronological order with coverage and URL details
  *
- * Output: "F18 browser: 12/12 passed" on pass.
+ * Output: "F18 browser: 13/13 passed" on pass.
  */
 
 import assert from "node:assert/strict";
@@ -60,7 +61,7 @@ assert.ok(
 const port = parseInt(origin.port || "3328", 10);
 const base = origin.href.replace(/\/$/, "");
 
-let requested = ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "B11", "B12"];
+let requested = ["B01", "B02", "B03", "B04", "B05", "B06", "B07", "B08", "B09", "B10", "B11", "B12", "B13"];
 for (let i = 0; i < process.argv.length; i++) {
   if (process.argv[i].startsWith("--only=")) {
     requested = process.argv[i].split("=")[1].split(",").map((s) => s.trim());
@@ -149,6 +150,41 @@ async function installAuditApi(page, options = {}) {
     pages = fixture("audit-pages.json"),
     performance = fixture("audit-performance.json"),
     price = fixture("price-quote.json"),
+    compare = {
+      host: "offcult.in",
+      base: {
+        id: COMPLETED_ID,
+        createdAt: "2026-11-11T09:00:00.000Z",
+        pagesCrawled: 40,
+        maxPages: 50,
+        crawlCompleted: true,
+      },
+      head: {
+        id: AUDIT_ID,
+        createdAt: "2026-11-13T09:00:00.000Z",
+        pagesCrawled: 52,
+        maxPages: 60,
+        crawlCompleted: true,
+      },
+      comparable: false,
+      warnings: [
+        {
+          code: "coverage_differs",
+          message:
+            "These audits crawled different numbers of pages (40 and 52), so some changes may come from coverage, not fixes.",
+        },
+      ],
+      rows: [
+        {
+          issueType: "missing-title",
+          severity: "warning",
+          basePages: 4,
+          headPages: 2,
+          newPages: ["https://offcult.in/new-page"],
+          fixedPages: ["https://offcult.in/fixed-page"],
+        },
+      ],
+    },
     start,
     cancel,
     features = FEATURES,
@@ -230,6 +266,10 @@ async function installAuditApi(page, options = {}) {
   await page.route(
     (url) => url.pathname === "/api/customer/price/estimate",
     (route) => jsonResponse(route, price),
+  );
+  await page.route(
+    (url) => url.pathname === "/api/customer/audit/compare",
+    (route) => jsonResponse(route, value(compare, new URL(route.request().url()))),
   );
 
   // The shell read the harness's feature flags during sign-in; clear the cache
@@ -470,6 +510,112 @@ scenario("B12", async (page) => {
   await page.getByRole("switch", { name: "Render JavaScript" }).waitFor({ timeout: 10000 });
   assert.equal(await page.getByRole("switch", { name: "Render JavaScript" }).isDisabled(), true);
   await page.getByText("JavaScript rendering isn't available right now.").waitFor({ timeout: 10000 });
+});
+
+scenario("B13", async (page) => {
+  const olderId = COMPLETED_ID;
+  const newerId = AUDIT_ID;
+  const otherHostId = "9c4a5f6e-3d7b-4c2a-8e1f-5a6b7c8d9e0f";
+  const baseList = fixture("audit-list.json");
+  const older = {
+    ...baseList.audits.find((audit) => audit.id === COMPLETED_ID),
+    createdAt: "2026-11-11T09:00:00.000Z",
+  };
+  const newer = {
+    ...baseList.audits[0],
+    id: newerId,
+    status: "completed",
+    pagesCrawled: 52,
+    pagesTotal: 52,
+    createdAt: "2026-11-13T09:00:00.000Z",
+    completedAt: "2026-11-13T09:01:12.000Z",
+  };
+  const otherHost = {
+    ...newer,
+    id: otherHostId,
+    startUrl: "https://other.example/",
+    createdAt: "2026-11-14T09:00:00.000Z",
+  };
+  const compareList = {
+    ...baseList,
+    audits: [older, newer, otherHost],
+  };
+
+  await page.unrouteAll({ behavior: "wait" });
+  await installAuditApi(page, {
+    list: compareList,
+    compare: {
+      host: "offcult.in",
+      base: {
+        id: olderId,
+        createdAt: older.createdAt,
+        pagesCrawled: 40,
+        maxPages: 50,
+        crawlCompleted: true,
+      },
+      head: {
+        id: newerId,
+        createdAt: newer.createdAt,
+        pagesCrawled: 52,
+        maxPages: 60,
+        crawlCompleted: true,
+      },
+      comparable: false,
+      warnings: [
+        {
+          code: "coverage_differs",
+          message:
+            "These audits crawled different numbers of pages (40 and 52), so some changes may come from coverage, not fixes.",
+        },
+      ],
+      rows: [
+        {
+          issueType: "missing-title",
+          severity: "warning",
+          basePages: 4,
+          headPages: 2,
+          newPages: ["https://offcult.in/new-page"],
+          fixedPages: ["https://offcult.in/fixed-page"],
+        },
+      ],
+    },
+  });
+
+  await gotoLaunch(page);
+  const olderRow = page.locator("tr").filter({
+    has: page.locator(`a[href="/portal/audit/${olderId}"]`),
+  });
+  const newerRow = page.locator("tr").filter({
+    has: page.locator(`a[href="/portal/audit/${newerId}"]`),
+  });
+  const otherHostRow = page.locator("tr").filter({
+    has: page.locator(`a[href="/portal/audit/${otherHostId}"]`),
+  });
+
+  const compareButton = page.getByRole("button", { name: "Compare 2 audits" });
+  assert.equal(await compareButton.isDisabled(), true);
+  await newerRow.getByRole("checkbox", { name: "Compare" }).check();
+  assert.equal(await otherHostRow.getByRole("checkbox", { name: "Compare" }).isDisabled(), true);
+  await olderRow.getByRole("checkbox", { name: "Compare" }).check();
+  await compareButton.click();
+  await page.waitForURL(
+    new RegExp(`/portal/audit/compare\\?base=${olderId}&head=${newerId}$`),
+    { timeout: 10000 },
+  );
+
+  await page.getByRole("heading", { name: "Compare audits" }).waitFor();
+  await page.getByText("offcult.in: Nov 11, 2026 → Nov 13, 2026").waitFor();
+  await page
+    .getByText(
+      "These audits crawled different numbers of pages (40 and 52), so some changes may come from coverage, not fixes.",
+    )
+    .waitFor();
+  await page.getByRole("columnheader", { name: "Before (pages)" }).waitFor();
+  await page.getByRole("cell", { name: "−2" }).waitFor();
+  await page.getByText("New (1)").click();
+  await page.getByText("https://offcult.in/new-page", { exact: true }).waitFor();
+  await page.getByText("Fixed (1)").click();
+  await page.getByText("https://offcult.in/fixed-page", { exact: true }).waitFor();
 });
 
 scenario("B10", async (page) => {
