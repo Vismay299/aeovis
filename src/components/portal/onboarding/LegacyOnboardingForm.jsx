@@ -3,9 +3,12 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Info } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import AuthLayout from "@/components/portal/AuthLayout";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
 export default function LegacyOnboardingForm() {
   const router = useRouter();
@@ -79,7 +82,7 @@ export default function LegacyOnboardingForm() {
         titleId="onboarding-title"
         subtitle="Tell us which brand to track. You can change this later."
       >
-        <p className="pv-auth-loading">Loading workspace setup…</p>
+        <p className="text-sm text-muted-foreground">Loading workspace setup…</p>
       </AuthLayout>
     );
   }
@@ -90,29 +93,27 @@ export default function LegacyOnboardingForm() {
       title="Set up your workspace"
       titleId="onboarding-title"
       subtitle="Tell us which brand to track. You can change this later."
-      footer={<>Already invited to a workspace? <Link href="/portal">Open your workspace</Link>.</>}
+      footer={<>Already invited to a workspace? <Link href="/portal" className="font-medium text-foreground underline underline-offset-2 hover:text-foreground/80">Open your workspace</Link>.</>}
     >
-      <form onSubmit={createWorkspace}>
-        <div className="pv-field">
-          <label className="pv-label" htmlFor="brand-name">Company or brand name</label>
-          <input className="pv-input" id="brand-name" autoComplete="organization" maxLength={120} required value={brandName} onChange={(event) => setBrandName(event.target.value)} />
-          <span className="pv-hint">The brand whose visibility in AI answers you want to track.</span>
-        </div>
-        <div className="pv-field">
-          <label className="pv-label" htmlFor="website">Website</label>
-          <input className="pv-input" id="website" type="url" autoComplete="url" required value={website} onChange={(event) => setWebsite(event.target.value)} placeholder="https://example.com" />
-          <span className="pv-hint">Your main site. You can connect Google Search Console later from your workspace.</span>
-        </div>
-        <button className="pv-btn pv-btn--primary pv-btn--block" type="submit" disabled={saving}>
-          {saving ? <span className="pv-spinner" aria-hidden="true" /> : null}
+      <form onSubmit={createWorkspace} className="space-y-4">
+        <Field>
+          <FieldLabel htmlFor="brand-name">Company or brand name</FieldLabel>
+          <Input id="brand-name" autoComplete="organization" maxLength={120} required value={brandName} onChange={(event) => setBrandName(event.target.value)} className="border-foreground/20 bg-card text-base md:text-base" />
+          <span className="text-xs text-muted-foreground">The brand whose visibility in AI answers you want to track.</span>
+        </Field>
+        <Field>
+          <FieldLabel htmlFor="website">Website</FieldLabel>
+          <Input id="website" type="url" autoComplete="url" required value={website} onChange={(event) => setWebsite(event.target.value)} placeholder="https://example.com" className="border-foreground/20 bg-card text-base md:text-base" />
+          <span className="text-xs text-muted-foreground">Your main site. You can connect Google Search Console later from your workspace.</span>
+        </Field>
+        <Button className="w-full font-semibold" type="submit" pending={saving} disabled={saving}>
           {saving ? "Creating workspace…" : "Create workspace"}
-        </button>
+        </Button>
       </form>
       {message ? (
-        <div className="pv-banner pv-banner--info" role="status">
-          <Info aria-hidden="true" />
-          <div className="pv-banner__body">{message}</div>
-        </div>
+        <Alert variant="info" role="status">
+          <AlertDescription>{message}</AlertDescription>
+        </Alert>
       ) : null}
     </AuthLayout>
   );

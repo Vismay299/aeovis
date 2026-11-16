@@ -6,16 +6,28 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { Trash2, UserPlus, Users } from "lucide-react";
+import { UserPlus, Users } from "lucide-react";
 import { usePortal } from "../PortalShell";
 import { Badge, Banner, Button, Card, PageHeader, SkeletonRows, formatRelative } from "../ui";
-import "./team.css";
+import { InlineConfirm } from "@/components/app/InlineConfirm";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function initialOf(email) {
   return (email || "?").trim().slice(0, 1).toUpperCase() || "?";
 }
+
+const AVATAR_CLASSES =
+  "grid size-[30px] shrink-0 place-items-center rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground";
 
 export default function TeamPage() {
   const { brandKey, isOwner, user, redirectToLogin } = usePortal();
@@ -78,7 +90,6 @@ export default function TeamPage() {
 
   async function removeMember(member) {
     const label = member.email || "this member";
-    if (!window.confirm(`Remove ${label} from this workspace? They will lose access right away.`)) return;
     setRemovingId(member.user_id);
     setBanner(null);
     try {
@@ -100,23 +111,23 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="pv-page">
+    <>
       <PageHeader title="Team" description="People who can see this workspace." />
 
       {!isOwner ? (
         <Banner tone="info">Only workspace owners can manage the team.</Banner>
       ) : (
-        <div className="pv-stack">
+        <div className="space-y-5">
           {banner ? (
             <Banner tone={banner.tone} onDismiss={() => setBanner(null)}>{banner.text}</Banner>
           ) : null}
 
           <Card title="Invite a teammate" description="They receive an email with a link to join this workspace.">
-            <form className="pv-team-invite" onSubmit={sendInvite}>
+            <form className="flex flex-wrap items-center gap-2" onSubmit={sendInvite}>
               <label className="sr-only" htmlFor="pv-team-invite-email">Email address</label>
-              <input
+              <Input
                 id="pv-team-invite-email"
-                className="pv-input pv-team-invite__input"
+                className="max-w-md flex-1 basis-64"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -144,97 +155,91 @@ export default function TeamPage() {
             <>
               <Card title="Members" description={`${team.members?.length || 0} with access`} flush>
                 {team.members?.length ? (
-                  <div className="pv-table-wrap">
-                    <table className="pv-table pv-team-table">
-                      <thead>
-                        <tr>
-                          <th scope="col">Member</th>
-                          <th scope="col">Role</th>
-                          <th scope="col"><span className="sr-only">Actions</span></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {team.members.map((member) => {
-                          const isSelf = member.user_id === user?.id;
-                          return (
-                            <tr key={member.user_id}>
-                              <td>
-                                <div className="pv-team-person">
-                                  <span className="pv-team-avatar" aria-hidden="true">{initialOf(member.email)}</span>
-                                  <span className="pv-team-person__text">
-                                    <span className="pv-team-person__email">{member.email || "Unknown address"}</span>
-                                    {isSelf ? <span className="pv-team-person__you">(you)</span> : null}
-                                  </span>
-                                </div>
-                              </td>
-                              <td>
-                                <Badge tone={member.role === "owner" ? "brand" : "neutral"}>
-                                  {member.role === "owner" ? "Owner" : "Member"}
-                                </Badge>
-                              </td>
-                              <td className="pv-team-table__action">
-                                {!isSelf ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    icon={Trash2}
-                                    className="pv-team-remove"
-                                    loading={removingId === member.user_id}
-                                    disabled={!!removingId}
-                                    onClick={() => removeMember(member)}
-                                  >
-                                    Remove
-                                  </Button>
-                                ) : null}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead scope="col">Member</TableHead>
+                        <TableHead scope="col">Role</TableHead>
+                        <TableHead scope="col"><span className="sr-only">Actions</span></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {team.members.map((member) => {
+                        const isSelf = member.user_id === user?.id;
+                        const address = member.email || "this member";
+                        return (
+                          <TableRow key={member.user_id}>
+                            <TableCell>
+                              <div className="flex min-w-0 items-center gap-3">
+                                <span className={AVATAR_CLASSES} aria-hidden="true">{initialOf(member.email)}</span>
+                                <span className="flex min-w-0 flex-wrap items-baseline gap-1.5">
+                                  <span className="truncate font-medium text-foreground">{member.email || "Unknown address"}</span>
+                                  {isSelf ? <span className="text-xs text-muted-foreground">(you)</span> : null}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge tone={member.role === "owner" ? "brand" : "neutral"}>
+                                {member.role === "owner" ? "Owner" : "Member"}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="w-px whitespace-nowrap text-right">
+                              {!isSelf ? (
+                                <InlineConfirm
+                                  label={`Remove ${address}`}
+                                  pending={removingId === member.user_id}
+                                  disabled={!!removingId && removingId !== member.user_id}
+                                  onConfirm={() => removeMember(member)}
+                                />
+                              ) : null}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 ) : (
-                  <div className="pv-team-empty"><Users aria-hidden="true" />No members yet.</div>
+                  <div className="flex items-center justify-center gap-2 px-4 py-7 text-sm text-muted-foreground">
+                    <Users aria-hidden="true" className="size-4" />No members yet.
+                  </div>
                 )}
               </Card>
 
               {team.pending_invites?.length ? (
                 <Card title="Pending invites" description="Waiting for the recipient to accept." flush>
-                  <div className="pv-table-wrap">
-                    <table className="pv-table pv-team-table">
-                      <thead>
-                        <tr>
-                          <th scope="col">Email</th>
-                          <th scope="col">Role</th>
-                          <th scope="col">Sent</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {team.pending_invites.map((invite) => (
-                          <tr key={invite.id}>
-                            <td>
-                              <div className="pv-team-person">
-                                <span className="pv-team-avatar pv-team-avatar--pending" aria-hidden="true">{initialOf(invite.email)}</span>
-                                <span className="pv-team-person__email">{invite.email}</span>
-                              </div>
-                            </td>
-                            <td>
-                              <Badge tone={invite.role === "owner" ? "brand" : "neutral"}>
-                                {invite.role === "owner" ? "Owner" : "Member"}
-                              </Badge>
-                            </td>
-                            <td className="pv-muted">{invite.created_at ? `Invite sent ${formatRelative(invite.created_at)}` : "Invite sent"}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead scope="col">Email</TableHead>
+                        <TableHead scope="col">Role</TableHead>
+                        <TableHead scope="col">Sent</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {team.pending_invites.map((invite) => (
+                        <TableRow key={invite.id}>
+                          <TableCell>
+                            <div className="flex min-w-0 items-center gap-3">
+                              <span className={AVATAR_CLASSES + " border-dashed bg-card text-muted-foreground"} aria-hidden="true">{initialOf(invite.email)}</span>
+                              <span className="truncate font-medium text-foreground">{invite.email}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge tone={invite.role === "owner" ? "brand" : "neutral"}>
+                              {invite.role === "owner" ? "Owner" : "Member"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">{invite.created_at ? `Invite sent ${formatRelative(invite.created_at)}` : "Invite sent"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </Card>
               ) : null}
             </>
           ) : null}
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -11,7 +11,6 @@ import ComposerCard from "./ComposerCard";
 import GenerationQueue from "./GenerationQueue";
 import DraftsLibrary from "./DraftsLibrary";
 import DraftEditor from "./DraftEditor";
-import "./content.css";
 import { AgentsPanel } from "@/components/studio/AgentsPanel";
 import { AgentCanvas } from "@/components/studio/AgentCanvas";
 
@@ -166,19 +165,34 @@ export default function ContentStudio() {
         </Banner>
       ) : null}
 
-      <div className="pv-content-tabs" role="tablist" aria-label="Content Studio views">
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Content Studio views">
         {[ ["workspace", "Workspace & canvas"], ["drafts", "Drafts"], ["agents", "Agents & crew canvas"] ].map(([key, label]) => (
-          <button key={key} role="tab" aria-selected={studioTab === key} onClick={() => setStudioTab(key)}>{label}</button>
+          <button
+            key={key}
+            role="tab"
+            className={
+              "inline-flex items-center justify-center rounded-lg border px-4 py-2 text-sm font-medium transition-colors "
+              + (studioTab === key
+                ? "border-primary/30 bg-primary/10 text-primary"
+                : "border-border bg-card text-muted-foreground hover:text-foreground")
+            }
+            aria-selected={studioTab === key}
+            onClick={() => setStudioTab(key)}
+          >{label}</button>
         ))}
       </div>
       {studioTab === "workspace" ? <Card title="Content workflow" description="Research, draft and review, with your approval before anything is published.">
         <AgentCanvas run={{ status: jobs?.find(isActive)?.status, query: jobs?.find(isActive)?.input?.query }} />
       </Card> : null}
-      {studioTab === "workspace" || studioTab === "agents" ? <section className="pv-studio-agents" aria-label="Workspace agents"><AgentsPanel key={brandKey} brand={brandKey} customer apiBase="/api/customer/agents" onRun={(agent) => { setSelectedAgent(agent); focusComposer(); }} /></section> : null}
-      <div hidden={studioTab !== "drafts"} className="pv-grid pv-grid--main-side pv-content-layout">
-        <div className="pv-content-main">
+      {studioTab === "workspace" || studioTab === "agents" ? <section className="min-w-0" aria-label="Workspace agents"><AgentsPanel key={brandKey} brand={brandKey} customer apiBase="/api/customer/agents" onRun={(agent) => { setSelectedAgent(agent); focusComposer(); }} /></section> : null}
+      <div
+        hidden={studioTab !== "drafts"}
+        style={studioTab === "drafts" ? undefined : { display: "none" }}
+        className="grid gap-5 lg:grid-cols-2"
+      >
+        <div className="min-w-0 space-y-4">
           {notices.length ? (
-            <div className="pv-content-notices">
+            <div className="space-y-2.5">
               {notices.map((notice) => (
                 <Banner
                   key={notice.key}
@@ -217,7 +231,7 @@ export default function ContentStudio() {
           )}
         </div>
 
-        <div className="pv-stack">
+        <div className="space-y-5">
           <ComposerCard
             initialTopic={searchParams.get("topic") || ""}
             selectedAgent={selectedAgent}

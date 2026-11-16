@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "../../worker/node_modules/playwright/index.mjs";
-import { openPortal, readFixture } from "./portalFixtureHarness.mjs";
+import { openAuth, openPortal, readFixture } from "./portalFixtureHarness.mjs";
 
 const origin = new URL(process.argv[2] || "http://127.0.0.1:3328");
 assert.ok(
@@ -374,73 +374,167 @@ try {
 
   await record(
     "F04-B07",
-    "App routes (/portal, /portal/scans, /portal/scans/scan-1, /portal/measurement) carry exactly one h1, no horizontal scroll at 390px, and no legacy pv-app, pv-sidebar, pv-page-header classes.",
+    "Every app route F04 migrates (/portal, /portal/scans, /portal/scans/scan-1, /portal/measurement, /portal/content, /portal/search-console, /portal/team, /portal/settings, /onboarding and the signed-out auth pages) carries exactly one h1, no horizontal scroll at 390px, and no legacy pv-app, pv-sidebar, pv-page-header or pv-auth classes.",
     async (artifacts) => {
-      const routes = [
+      const workspaceRoutes = [
         "/portal",
         "/portal/scans",
         "/portal/scans/scan-1",
         "/portal/measurement",
+        "/portal/content",
+        "/portal/search-console",
+        "/portal/team",
+        "/portal/settings",
+      ];
+      const authRoutes = [
+        "/login",
+        "/signup",
+        "/auth/forgot",
+        "/auth/verify",
+        "/auth/error",
+        "/auth/reset",
+        "/auth/accept",
       ];
       const viewports = [
         { width: 1440, height: 1000, name: "1440" },
         { width: 390, height: 844, name: "390" },
       ];
+      const legacySelector = ".pv-app, .pv-sidebar, .pv-page-header, .pv-auth";
+
+      async function checkRoute(page, route, vp) {
+        await page.goto(new URL(route, origin).href, { waitUntil: "networkidle" });
+
+        const h1Count = await page.locator("h1").count();
+        assert.equal(
+          h1Count,
+          1,
+          `${route} at ${vp.name} must have exactly one h1, found ${h1Count}`
+        );
+
+        if (vp.width === 390) {
+          const overflow = await page.evaluate(() => {
+            const doc = document.documentElement;
+            return {
+              scrollWidth: doc.scrollWidth,
+              innerWidth: window.innerWidth,
+            };
+          });
+          assert.ok(
+            overflow.scrollWidth <= overflow.innerWidth + 1,
+            `${route} at 390 horizontally overflows: scrollWidth ${overflow.scrollWidth} > innerWidth ${overflow.innerWidth} + 1`
+          );
+        }
+
+        const legacyCount = await page.locator(legacySelector).count();
+        assert.equal(
+          legacyCount,
+          0,
+          `${route} at ${vp.name} still contains legacy classes (${legacySelector}): found ${legacyCount}`
+        );
+
+        const safeName = route.replace(/\//g, "-").replace(/^-/, "");
+        const shotName = `f04-p6-${safeName}-${vp.name}.png`;
+        await page.screenshot({ path: path.join(output, shotName), fullPage: true });
+        artifacts.push(shotName);
+      }
 
       for (const vp of viewports) {
-        const { context, page, blockedWrites } = await openPortal(browser, origin, {
+        // The workspace pages and onboarding need a session.
+        const portal = await openPortal(browser, origin, {
           viewport: { width: vp.width, height: vp.height },
         });
         try {
-          for (const route of routes) {
-            await page.goto(new URL(route, origin).href, { waitUntil: "networkidle" });
-
-            // Exactly one h1
-            const h1Count = await page.locator("h1").count();
-            assert.equal(
-              h1Count,
-              1,
-              `${route} at ${vp.name} must have exactly one h1, found ${h1Count}`
-            );
-
-            // No horizontal scroll at 390
-            if (vp.width === 390) {
-              const overflow = await page.evaluate(() => {
-                const doc = document.documentElement;
-                return {
-                  scrollWidth: doc.scrollWidth,
-                  innerWidth: window.innerWidth,
-                };
-              });
-              assert.ok(
-                overflow.scrollWidth <= overflow.innerWidth + 1,
-                `${route} at 390 horizontally overflows: scrollWidth ${overflow.scrollWidth} > innerWidth ${overflow.innerWidth} + 1`
-              );
-            }
-
-            // No .pv-app, .pv-sidebar, .pv-page-header
-            const legacyCount = await page
-              .locator(".pv-app, .pv-sidebar, .pv-page-header")
-              .count();
-            assert.equal(
-              legacyCount,
-              0,
-              `${route} at ${vp.name} still contains legacy classes (.pv-app, .pv-sidebar, .pv-page-header): found ${legacyCount}`
-            );
-
-            // Screenshot
-            const safeName = route.replace(/\//g, "-").replace(/^-/, "");
-            const shotName = `f04-p5-${safeName}-${vp.name}.png`;
-            const shotPath = path.join(output, shotName);
-            await page.screenshot({ path: shotPath, fullPage: true });
-            artifacts.push(shotName);
+          for (const route of workspaceRoutes) {
+            await checkRoute(portal.page, route, vp);
           }
-          assert.deepEqual(blockedWrites, [], "the shell wrote to a customer route");
+
+          // The onboarding fixture answers `has_workspace: false`, so the
+          // legacy form (the F27 wizard is off in a production build) renders.
+          await checkRoute(portal.page, "/onboarding", vp);
+          assert.equal(
+            await portal.page.locator("#brand-name").count(),
+            1,
+            `/onboarding at ${vp.name} must render the legacy workspace form`
+          );
+          assert.deepEqual(portal.blockedWrites, [], "the workspace pass wrote to a customer route");
         } finally {
-          await context.close();
+          await portal.context.close();
+        }
+
+        // The signed-out auth pages: a session read of 401 keeps them on screen.
+        const auth = await openAuth(browser, origin, {
+          viewport: { width: vp.width, height: vp.height },
+        });
+        try {
+          for (const route of authRoutes) {
+            await checkRoute(auth.page, route, vp);
+          }
+          assert.deepEqual(auth.blockedWrites, [], "the auth pass wrote to a customer route");
+        } finally {
+          await auth.context.close();
         }
       }
-      return "All 4 workspace routes verified at 1440 and 390 (one h1, no overflow, no legacy layout classes).";
+      return `All ${workspaceRoutes.length} workspace routes, /onboarding and ${authRoutes.length} signed-out auth routes verified at 1440 and 390 (one h1, no overflow, no legacy layout classes).`;
+    }
+  );
+
+  await record(
+    "F04-B09",
+    "At 390 px an input on /login computes to 16 px; a reveal-on-hover action on /portal/scans is opacity 0 until its row is hovered and 1 after; body text is the system stack on /portal and Archivo on the public site.",
+    async () => {
+      const compact = await openAuth(browser, origin, {
+        viewport: { width: 390, height: 844 },
+      });
+      try {
+        await compact.page.goto(new URL("/login", origin).href, { waitUntil: "networkidle" });
+        const email = compact.page.locator("input#email");
+        await email.waitFor({ state: "visible", timeout: 15000 });
+        const inputFontSize = await email.evaluate((element) => getComputedStyle(element).fontSize);
+        assert.equal(inputFontSize, "16px", `/login's input computes ${inputFontSize}, not 16px`);
+
+        await compact.page.goto(new URL("/", origin).href, { waitUntil: "networkidle" });
+        const publicFont = await compact.page.evaluate(
+          () => getComputedStyle(document.body).fontFamily
+        );
+        assert.ok(
+          publicFont.startsWith("Archivo"),
+          `the public body font starts with ${JSON.stringify(publicFont)}, not Archivo`
+        );
+        assert.deepEqual(compact.blockedWrites, [], "the auth pass wrote to a customer route");
+      } finally {
+        await compact.context.close();
+      }
+
+      const portal = await openPortal(browser, origin, {
+        viewport: { width: 1440, height: 1000 },
+      });
+      try {
+        await portal.page.goto(new URL("/portal", origin).href, { waitUntil: "networkidle" });
+        const appFont = await portal.page.evaluate(
+          () => getComputedStyle(document.body).fontFamily
+        );
+        assert.ok(
+          appFont.startsWith("ui-sans-serif"),
+          `the app body font starts with ${JSON.stringify(appFont)}, not ui-sans-serif`
+        );
+
+        await portal.page.goto(new URL("/portal/scans", origin).href, { waitUntil: "networkidle" });
+        const action = portal.page.locator('button[aria-label="Open report"]').first();
+        await action.waitFor({ state: "attached", timeout: 20000 });
+        const hidden = await action.evaluate((element) => getComputedStyle(element).opacity);
+        assert.equal(hidden, "0", `the reveal action starts at opacity ${hidden}, not 0`);
+
+        const row = portal.page.locator('tr:has(button[aria-label="Open report"])').first();
+        await row.hover();
+        await portal.page.waitForTimeout(400);
+        const revealed = await action.evaluate((element) => getComputedStyle(element).opacity);
+        assert.equal(revealed, "1", `the reveal action is opacity ${revealed} after hovering its row, not 1`);
+
+        assert.deepEqual(portal.blockedWrites, [], "the shell wrote to a customer route");
+        return "The login input is 16px at 390; the app font is the system stack and the public font is Archivo; the row action reveals on hover.";
+      } finally {
+        await portal.context.close();
+      }
     }
   );
 
