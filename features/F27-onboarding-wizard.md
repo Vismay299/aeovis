@@ -475,12 +475,12 @@ Branches `feat/f27-onboarding-wizard-p1` … `-p5`. `NT` = `node --import ./src/
 
 **Goal:** "Get started" replaces `GettingStarted` when the flag is on.
 
-- [ ] **P3.T1 Component**
-  - [ ] **P3.T1.S1** *Files:* `src/components/portal/overview/SetupChecklist.tsx`, `src/components/portal/overview/hooks/useSetupActivation.ts`, `src/app/portal/page.jsx`. *Do:* §6.6.9. *Verify:* build → exit 0.
-  - [ ] **P3.T1.S2** *Files:* `src/components/portal/overview/setupChecklist.test.mjs`. *Do:* render-harness test (F04 rule 2, `renderToStaticMarkup` with a fake query client) porting OpenSEO's two cases: all dismissed → markup contains "saved for later"; all done → empty string; plus a member render without actions on owner rows. *Verify:* `NT src/components/portal/overview/setupChecklist.test.mjs` → pass (F27-AC-17 unit).
-  - [ ] **P3.T1.S3** *Files:* `src/components/portal/portalRegressions.test.mjs`. *Do:* add `SetupChecklist` to the Overview module map as `autoNull` and keep the existing `GettingStarted`/`buildChecklist` assertions (reason: Overview now imports the checklist; the flag-off path is unchanged). *Verify:* `NT src/components/portal/portalRegressions.test.mjs` → pass.
-- [ ] **P3.T2 Browser**
-  - [ ] **P3.T2.S1** *Files:* `scripts/qa/check-f27-browser.mjs`. *Do:* W10: flag on → "Get started" with the fixture rows; "Skip for now" moves a row into "1 saved for later"; "Restore" brings it back; all-done fixture → no card; flag off → "Getting started" (the old card) renders. *Verify:* `ok 10 scenarios` (F27-AC-17).
+- [x] **P3.T1 Component**
+  - [x] **P3.T1.S1** *Files:* `src/components/portal/overview/SetupChecklist.tsx`, `src/components/portal/overview/hooks/useSetupActivation.ts`, `src/app/portal/page.jsx`. *Do:* §6.6.9. *Verify:* build → exit 0.
+  - [x] **P3.T1.S2** *Files:* `src/components/portal/overview/setupChecklist.test.mjs`. *Do:* render-harness test (F04 rule 2, `renderToStaticMarkup` with a fake query client) porting OpenSEO's two cases: all dismissed → markup contains "saved for later"; all done → empty string; plus a member render without actions on owner rows. *Verify:* `NT src/components/portal/overview/setupChecklist.test.mjs` → pass (F27-AC-17 unit).
+  - [x] **P3.T1.S3** *Files:* `src/components/portal/portalRegressions.test.mjs`. *Do:* add `SetupChecklist` to the Overview module map as `autoNull` and keep the existing `GettingStarted`/`buildChecklist` assertions (reason: Overview now imports the checklist; the flag-off path is unchanged). *Verify:* `NT src/components/portal/portalRegressions.test.mjs` → pass.
+- [x] **P3.T2 Browser**
+  - [x] **P3.T2.S1** *Files:* `scripts/qa/check-f27-browser.mjs`. *Do:* W10: flag on → "Get started" with the fixture rows; "Skip for now" moves a row into "1 saved for later"; "Restore" brings it back; all-done fixture → no card; flag off → "Getting started" (the old card) renders. *Verify:* `ok 10 scenarios` (F27-AC-17).
 
 **Checkpoint:** suite, build, browser W10. Completes F27-AC-17.
 

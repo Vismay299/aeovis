@@ -808,3 +808,6 @@ SOFTWARE.
 - `src/lib/tools/waiting.ts` and `src/lib/tools/waiting.test.ts` (from `src/server/features/sam/samChatTools.ts`)
 - `src/lib/tools/format.ts` (from `src/server/mcp/formatters.ts`)
 - `src/lib/tools/mcp.ts` (from `src/server/mcp/output-schemas.ts`, `src/server/mcp/server.ts`)
+
+### F27 Phase 3 ports
+- `src/components/portal/overview/SetupChecklist.tsx` (from `openseo:src/client/features/dashboard/DashboardOnboarding.tsx:24-180`)
