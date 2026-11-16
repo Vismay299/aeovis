@@ -486,8 +486,8 @@ Branches `feat/f27-onboarding-wizard-p1` … `-p5`. `NT` = `node --import ./src/
 
 ### Phase 4 — Owner live checks
 
-- [ ] **P4.T1 Runbook**
-  - [ ] **P4.T1.S1** *Files:* `docs/OPERATOR_LEDGER.md` § C ("F27 onboarding": §10 steps), `scripts/qa/check-f27-live.md` (O1–O5). *Verify:* `NT src/lib/docStatus.test.mjs` → pass.
+- [x] **P4.T1 Runbook**
+  - [x] **P4.T1.S1** *Files:* `docs/OPERATOR_LEDGER.md` § C ("F27 onboarding": §10 steps), `scripts/qa/check-f27-live.md` (O1–O5). *Verify:* `NT src/lib/docStatus.test.mjs` → pass.
 - [ ] **P4.T2 Owner-run live checks (only on the owner's instruction)**
   - [ ] **P4.T2.S1** *Do:* the owner runs O1–O5 and records pass/fail and dates in the phase-4 PR. *Verify:* five passes (F27-AC-19).
 
