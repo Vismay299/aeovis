@@ -31,7 +31,7 @@ export default function DraftsLibrary({ items, onOpen }) {
 
   return (
     <Card flush title="Drafts" description="Open a draft to edit, preview and review it.">
-      <div className="pv-content-tabs-row">
+      <div className="overflow-x-auto px-4 pb-3">
         <Tabs items={tabs} value={filter} onChange={setFilter} label="Filter drafts" />
       </div>
       {items === null ? <SkeletonRows rows={4} /> : null}
@@ -41,18 +41,18 @@ export default function DraftsLibrary({ items, onOpen }) {
         </EmptyState>
       ) : null}
       {items && items.length > 0 && visible.length === 0 ? (
-        <p className="pv-content-quiet">No drafts in this view.</p>
+        <p className="px-4 pb-6 pt-1 text-[13px] text-muted-foreground">No drafts in this view.</p>
       ) : null}
       {visible.length > 0 ? (
-        <div className="pv-list">
+        <div className="divide-y divide-border">
           {visible.map((item) => {
             const status = contentItemStatus(item.status);
             const meta = [playbookLabel(item.playbook, item.agent_format), `Updated ${formatRelative(item.updated_at)}`].filter(Boolean).join(" · ");
             return (
-              <button key={item.id} type="button" className="pv-list__row pv-content-row" onClick={() => onOpen(item.id)}>
-                <span className="pv-list__main">
-                  <span className="pv-list__title">{item.title || "Untitled draft"}</span>
-                  <span className="pv-list__meta">{meta}</span>
+              <button key={item.id} type="button" className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" onClick={() => onOpen(item.id)}>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="truncate text-sm font-medium text-foreground">{item.title || "Untitled draft"}</span>
+                  <span className="truncate text-xs text-muted-foreground">{meta}</span>
                 </span>
                 <Badge tone={status.tone}>{status.label}</Badge>
               </button>

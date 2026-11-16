@@ -11,7 +11,6 @@ import { usePortal } from "../PortalShell";
 import { Badge, Banner, Button, Card, PageHeader, SkeletonRows, formatDate, formatRelative } from "../ui";
 import PropertyPicker from "./PropertyPicker";
 import PerformanceCard from "./PerformanceCard";
-import "./gsc.css";
 
 const CALLBACK_PARAMS = ["gsc_attempt", "gsc_connected", "gsc_error", "brand_key"];
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -213,7 +212,7 @@ export default function GscPage() {
   }
 
   return (
-    <div className="pv-page">
+    <>
       <PageHeader
         title="Google Search Console"
         description="Connect your own Google account to bring search clicks and impressions into this workspace."
@@ -227,27 +226,29 @@ export default function GscPage() {
       {banner ? (
         <Banner tone={banner.tone} onDismiss={() => setBanner(null)}>{banner.text}</Banner>
       ) : null}
-      <div className="pv-stack">{content}</div>
-    </div>
+      {content}
+    </>
   );
 }
 
 function ConnectCard({ onConnect, busy, disabled }) {
   return (
-    <Card className="pv-gsc-connect">
-      <div className="pv-gsc-connect__icon" aria-hidden="true">
-        <Search />
+    <Card className="text-center">
+      <div className="mx-auto grid max-w-md justify-items-center gap-4 py-4">
+        <div className="grid size-11 place-items-center rounded-xl border border-border bg-muted text-muted-foreground" aria-hidden="true">
+          <Search className="size-5" />
+        </div>
+        <h2 className="text-lg font-semibold tracking-tight">Connect Google Search Console</h2>
+        <p className="text-sm text-muted-foreground">This connection imports Search Analytics query data. Google’s separate Generative AI report is not imported here.</p>
+        <ul className="grid w-full list-none gap-2.5 p-0 text-left text-sm text-muted-foreground">
+          <li className="flex items-start gap-2.5"><CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />See which searches bring visitors to your site.</li>
+          <li className="flex items-start gap-2.5"><CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />Compare Google Search queries with your separately collected AI observations.</li>
+          <li className="flex items-start gap-2.5"><CircleCheck aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-success" />Read-only access. Disconnect any time.</li>
+        </ul>
+        <Button icon={Link2} loading={busy} disabled={disabled} onClick={onConnect}>
+          Connect with Google
+        </Button>
       </div>
-      <h2 className="pv-gsc-connect__title">Connect Google Search Console</h2>
-      <p>This connection imports Search Analytics query data. Google’s separate Generative AI report is not imported here.</p>
-      <ul className="pv-gsc-benefits">
-        <li><CircleCheck aria-hidden="true" />See which searches bring visitors to your site.</li>
-        <li><CircleCheck aria-hidden="true" />Compare Google Search queries with your separately collected AI observations.</li>
-        <li><CircleCheck aria-hidden="true" />Read-only access. Disconnect any time.</li>
-      </ul>
-      <Button icon={Link2} loading={busy} disabled={disabled} onClick={onConnect}>
-        Connect with Google
-      </Button>
     </Card>
   );
 }
@@ -259,14 +260,14 @@ function ConnectionCard({ connection, owner = false, busy = "", onSync, onChange
       title="Connection"
       description={owner ? "The property this workspace reads search data from." : "Managed by a workspace owner."}
       footer={owner ? (
-        <div className="pv-gsc-footer">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="secondary" size="sm" icon={RefreshCw} loading={busy === "sync"} disabled={!!busy && busy !== "sync"} onClick={onSync}>
             Sync now
           </Button>
           <Button variant="secondary" size="sm" icon={Link2} disabled={!!busy} onClick={onChange}>
             Change property
           </Button>
-          <span className="pv-gsc-footer__spacer" />
+          <span className="flex-1" />
           <Button variant="danger" size="sm" icon={Unplug} loading={busy === "disconnect"} disabled={!!busy && busy !== "disconnect"} onClick={onDisconnect}>
             Disconnect
           </Button>
@@ -278,26 +279,26 @@ function ConnectionCard({ connection, owner = false, busy = "", onSync, onChange
           {connection.last_error || "Unknown error. Try syncing again."}
         </Banner>
       ) : null}
-      <dl className="pv-gsc-facts">
-        <div>
-          <dt>Property</dt>
-          <dd className="pv-gsc-facts__mono">{connection?.site_url || "—"}</dd>
+      <dl className="grid divide-y divide-border">
+        <div className="grid gap-1 py-3 first:pt-0">
+          <dt className="text-xs text-muted-foreground">Property</dt>
+          <dd className="break-words font-mono text-[13.5px] text-foreground">{connection?.site_url || "—"}</dd>
         </div>
-        <div>
-          <dt>Data through</dt>
-          <dd>{formatDate(connection?.last_ingested_through)}</dd>
+        <div className="grid gap-1 py-3">
+          <dt className="text-xs text-muted-foreground">Data through</dt>
+          <dd className="text-sm text-foreground">{formatDate(connection?.last_ingested_through)}</dd>
         </div>
-        <div>
-          <dt>Last sync</dt>
-          <dd className="pv-gsc-facts__status">
+        <div className="grid gap-1 py-3">
+          <dt className="text-xs text-muted-foreground">Last sync</dt>
+          <dd className="flex flex-wrap items-center gap-2">
             <Badge tone={status.tone} dot>{status.label}</Badge>
-            {connection?.last_attempt_at ? <span className="pv-muted">{formatRelative(connection.last_attempt_at)}</span> : null}
+            {connection?.last_attempt_at ? <span className="text-xs text-muted-foreground">{formatRelative(connection.last_attempt_at)}</span> : null}
           </dd>
         </div>
         {connection?.connected_at ? (
-          <div>
-            <dt>Connected</dt>
-            <dd>{formatDate(connection.connected_at, { withTime: true })}</dd>
+          <div className="grid gap-1 py-3 last:pb-0">
+            <dt className="text-xs text-muted-foreground">Connected</dt>
+            <dd className="text-sm text-foreground">{formatDate(connection.connected_at, { withTime: true })}</dd>
           </div>
         ) : null}
       </dl>
