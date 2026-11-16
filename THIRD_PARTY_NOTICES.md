@@ -808,3 +808,10 @@ SOFTWARE.
 - `src/lib/tools/waiting.ts` and `src/lib/tools/waiting.test.ts` (from `src/server/features/sam/samChatTools.ts`)
 - `src/lib/tools/format.ts` (from `src/server/mcp/formatters.ts`)
 - `src/lib/tools/mcp.ts` (from `src/server/mcp/output-schemas.ts`, `src/server/mcp/server.ts`)
+
+### F27 Phase 3 ports
+- `src/components/portal/overview/SetupChecklist.tsx` (from `openseo:src/client/features/dashboard/DashboardOnboarding.tsx:24-180`)
+
+### F22 Phase 2 ports
+- `src/lib/assistant/sessions.ts` (from `src/server/features/sam/SamSessionRepository.ts`, the title rule in `src/server/features/sam/SamChatAgent.ts` and the session schema in `src/db/pg/sam.schema.ts`)
+- `supabase/migrations/145_f22_assistant_sessions.sql` (session/message schema from `src/db/pg/sam.schema.ts`; rewind rule from `src/server/features/sam/SamChatAgent.ts`)

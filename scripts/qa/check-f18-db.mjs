@@ -4,13 +4,14 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 /**
- * F18 database harness (migrations 125 and 126):
+ * F18 database harness (migrations 125, 126 and 127):
  *   - 125: site_audits, site_audit_pages, site_audit_issues, site_audit_lighthouse,
  *          site_audit_frontier, site_audit_links, storage bucket site-audit-lighthouse, RLS
  *   - 126: site_audit_create, site_audit_seed, site_audit_frontier_stats,
  *          site_audit_claim_chunk, site_audit_record_batch, site_audit_release,
  *          site_audit_abandon_chunk, site_audit_broken_links, site_audit_orphan_pages,
  *          site_audit_issue_summary, site_audit_destroy_scratch, prune_site_audits
+ *   - 127: site_audit_compare (workspace-scoped before/after issue pages)
  *
  * Runs against a disposable loopback PostgreSQL database.
  * Usage:
@@ -44,18 +45,20 @@ const pool = new pg.Pool({ max: 8 });
 const query = (sql, values = []) => pool.query(sql, values);
 const id = () => crypto.randomUUID();
 
-async function apply125And126() {
+async function apply125Through127() {
   const sql125 = fs.readFileSync(path.join(ROOT, "supabase/migrations/125_f18_site_audit.sql"), "utf8");
   const sql126 = fs.readFileSync(path.join(ROOT, "supabase/migrations/126_f18_site_audit_functions.sql"), "utf8");
+  const sql127 = fs.readFileSync(path.join(ROOT, "supabase/migrations/127_f18_site_audit_compare.sql"), "utf8");
   await query(sql125);
   await query(sql126);
+  await query(sql127);
 }
 
 if (process.argv.includes("--only") && process.argv[process.argv.indexOf("--only") + 1] === "schema") {
   try {
-    await apply125And126();
-    await apply125And126();
-    console.log("125/126 applied twice without error");
+    await apply125Through127();
+    await apply125Through127();
+    console.log("125/126/127 applied twice without error");
     await pool.end();
     process.exit(0);
   } catch (err) {
@@ -294,7 +297,7 @@ async function asUser(userId, fn) {
 }
 
 async function main() {
-  await apply125And126();
+  await apply125Through127();
 
   const userA = await createUser("usera");
   const userB = await createUser("userb");
@@ -701,6 +704,63 @@ async function main() {
   assert.equal(runningScratchRemains.length, 1, "Running scratch kept");
 
   console.log("PASS retention");
+
+  // --- Group: compare audits (migration 127) ---
+  console.log("Running site_audit_compare tests...");
+  const compareBaseId = id();
+  const compareHeadId = id();
+  const compareForeignId = id();
+  const compareHost = `compare-${id().slice(0, 8)}.test`;
+  for (const [compareId, brandKey, pagesCrawled] of [
+    [compareBaseId, brandA, 10],
+    [compareHeadId, brandA, 10],
+    [compareForeignId, brandB, 10],
+  ]) {
+    await query(
+      `INSERT INTO public.site_audits
+         (id, brand_key, requested_url, start_url, start_host, max_pages, status, pages_crawled, crawl_completed)
+       VALUES ($1, $2, $3, $3, $4, 50, 'completed', $5, true)`,
+      [compareId, brandKey, `https://${compareHost}/`, compareHost, pagesCrawled]
+    );
+  }
+  await query(
+    `INSERT INTO public.site_audit_issues (id, audit_id, brand_key, page_url, issue_type, severity) VALUES
+       ($1, $2, $3, $4, 'missing-title', 'warning'),
+       ($5, $2, $3, $6, 'missing-title', 'warning'),
+       ($7, $2, $3, $8, 'broken-page', 'critical'),
+       ($9, $10, $3, $11, 'missing-title', 'warning'),
+       ($12, $10, $3, $6, 'missing-title', 'warning')`,
+    [
+      id(), compareBaseId, brandA, `https://${compareHost}/old`,
+      id(), `https://${compareHost}/shared`,
+      id(), `https://${compareHost}/broken`,
+      id(), compareHeadId, `https://${compareHost}/new`,
+      id(),
+    ]
+  );
+  const compareRows = (await query(
+    "SELECT * FROM public.site_audit_compare($1, $2, $3, 100)",
+    [brandA, compareBaseId, compareHeadId]
+  )).rows;
+  const missingTitle = compareRows.find((row) => row.issue_type === "missing-title");
+  assert.ok(missingTitle, "compare returns shared issue types");
+  assert.equal(Number(missingTitle.base_pages), 2);
+  assert.equal(Number(missingTitle.head_pages), 2);
+  assert.deepEqual(missingTitle.new_pages, [`https://${compareHost}/new`]);
+  assert.deepEqual(missingTitle.fixed_pages, [`https://${compareHost}/old`]);
+  const brokenPage = compareRows.find((row) => row.issue_type === "broken-page");
+  assert.ok(brokenPage, "compare retains issue types fixed in the head audit");
+  assert.equal(Number(brokenPage.base_pages), 1);
+  assert.equal(Number(brokenPage.head_pages), 0);
+  assert.deepEqual(brokenPage.new_pages, []);
+  assert.deepEqual(brokenPage.fixed_pages, [`https://${compareHost}/broken`]);
+
+  const crossWorkspaceRows = (await query(
+    "SELECT * FROM public.site_audit_compare($1, $2, $3, 100)",
+    [brandA, compareBaseId, compareForeignId]
+  )).rows;
+  assert.deepEqual(crossWorkspaceRows, [], "compare exposes no issue rows when either audit is outside the workspace");
+  console.log("PASS site_audit_compare");
 
   console.log("F18 DB checks: all passed");
   await pool.end();
