@@ -35,6 +35,12 @@ import { captureAuditEvent } from "../audit/telemetry.ts";
 import { trackAuthServerEvent } from "../auth/telemetry.ts";
 import { trackEmailEvent } from "../email/telemetry.ts";
 import { trackOnboardingServerEvent } from "../onboarding/telemetry.ts";
+import {
+  __lastInitOptionsForTests,
+  __resetClientForTests,
+  startAnalyticsCapture,
+  trackEvent,
+} from "./client.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../..");
 
@@ -474,4 +480,90 @@ test("every registry name is sink-reachable, emitted directly, or pending", () =
   const missing = registryNames().filter((name) => !owners.has(name));
   assert.deepEqual(missing, [], `registry names with no sink, emitter or PENDING_EMITTERS entry: ${missing.join(", ")}`);
   assert.equal(owners.size, registryNames().length);
+});
+
+test("sinks are no-ops when the PostHog env vars are missing", async () => {
+  const envKeys = [
+    "POSTHOG_PROJECT_KEY",
+    "POSTHOG_HOST",
+    "TELEMETRY_DISABLED",
+    "NEXT_PUBLIC_POSTHOG_KEY",
+    "NEXT_PUBLIC_TELEMETRY_DISABLED",
+  ] as const;
+  const saved: Record<string, string | undefined> = {};
+  for (const key of envKeys) saved[key] = process.env[key];
+
+  const originalFetch = globalThis.fetch;
+  const originalWindow = (globalThis as { window?: unknown }).window;
+  let fetched = 0;
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+  try {
+    for (const key of envKeys) delete process.env[key];
+
+    // Server half: the wired sink goes through the real `captureServerEvent`,
+    // which must stop at the missing-key gate before consent, Supabase or a
+    // PostHog client. A fetch from this path is the failure the test names.
+    globalThis.fetch = ((..._args: Parameters<typeof fetch>) => {
+      fetched += 1;
+      throw new Error("a wired server sink reached the network without POSTHOG_PROJECT_KEY");
+    }) as typeof fetch;
+    wireServerSinks();
+    trackEmailEvent("email:sent", { template: "scan_results", kind: "event", duplicate: false });
+    await tick();
+    assert.equal(fetched, 0, "a wired server sink reached the network without keys");
+
+    // Client half: the default loader must return null before it touches
+    // posthog-js. `window` exists so the check exercises the key gate, not the
+    // server-side `typeof window` short circuit.
+    (globalThis as { window?: unknown }).window = {};
+    __resetClientForTests();
+    assert.doesNotThrow(() =>
+      trackEvent("data:export", {
+        source_feature: "scans",
+        format: "csv",
+        result_count: 1,
+        scope: "all",
+      }),
+    );
+    await tick();
+    assert.equal(__lastInitOptionsForTests(), null, "trackEvent initialised posthog-js without a key");
+    startAnalyticsCapture();
+    await tick();
+    assert.equal(
+      __lastInitOptionsForTests(),
+      null,
+      "startAnalyticsCapture initialised posthog-js without a key",
+    );
+
+    // Second case: a key is present but the browser kill switch is on.
+    __resetClientForTests();
+    process.env.NEXT_PUBLIC_POSTHOG_KEY = "phc_qa_placeholder";
+    process.env.NEXT_PUBLIC_TELEMETRY_DISABLED = "1";
+    assert.doesNotThrow(() =>
+      trackEvent("data:export", {
+        source_feature: "scans",
+        format: "csv",
+        result_count: 1,
+        scope: "all",
+      }),
+    );
+    startAnalyticsCapture();
+    await tick();
+    assert.equal(
+      __lastInitOptionsForTests(),
+      null,
+      "TELEMETRY_DISABLED=1 still initialised posthog-js",
+    );
+  } finally {
+    for (const key of envKeys) {
+      const value = saved[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    globalThis.fetch = originalFetch;
+    if (originalWindow === undefined) delete (globalThis as { window?: unknown }).window;
+    else (globalThis as { window?: unknown }).window = originalWindow;
+    __resetClientForTests();
+  }
 });
