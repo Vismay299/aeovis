@@ -569,9 +569,9 @@ Branches `feat/f25-lifecycle-email-p1` … `-p4`. `NT` = `node --import ./src/li
 
 **Goal:** templates and the Loop exist in Loops, and each email is confirmed on the deployment.
 
-- [ ] **P4.T1 Runbook**
-  - [ ] **P4.T1.S1** *Files:* `docs/OPERATOR_LEDGER.md` § C ("F25 lifecycle email" with the §10 enabling steps and the §6.4 template table copied verbatim), `scripts/qa/check-f25-live.md` (E1–E6 checklist). *Verify:* `NT src/lib/docStatus.test.mjs` → pass.
-  - [ ] **P4.T1.S2** *Files:* `scripts/qa/send-f25-test-email.mjs`. *Do:* owner-only script: refuses unless `--to <address>`, `--template <scan_finished|schedule_skipped|spend_cap_reached>` and `--confirm` are passed; inserts one outbox row for the signed-in owner's user id with fixture data from `tests/fixtures/f25/` (dedupe key `manual-test:<template>:<uuid>`) and prints only the row id; delivery happens on the next `email.deliver` tick. *Verify:* `node scripts/qa/send-f25-test-email.mjs` (no args) → exit 1 "Refusing: pass --to, --template and --confirm".
+- [x] **P4.T1 Runbook**
+  - [x] **P4.T1.S1** *Files:* `docs/OPERATOR_LEDGER.md` § C ("F25 lifecycle email" with the §10 enabling steps and the §6.4 template table copied verbatim), `scripts/qa/check-f25-live.md` (E1–E6 checklist). *Verify:* `NT src/lib/docStatus.test.mjs` → pass.
+  - [x] **P4.T1.S2** *Files:* `scripts/qa/send-f25-test-email.mjs`. *Do:* owner-only script: refuses unless `--to <address>`, `--template <scan_finished|schedule_skipped|spend_cap_reached>` and `--confirm` are passed; inserts one outbox row for the signed-in owner's user id with fixture data from `tests/fixtures/f25/` (dedupe key `manual-test:<template>:<uuid>`) and prints only the row id; delivery happens on the next `email.deliver` tick. *Verify:* `node scripts/qa/send-f25-test-email.mjs` (no args) → exit 1 "Refusing: pass --to, --template and --confirm".
 - [ ] **P4.T2 Owner-run live checks (only on the owner's instruction)**
   - [ ] **P4.T2.S1** *Do:* the owner runs E1–E6 and records pass/fail and date in the phase-4 PR. *Verify:* six passes (F25-AC-16).
 
