@@ -414,6 +414,12 @@ const FULL_CATALOG = [
   "question_answer_links", "link_question_answers", "prune_question_answer_links",
   // F27 phase 1 migration 170 — user onboarding progress, dismissals, GSC return path.
   "user_onboarding", "workspace_setup_dismissals", "gsc_oauth_attempts.return_path",
+  // F22 phase 2 migrations 145–148 — assistant storage and the GSC query summary.
+  "assistant_sessions", "assistant_messages", "assistant_turns", "begin_assistant_turn",
+  "rewind_assistant_session", "prune_assistant_sessions",
+  "assistant_stream_chunks", "prune_assistant_stream_chunks",
+  "assistant_approvals", "claim_assistant_approval", "expire_assistant_approvals",
+  "assistant_gsc_query_summary",
 ];
 
 function withRegister(dir) {

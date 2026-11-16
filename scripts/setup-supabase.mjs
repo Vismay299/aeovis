@@ -618,6 +618,26 @@ const EXPECTED_OBJECTS = {
     { kind: "index", name: "scans_brand_visibility_idx" },
     { kind: "index", name: "scans_engines_gin_idx" },
   ],
+  "145_f22_assistant_sessions.sql": [
+    { kind: "table", name: "assistant_sessions" },
+    { kind: "table", name: "assistant_messages" },
+    { kind: "table", name: "assistant_turns" },
+    { kind: "function", name: "begin_assistant_turn" },
+    { kind: "function", name: "rewind_assistant_session" },
+    { kind: "function", name: "prune_assistant_sessions" },
+  ],
+  "146_f22_assistant_stream_chunks.sql": [
+    { kind: "table", name: "assistant_stream_chunks" },
+    { kind: "function", name: "prune_assistant_stream_chunks" },
+  ],
+  "147_f22_assistant_approvals.sql": [
+    { kind: "table", name: "assistant_approvals" },
+    { kind: "function", name: "claim_assistant_approval" },
+    { kind: "function", name: "expire_assistant_approvals" },
+  ],
+  "148_f22_gsc_query_summary.sql": [
+    { kind: "function", name: "assistant_gsc_query_summary" },
+  ],
 };
 
 /**
