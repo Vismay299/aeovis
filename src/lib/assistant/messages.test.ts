@@ -11,7 +11,9 @@ function makeAdmin(seed: Record<string, Row[]> = {}) {
 
   function query(table: string) {
     const filters: Array<[string, unknown]> = [];
+    const gts: Array<[string, number]> = [];
     const orders: Array<[string, boolean]> = [];
+    let limit: number | null = null;
     let inserted: Row | null = null;
     const rows = () => (tables[table] ??= []);
     const run = () => {
@@ -30,16 +32,23 @@ function makeAdmin(seed: Record<string, Row[]> = {}) {
         rows().push(row);
         return { data: [{ ...row }], error: null };
       }
-      let out = rows().filter((row) => filters.every(([column, value]) => row[column] === value));
+      let out = rows().filter(
+        (row) =>
+          filters.every(([column, value]) => row[column] === value) &&
+          gts.every(([column, value]) => Number(row[column]) > value),
+      );
       if (orders.length > 0) {
         out = out.slice().sort((a, b) => {
           for (const [column, ascending] of orders) {
-            if (a[column] < b[column]) return ascending ? -1 : 1;
-            if (a[column] > b[column]) return ascending ? 1 : -1;
+            const left = column === "seq" ? Number(a[column]) : a[column];
+            const right = column === "seq" ? Number(b[column]) : b[column];
+            if (left < right) return ascending ? -1 : 1;
+            if (left > right) return ascending ? 1 : -1;
           }
           return 0;
         });
       }
+      if (limit !== null) out = out.slice(0, limit);
       return { data: out.map((row) => ({ ...row })), error: null };
     };
     const builder: any = {
@@ -50,8 +59,16 @@ function makeAdmin(seed: Record<string, Row[]> = {}) {
         filters.push([column, value]);
         return builder;
       },
+      gt(column: string, value: number) {
+        gts.push([column, Number(value)]);
+        return builder;
+      },
       order(column: string, opts?: { ascending?: boolean }) {
         orders.push([column, opts?.ascending !== false]);
+        return builder;
+      },
+      limit(value: number) {
+        limit = value;
         return builder;
       },
       insert(row: Row) {
@@ -82,6 +99,14 @@ const ROW = {
   turn_id: "t1",
   created_at: "2026-11-01T00:01:00.000Z",
 };
+
+test("loadMessages pages by seq so long chats are not truncated at max_rows", async () => {
+  const seed = Array.from({ length: 25 }, (_, i) => ({ ...ROW, id: `m${i + 1}`, seq: String(i + 1) }));
+  const { admin } = makeAdmin({ assistant_messages: seed });
+  const rows = await loadMessages(admin, "s1", { pageSize: 10 });
+  assert.equal(rows.length, 25);
+  assert.deepEqual(rows.map((row) => row.seq), Array.from({ length: 25 }, (_, i) => i + 1));
+});
 
 test("loadMessages returns rows in seq order with camelCase fields", async () => {
   const { admin } = makeAdmin({

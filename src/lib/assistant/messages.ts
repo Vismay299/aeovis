@@ -52,14 +52,32 @@ function toStoredMessage(row: MessageRow): StoredMessage {
   };
 }
 
-export async function loadMessages(admin: SupabaseClient, sessionId: string): Promise<StoredMessage[]> {
-  const { data, error } = await admin
-    .from("assistant_messages")
-    .select("session_id,id,brand_key,seq,role,parts,metadata,turn_id,created_at")
-    .eq("session_id", sessionId)
-    .order("seq", { ascending: true });
-  if (error) throw error;
-  return (Array.isArray(data) ? data : []).map((row) => toStoredMessage(row as MessageRow));
+/**
+ * Loads every message of a session in seq order. Reads are paged by seq
+ * because PostgREST caps a response at max_rows (1000); one unpaged read would
+ * silently drop the newest messages of a long chat.
+ */
+export async function loadMessages(
+  admin: SupabaseClient,
+  sessionId: string,
+  options: { pageSize?: number } = {},
+): Promise<StoredMessage[]> {
+  const pageSize = Math.max(1, Math.min(options.pageSize ?? 500, 1000));
+  const out: StoredMessage[] = [];
+  let after: number | null = null;
+  for (;;) {
+    let query = admin
+      .from("assistant_messages")
+      .select("session_id,id,brand_key,seq,role,parts,metadata,turn_id,created_at")
+      .eq("session_id", sessionId);
+    if (after !== null) query = query.gt("seq", after);
+    const { data, error } = await query.order("seq", { ascending: true }).limit(pageSize);
+    if (error) throw error;
+    const rows = (Array.isArray(data) ? data : []).map((row) => toStoredMessage(row as MessageRow));
+    out.push(...rows);
+    if (rows.length < pageSize) return out;
+    after = rows[rows.length - 1].seq;
+  }
 }
 
 export async function insertMessage(admin: SupabaseClient, message: InsertMessage): Promise<StoredMessage> {
