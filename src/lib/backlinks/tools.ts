@@ -26,6 +26,8 @@ import {
   referringDomainsSortFieldSchema,
 } from "../../shared/backlinks.ts";
 import { researchScopeSchema } from "../../shared/researchScope.ts";
+import { listSnapshots } from "./snapshots.ts";
+import { AppError } from "../http/appError.ts";
 
 export type BacklinksToolBrand = {
   brandKey: string;
@@ -275,8 +277,52 @@ export const listReferringDomainsTool = {
   },
 };
 
+const getBacklinkHistoryInput = z.strictObject({
+  target: z.string().trim().min(3).max(255),
+  scope: z.enum(["domain", "subdomains"]),
+});
+
+const getBacklinkHistoryOutput = z.looseObject({
+  snapshots: z.array(
+    z.looseObject({
+      capturedOn: z.string(),
+      source: z.enum(["scheduled", "lookup"]),
+      rank: z.number().nullable(),
+      backlinks: z.number().nullable(),
+      referringDomains: z.number().nullable(),
+      referringPages: z.number().nullable(),
+      brokenBacklinks: z.number().nullable(),
+      brokenPages: z.number().nullable(),
+      newBacklinks: z.number().nullable(),
+      lostBacklinks: z.number().nullable(),
+      newReferringDomains: z.number().nullable(),
+      lostReferringDomains: z.number().nullable(),
+      backlinksSpamScore: z.number().nullable(),
+      targetSpamScore: z.number().nullable(),
+    }),
+  ),
+});
+
+export const getBacklinkHistoryTool = {
+  name: "get_backlink_history",
+  description: "Read stored backlink snapshots for a tracked domain. Free; reads stored history only and never calls a provider.",
+  input: getBacklinkHistoryInput,
+  output: getBacklinkHistoryOutput,
+  handler: async (ctx: BacklinksToolContext, rawInput?: unknown) => {
+    const input = getBacklinkHistoryInput.parse(rawInput ?? {});
+    if (!ctx.admin) throw new AppError(503, "snapshots_unavailable", "Backlink history is unavailable. Please retry.");
+    const snapshots = await listSnapshots(ctx.admin, {
+      brandKey: ctx.brand.brandKey,
+      target: input.target,
+      scope: input.scope,
+    });
+    return getBacklinkHistoryOutput.parse({ snapshots });
+  },
+};
+
 export const backlinksTools = [
   getBacklinksOverviewTool,
   listBacklinksTool,
   listReferringDomainsTool,
+  getBacklinkHistoryTool,
 ];

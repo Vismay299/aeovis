@@ -598,6 +598,12 @@ const EXPECTED_OBJECTS = {
     { kind: "table", name: "rank_keyword_questions" },
     { kind: "function", name: "rank_question_aio_status" },
   ],
+  "115_f16_backlink_snapshots.sql": [
+    { kind: "table", name: "backlink_snapshot_targets" },
+    { kind: "table", name: "backlink_snapshots" },
+    { kind: "function", name: "prune_backlink_snapshots" },
+    { kind: "function", name: "f16_snapshot_target_cap" },
+  ],
   "065_f06_exports.sql": [
     { kind: "bucket", name: "exports" },
     { kind: "table", name: "export_requests" },

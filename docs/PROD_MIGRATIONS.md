@@ -1858,6 +1858,14 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - **Rollback:** leaving 095 in place after reverting the phase-1 code is harmless (unused table and functions; the periodic stops calling them). `truncate question_answer_links;` is safe — links are rebuilt by the backfill in `docs/runbooks/question-history-backfill.md`.
 - **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f12-db.mjs`. Never run that harness against production.
 
+## `115_f16_backlink_snapshots.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply 115 after migration 170 and before deploying F16 phase 5.
+- **Additive only.** Creates the tenant-readable `backlink_snapshot_targets` and `backlink_snapshots` tables, a trigger function that caps enabled targets at 20 per workspace, and `prune_backlink_snapshots` for batched 25-month retention. Customer access is read-only through RLS; application writes use the service role.
+- **Pre-check:** `select to_regclass('public.backlink_snapshot_targets'), to_regclass('public.backlink_snapshots');` returns two nulls.
+- **Applied-check:** both table names resolve; `pg_proc` contains `f16_snapshot_target_cap` and `prune_backlink_snapshots`.
+- **Apply:** migration 115 is numerically below 170. It is safe after 170 as well as on a fresh database; apply it twice in local QA before deployment. Do not use the loopback QA harness against production.
+
 ## `127_f18_site_audit_compare.sql`
 
 - **Status:** in repo; **NOT YET APPLIED to production**. Apply after `126_f18_site_audit_functions.sql` and before deploying F18 phase 8. It is safe to apply on a fresh schema, more than once, and after migration 170.

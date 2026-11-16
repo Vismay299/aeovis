@@ -239,6 +239,9 @@ export const NEVER_WRITABLE = Object.freeze([
   // F27 — migration 170: onboarding progress and setup checklist dismissals.
   "user_onboarding",
   "workspace_setup_dismissals",
+  // F16 phase 5 — migration 115: tracked targets and customer backlink history.
+  "backlink_snapshot_targets",
+  "backlink_snapshots",
 ]);
 
 /**
@@ -304,6 +307,8 @@ export const WRITING_FUNCTIONS = Object.freeze({
   save_local_business: ["local_businesses"],
   claim_local_poll: ["local_fetches", "local_grid_runs"],
   prune_local_seo: ["local_fetches", "local_fetch_items", "local_grid_runs", "local_searches"],
+  // F16 phase 5 — migration 115: snapshot retention writer.
+  prune_backlink_snapshots: ["backlink_snapshots"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */

@@ -35,6 +35,10 @@ export const BACKLINKS_COMMON_ERROR_CODES = [
   "filters_over_budget",
   "subfolder_not_supported",
   "backlinks_unavailable",
+  "already_tracked",
+  "snapshot_target_limit",
+  "snapshot_target_not_found",
+  "snapshots_unavailable",
 ];
 
 // --- 1. POST /api/customer/backlinks/overview ---
@@ -451,10 +455,122 @@ export const ahrefsDomainRatingsContract = defineRouteContract({
   examples: [{ response: EXAMPLE_AHREFS_DR_RESPONSE }],
 });
 
+// --- 6. F16 phase 5 tracked snapshot routes ---
+export const snapshotTargetsQuery = backlinksBrandQuery;
+export const snapshotTargetCreateRequestBody = z.strictObject({
+  target: z.string().trim().min(3).max(255),
+  scope: z.enum(["domain", "subdomains"]),
+  interval: z.enum(["weekly", "monthly"]),
+  label: z.string().trim().min(1).max(120).optional(),
+  maxUsd: z.number().positive().max(1000).optional(),
+});
+
+const snapshotTargetSchema = z.looseObject({
+  id: z.string(),
+  target: z.string(),
+  scope: z.enum(["domain", "subdomains"]),
+  label: z.string().nullable(),
+  interval: z.enum(["weekly", "monthly"]),
+  enabled: z.boolean(),
+  nextRunAt: z.string(),
+  lastRunAt: z.string().nullable(),
+  lastSkipReason: z.string().nullable(),
+  lastSkipMessage: z.string().nullable(),
+});
+
+export const snapshotTargetsResponseSchema = z.looseObject({
+  targets: z.array(snapshotTargetSchema),
+});
+export const snapshotTargetCreateResponseSchema = z.looseObject({
+  target: snapshotTargetSchema,
+});
+export const snapshotTargetDeleteResponseSchema = z.looseObject({
+  deleted: z.literal(true),
+});
+export const snapshotsQuery = z.strictObject({
+  brand_key: z.string().min(1).max(200).optional(),
+  target: z.string().trim().min(3).max(255),
+  scope: z.enum(["domain", "subdomains"]),
+});
+export const snapshotsResponseSchema = z.looseObject({
+  snapshots: z.array(
+    z.looseObject({
+      capturedOn: z.string(),
+      capturedAt: z.string().optional(),
+      source: z.enum(["scheduled", "lookup"]),
+      rank: z.number().nullable(),
+      backlinks: z.number().nullable(),
+      referringDomains: z.number().nullable(),
+      referringPages: z.number().nullable(),
+      brokenBacklinks: z.number().nullable(),
+      brokenPages: z.number().nullable(),
+      newBacklinks: z.number().nullable(),
+      lostBacklinks: z.number().nullable(),
+      newReferringDomains: z.number().nullable(),
+      lostReferringDomains: z.number().nullable(),
+      backlinksSpamScore: z.number().nullable(),
+      targetSpamScore: z.number().nullable(),
+    }),
+  ),
+});
+
+export const snapshotTargetsGetContract = defineRouteContract({
+  id: "customer.backlinks.snapshot_targets.get",
+  method: "GET",
+  path: "/api/customer/backlinks/snapshot-targets",
+  file: "src/app/api/customer/backlinks/snapshot-targets/route.ts",
+  auth: "workspace",
+  query: snapshotTargetsQuery,
+  response: snapshotTargetsResponseSchema,
+  errorCodes: BACKLINKS_COMMON_ERROR_CODES,
+  examples: [{ response: { targets: [] } }],
+});
+
+export const snapshotTargetsPostContract = defineRouteContract({
+  id: "customer.backlinks.snapshot_targets.post",
+  method: "POST",
+  path: "/api/customer/backlinks/snapshot-targets",
+  file: "src/app/api/customer/backlinks/snapshot-targets/route.ts",
+  auth: "workspace_owner",
+  query: snapshotTargetsQuery,
+  request: snapshotTargetCreateRequestBody,
+  response: snapshotTargetCreateResponseSchema,
+  errorCodes: BACKLINKS_COMMON_ERROR_CODES,
+  examples: [{ response: { target: { id: "uuid", target: "offcult.in", scope: "subdomains", label: null, interval: "weekly", enabled: true, nextRunAt: "2026-10-28T00:00:00.000Z", lastRunAt: null, lastSkipReason: null, lastSkipMessage: null } } }],
+});
+
+export const snapshotTargetsDeleteContract = defineRouteContract({
+  id: "customer.backlinks.snapshot_targets.delete",
+  method: "DELETE",
+  path: "/api/customer/backlinks/snapshot-targets/[targetId]",
+  file: "src/app/api/customer/backlinks/snapshot-targets/[targetId]/route.ts",
+  auth: "workspace_owner",
+  query: backlinksBrandQuery,
+  response: snapshotTargetDeleteResponseSchema,
+  errorCodes: BACKLINKS_COMMON_ERROR_CODES,
+  examples: [{ response: { deleted: true } }],
+});
+
+export const snapshotsGetContract = defineRouteContract({
+  id: "customer.backlinks.snapshots.get",
+  method: "GET",
+  path: "/api/customer/backlinks/snapshots",
+  file: "src/app/api/customer/backlinks/snapshots/route.ts",
+  auth: "workspace",
+  query: snapshotsQuery,
+  response: snapshotsResponseSchema,
+  errorCodes: BACKLINKS_COMMON_ERROR_CODES,
+  examples: [{ response: { snapshots: [] } }],
+});
+
 export const contracts: RouteContract[] = [
   backlinksOverviewContract,
   backlinksRowsContract,
   referringDomainsContract,
   topPagesContract,
   ahrefsDomainRatingsContract,
+  snapshotTargetsGetContract,
+  snapshotTargetsPostContract,
+  snapshotTargetsDeleteContract,
+  snapshotsGetContract,
 ];
