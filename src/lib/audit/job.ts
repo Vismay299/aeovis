@@ -135,14 +135,20 @@ export function registerSiteAuditJob(): void {
         // 2. resolve-start
         const resolved = await ctx.step.do("resolve-start", AUDIT_STEPS.resolveStart, async () => {
           const fresh = (await store.getAudit(auditId)) ?? audit;
-          const res = await resolveAuditStart(fresh, deps);
+          const res = await resolveAuditStart(fresh, { ...deps, admin });
           const finalHost = new URL(res.startUrl).hostname.toLowerCase();
           await store.updateAudit(auditId, ctx.jobId, {
             start_url: res.startUrl,
             start_host: finalHost,
             site_platform: res.sitePlatform,
+            crawler_credential_id: res.crawlerCredentialId,
           });
-          return res;
+          // The persisted step output carries no credential value or id.
+          return {
+            startUrl: res.startUrl,
+            origin: res.origin,
+            sitePlatform: res.sitePlatform,
+          };
         });
 
         // 3. discover

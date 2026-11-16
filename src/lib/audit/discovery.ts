@@ -10,6 +10,7 @@ import { parseRobotsTxt as parseRobotsTxtRep, evaluateBot } from "../crawlers/ro
 import { safeFetch, type SafeFetchResult } from "../http/safeFetch.ts";
 import { normalizeUrl, isSameOrigin } from "./urlUtils.ts";
 import { isCrawlableUrl } from "./urlPolicy.ts";
+import { crawlerHeadersFor, type CrawlerAccess } from "./crawlerAccess.ts";
 
 const SITEMAP_FETCH_TIMEOUT_MS = 15_000;
 const MAX_ROBOTS_TXT_BYTES = 500 * 1024;
@@ -24,29 +25,6 @@ const xmlParser = new XMLParser({
   ignoreAttributes: false,
   isArray: (name) => name === "sitemap" || name === "url",
 });
-
-export interface CrawlerAccess {
-  host: string;
-  headers: Record<string, string>;
-  expiresAt?: string | null;
-}
-
-export function crawlerHeadersFor(
-  url: string,
-  access: CrawlerAccess | null | undefined,
-): Record<string, string> {
-  if (!access) return {};
-  try {
-    const parsed = new URL(url);
-    if (
-      parsed.protocol === "https:" &&
-      parsed.hostname.toLowerCase() === access.host.toLowerCase()
-    ) {
-      return access.headers;
-    }
-  } catch {}
-  return {};
-}
 
 export interface RobotsResult {
   isAllowed: (url: string) => boolean;

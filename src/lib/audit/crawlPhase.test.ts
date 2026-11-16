@@ -4,11 +4,17 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { runCrawlChunk, runCrawlPhase } from "./crawlPhase.ts";
 import { createMemoryAuditStore } from "./memoryStore.ts";
 import { AuditPhaseError } from "./errors.ts";
 import { finalizeAudit } from "./phases.ts";
 import { StepFailedError } from "../jobs/runner.ts";
+import {
+  crawlerAccessAad,
+  encryptCrawlerField,
+} from "./crawlerAccessCrypto.ts";
+import { renderPage } from "./renderedPage.ts";
 import type { AuditRow } from "./store.ts";
 import type { SafeFetchResult } from "../http/safeFetch.ts";
 
@@ -585,4 +591,211 @@ test("crawlPhase: rendered chunks are billed with retries 0 (a retry never re-bi
     },
   );
   assert.equal(freeOpts.find((s) => s.name === "crawl-chunk-1")?.opts.retries, 1);
+});
+
+// ---------------------------------------------------------------------------
+// Shopify crawler access (F18 phase 9)
+// ---------------------------------------------------------------------------
+
+const CRAWLER_SIGNATURE_INPUT = 'sig1=("@authority" "signature-agent");keyid="test-key"';
+const CRAWLER_SIGNATURE = "sig1=:EXAMPLE-NOT-A-REAL-SIGNATURE:";
+
+function crawlerEnv(): Record<string, string | undefined> {
+  return { CRAWLER_ACCESS_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") };
+}
+
+function sealedCredential(
+  env: Record<string, string | undefined>,
+  brandKey = "qa-brand",
+  host = "example.com",
+) {
+  return {
+    brandKey,
+    host,
+    signatureInput: encryptCrawlerField(
+      CRAWLER_SIGNATURE_INPUT,
+      crawlerAccessAad(brandKey, host, "signature_input"),
+      env,
+    ),
+    signature: encryptCrawlerField(
+      CRAWLER_SIGNATURE,
+      crawlerAccessAad(brandKey, host, "signature"),
+      env,
+    ),
+    expiresAt: null,
+  };
+}
+
+test("crawler access: page GETs carry the replay headers only for the credential host", async () => {
+  const env = crawlerEnv();
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-0000000000a1";
+  store.seedAudit(makeAudit(auditId, { crawler_credential_id: "cred-1" }));
+  await store.seedStart(auditId, "https://example.com/");
+  await store.seedSitemap(auditId, ["https://example.com/p1"]);
+
+  const seen: Array<{ url: string; headers: Headers }> = [];
+  const output = await runCrawlChunk({
+    auditId,
+    chunkNo: 1,
+    jobId: "job-1",
+    store,
+    deps: {
+      initialIntervalMs: 0,
+      safeFetch: async (u: any, init: any) => {
+        seen.push({ url: u.toString(), headers: new Headers(init?.headers ?? {}) });
+        return mockHtml(u.toString());
+      },
+      lookup: async () => ["93.184.216.34"],
+      env,
+      resolveCrawlerAccess: async () => ({ id: "cred-1", sealed: sealedCredential(env) }),
+    },
+  });
+
+  assert.ok(seen.length >= 2);
+  for (const call of seen) {
+    assert.equal(call.headers.get("signature-input"), CRAWLER_SIGNATURE_INPUT, call.url);
+    assert.equal(call.headers.get("signature"), CRAWLER_SIGNATURE, call.url);
+    assert.equal(call.headers.get("signature-agent"), '"https://shopify.com"', call.url);
+  }
+  assert.ok(!JSON.stringify(output).includes(CRAWLER_SIGNATURE));
+});
+
+test("crawler access: a decrypt failure logs one host-only line and crawls unsigned", async () => {
+  const env = crawlerEnv();
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-0000000000a2";
+  store.seedAudit(makeAudit(auditId, { crawler_credential_id: "cred-1" }));
+  await store.seedStart(auditId, "https://example.com/");
+
+  const warnings: string[] = [];
+  const seen: Headers[] = [];
+  await runCrawlChunk({
+    auditId,
+    chunkNo: 1,
+    jobId: "job-1",
+    store,
+    deps: {
+      initialIntervalMs: 0,
+      safeFetch: async (u: any, init: any) => {
+        seen.push(new Headers(init?.headers ?? {}));
+        return mockHtml(u.toString());
+      },
+      lookup: async () => ["93.184.216.34"],
+      env,
+      warn: (message: string) => warnings.push(message),
+      resolveCrawlerAccess: async () => ({
+        id: "cred-1",
+        sealed: {
+          brandKey: "qa-brand",
+          host: "example.com",
+          signatureInput: "corrupt",
+          signature: "corrupt",
+          expiresAt: null,
+        },
+      }),
+    },
+  });
+
+  assert.ok(seen.length > 0);
+  for (const headers of seen) assert.equal(headers.get("signature"), null);
+  assert.deepEqual(warnings, ["[audit] crawler access unreadable host=example.com"]);
+  assert.ok(!warnings.join("\n").includes("corrupt"));
+});
+
+test("crawler access: a live credential with no key fails the chunk", async () => {
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-0000000000a3";
+  store.seedAudit(makeAudit(auditId, { crawler_credential_id: "cred-1" }));
+  await store.seedStart(auditId, "https://example.com/");
+
+  await assert.rejects(
+    runCrawlChunk({
+      auditId,
+      chunkNo: 1,
+      jobId: "job-1",
+      store,
+      deps: {
+        initialIntervalMs: 0,
+        safeFetch: async (u: any) => mockHtml(u.toString()),
+        lookup: async () => ["93.184.216.34"],
+        env: {},
+        resolveCrawlerAccess: async () => ({
+          id: "cred-1",
+          sealed: {
+            brandKey: "qa-brand",
+            host: "example.com",
+            signatureInput: "sealed",
+            signature: "sealed",
+            expiresAt: null,
+          },
+        }),
+      },
+    }),
+    (err: unknown) =>
+      err instanceof AuditPhaseError && err.code === "unknown" && err.phase === "crawling",
+  );
+});
+
+test("secrets: Firecrawl render requests and render options carry no signature", async () => {
+  const env = crawlerEnv();
+  const store = createMemoryAuditStore();
+  const auditId = "00000000-0000-4000-8000-0000000000a4";
+  store.seedAudit(
+    makeAudit(auditId, {
+      crawler_credential_id: "cred-1",
+      render_javascript: true,
+      render_hold_id: "hold-1",
+      site_platform: "shopify",
+    }),
+  );
+  await store.seedStart(auditId, "https://example.com/");
+
+  const firecrawlCalls: Array<{ url: string; init: any }> = [];
+  const renderCalls: Array<{ url: string; options: any }> = [];
+
+  await runCrawlChunk({
+    auditId,
+    chunkNo: 1,
+    jobId: "job-1",
+    store,
+    deps: {
+      initialIntervalMs: 0,
+      safeFetch: async (u: any) => mockRateLimit(u.toString()),
+      lookup: async () => ["93.184.216.34"],
+      env,
+      resolveCrawlerAccess: async () => ({ id: "cred-1", sealed: sealedCredential(env) }),
+      firecrawlApiKey: "test-firecrawl-key",
+      renderPage: async (url: string, options: any) => {
+        renderCalls.push({ url, options });
+        return renderPage(url, options);
+      },
+      firecrawlFetchImpl: (async (url: string, init: any) => {
+        firecrawlCalls.push({ url, init });
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              rawHtml:
+                "<!DOCTYPE html><html><head><title>Rendered</title></head><body><h1>Rendered</h1></body></html>",
+              metadata: { statusCode: 200, url },
+            },
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }) as any,
+    },
+  });
+
+  assert.ok(renderCalls.length > 0, "a throttled Shopify page still renders");
+  assert.ok(firecrawlCalls.length > 0);
+  for (const call of renderCalls) {
+    assert.deepEqual(Object.keys(call.options).sort(), ["apiKey", "auditId", "fetchImpl", "usage"]);
+  }
+  for (const call of firecrawlCalls) {
+    const body = String(call.init?.body ?? "");
+    assert.ok(!/signature/i.test(body), "the Firecrawl request body carries no signature");
+    const headerNames = [...new Headers(call.init?.headers ?? {}).keys()];
+    assert.ok(headerNames.every((name) => !/^signature/i.test(name)));
+  }
 });

@@ -26,6 +26,12 @@ import { isCrawlableUrl } from "./urlPolicy.ts";
 import { createCancelProbe } from "./cancel.ts";
 import { AuditPhaseError } from "./errors.ts";
 import { renderPage } from "./renderedPage.ts";
+import {
+  openCrawlerAccess,
+  resolveCrawlerAccess,
+  type CrawlerAccess,
+} from "./crawlerAccess.ts";
+import { isCrawlerAccessConfigured } from "./crawlerAccessCrypto.ts";
 import type { AuditRow, AuditStore, ClaimedUrl } from "./store.ts";
 import type { CrawledPageResult } from "./types.ts";
 
@@ -46,6 +52,11 @@ export interface CrawlDeps {
   firecrawlApiKey?: string;
   firecrawlFetchImpl?: typeof fetch;
   renderPage?: typeof renderPage;
+  env?: Record<string, string | undefined>;
+  resolveCrawlerAccess?: typeof resolveCrawlerAccess;
+  openCrawlerAccess?: typeof openCrawlerAccess;
+  isCrawlerAccessConfigured?: typeof isCrawlerAccessConfigured;
+  warn?: (message: string) => void;
 }
 
 export interface CrawlChunkInput {
@@ -114,6 +125,24 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
   const { urls: claimedUrls, isRetry } = await store.claimChunk(auditId, chunkNo, claimLimit);
   const deadline = Date.now() + CHUNK_DEADLINE_MS;
 
+  // Decryption happens only inside the crawl step. The opened values stay in
+  // memory: they are never written back, logged or handed to Firecrawl.
+  let crawlerAccess: CrawlerAccess | null = null;
+  if (audit.crawler_credential_id) {
+    const configured = (deps?.isCrawlerAccessConfigured ?? isCrawlerAccessConfigured)(deps?.env);
+    if (!configured) {
+      throw new AuditPhaseError("unknown", "crawling", "Crawler access encryption is not configured");
+    }
+    const resolve = deps?.resolveCrawlerAccess ?? resolveCrawlerAccess;
+    const open = deps?.openCrawlerAccess ?? openCrawlerAccess;
+    const credentialAdmin = input.admin;
+    if (!credentialAdmin && !deps?.resolveCrawlerAccess) {
+      throw new AuditPhaseError("unknown", "crawling", "Crawler access is unavailable");
+    }
+    const found = await resolve(credentialAdmin, audit.brand_key, audit.start_host);
+    if (found) crawlerAccess = await open(found.sealed, deps);
+  }
+
   const limits = isRetry ? RETRY_CRAWL_WINDOW : CRAWL_WINDOW;
   if (isRetry && previousThrottle) {
     previousThrottle.nextRequestAt = Math.max(
@@ -174,6 +203,7 @@ export async function runCrawlChunk(input: CrawlChunkInput): Promise<CrawlChunkO
       }
     : undefined;
   const fetchOptions: CrawlPageOptions = {
+    access: crawlerAccess,
     deps: {
       safeFetch: (deps?.safeFetch as any) ?? safeFetch,
       lookup: cachedLookup,

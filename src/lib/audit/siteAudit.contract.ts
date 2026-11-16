@@ -38,6 +38,22 @@ export const pagesQuery = z.strictObject({
   limit: z.coerce.number().int().min(1).max(200).default(100),
 });
 export const cancelBody = z.strictObject({ brand_key: z.string().max(200).optional() });
+export const crawlerAccessQuery = z.strictObject({
+  brand_key: z.string().max(200).optional(),
+});
+export const crawlerAccessBody = z.strictObject({
+  brand_key: z.string().max(200).optional(),
+  host: z.string().max(253),
+  signatureInput: z.string().min(1).max(4096),
+  signature: z.string().min(1).max(4096),
+});
+export const crawlerCredential = z.looseObject({
+  id: z.uuid(),
+  host: z.string(),
+  provider: z.literal("shopify"),
+  createdAt: z.string(),
+  expiresAt: z.string().nullable(),
+});
 
 const loose = z.looseObject({});
 
@@ -52,4 +68,7 @@ export const contracts: RouteContract[] = [
   defineRouteContract({ id: "f18.audit.pages", method: "GET", path: "/api/customer/audit/[auditId]/pages", file: "src/app/api/customer/audit/[auditId]/pages/route.ts", auth: "workspace", query: pagesQuery, response: z.looseObject({ total: z.number().int(), rows: z.array(loose) }), errorCodes: ["feature_unavailable", "audit_not_found", "invalid_request"], examples: [{ response: { total: 0, rows: [] } }] }),
   defineRouteContract({ id: "f18.audit.performance", method: "GET", path: "/api/customer/audit/[auditId]/performance", file: "src/app/api/customer/audit/[auditId]/performance/route.ts", auth: "workspace", response: z.looseObject({ rows: z.array(loose) }), errorCodes: ["feature_unavailable", "audit_not_found"], examples: [{ response: { rows: [] } }] }),
   defineRouteContract({ id: "f18.audit.cancel", method: "POST", path: "/api/customer/audit/[auditId]/cancel", file: "src/app/api/customer/audit/[auditId]/cancel/route.ts", auth: "workspace", request: cancelBody, response: z.looseObject({ status: z.string() }), errorCodes: ["feature_unavailable", "audit_not_found"], examples: [{ response: { status: "cancelling" } }] }),
+  defineRouteContract({ id: "f18.audit.crawler_access.list", method: "GET", path: "/api/customer/audit/crawler-access", file: "src/app/api/customer/audit/crawler-access/route.ts", auth: "workspace_owner", query: crawlerAccessQuery, response: z.looseObject({ credentials: z.array(crawlerCredential) }), errorCodes: ["feature_unavailable", "feature_disabled", "owner_required", "invalid_request", "crawler_access_unavailable", "audit_unavailable"], examples: [{ response: { credentials: [] } }] }),
+  defineRouteContract({ id: "f18.audit.crawler_access.save", method: "POST", path: "/api/customer/audit/crawler-access", file: "src/app/api/customer/audit/crawler-access/route.ts", auth: "workspace_owner", request: crawlerAccessBody, response: z.looseObject({ credential: crawlerCredential }), errorCodes: ["feature_unavailable", "feature_disabled", "owner_required", "invalid_request", "invalid_json", "invalid_host", "audit_host_not_owned", "signature_wrong_domain", "signature_invalid", "crawler_access_unavailable", "audit_unavailable"], examples: [{ response: { credential: { id: "6f1d2c3b-0a4e-4b8f-9c1d-2e3f4a5b6c7d", host: "shop.example.com", provider: "shopify", createdAt: "2026-11-16T09:00:00.000Z", expiresAt: null } } }] }),
+  defineRouteContract({ id: "f18.audit.crawler_access.delete", method: "DELETE", path: "/api/customer/audit/crawler-access/[id]", file: "src/app/api/customer/audit/crawler-access/[id]/route.ts", auth: "workspace_owner", query: crawlerAccessQuery, response: z.looseObject({ deleted: z.literal(true) }), errorCodes: ["feature_unavailable", "feature_disabled", "owner_required", "invalid_request", "credential_not_found", "audit_unavailable"], examples: [{ response: { deleted: true } }] }),
 ];
