@@ -64,6 +64,10 @@ export const FEATURES = {
   prompt_explorer: { spend: ["ai_visibility.explore"] as const },
   // F27: onboarding wizard and setup checklist
   onboarding_wizard: { spend: [] as const },
+  // F22: gates the in-app assistant, its routes and its turn/compaction spend.
+  assistant: { spend: ["assistant.turn", "assistant.compaction"] as const },
+  // F22: lets the assistant start Content Studio drafts. The content pipeline caps its own cost.
+  assistant_content_drafts: { spend: ["content.draft"] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;
