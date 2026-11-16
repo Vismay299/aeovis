@@ -117,7 +117,7 @@ test("F26-AC-01 no forbidden property keys and string leaves are code/enum/liter
 
 test("F26-AC-01 registry count equals the table", () => {
   assert.equal(Object.keys(EVENTS).length, EVENT_REGISTRY_COUNT);
-  assert.equal(EVENT_REGISTRY_COUNT, 143);
+  assert.equal(EVENT_REGISTRY_COUNT, 144);
 });
 
 test("F26-AC-02 validateEventProps rejects unknown names and bad props", () => {
@@ -146,4 +146,90 @@ test("F26-AC-02 code type rejects hostnames and emails, accepts model and action
 test("empty-props events accept {}", () => {
   const name = "scan_report:cost_expanded" as EventName;
   assert.equal(validateEventProps(name, {}).ok, true);
+});
+
+// ---------------------------------------------------------------------------
+// F26-AC-02 — the §6.2.1 `code` vocabulary and the number clamps
+// ---------------------------------------------------------------------------
+
+test("F26-AC-02 code accepts every dotted action key the product uses", () => {
+  for (const value of [
+    "ai_visibility.scan.run",
+    "local.grid.run",
+    "questions.setup.run",
+    "backlinks.snapshots.track",
+    "site_audit.run",
+    "anthropic/claude-sonnet-4.5",
+    "1.2",
+  ]) {
+    assert.equal(code.safeParse(value).success, true, value);
+  }
+  assert.equal(code.safeParse("snitch.com").success, false);
+  assert.equal(code.safeParse("acme.co.in").success, false);
+  assert.equal(code.safeParse("a@b.test").success, false);
+});
+
+test("F26-AC-02 a quote carrying an F09 action key validates", () => {
+  const result = validateEventProps("price:quote_shown", {
+    action: "local.grid.run",
+    total_usd: 1,
+    blocked_code: null,
+  });
+  assert.equal(result.ok, true);
+});
+
+test("F26-AC-02 out-of-range numbers clamp and the event still validates", () => {
+  const high = validateEventProps("questions:generated", { count: 99_999_999_999 });
+  assert.equal(high.ok, true);
+  if (high.ok) assert.equal(high.props.count, 10_000_000);
+
+  const low = validateEventProps("questions:generated", { count: -5 });
+  assert.equal(low.ok, true);
+  if (low.ok) assert.equal(low.props.count, 0);
+
+  const usd = validateEventProps("price:quote_shown", {
+    action: "keywords.research.run",
+    total_usd: 250_000,
+    blocked_code: null,
+  });
+  assert.equal(usd.ok, true);
+  if (usd.ok) assert.equal(usd.props.total_usd, 100_000);
+
+  const duration = validateEventProps("tool:call", {
+    tool: "site_audit.run",
+    source: "assistant",
+    success: true,
+    error_code: null,
+    duration_ms: 9_999_999,
+    output_invalid: false,
+    truncated: false,
+  });
+  assert.equal(duration.ok, true);
+  if (duration.ok) assert.equal(duration.props.duration_ms, 3_600_000);
+});
+
+test("F26-AC-02 a wrong type still fails after preprocessing", () => {
+  assert.equal(validateEventProps("usage:page_viewed", { range: "1y" }).ok, false);
+  assert.equal(validateEventProps("usage:page_viewed", { range: 7 }).ok, false);
+  assert.equal(validateEventProps("questions:generated", { count: "12" }).ok, false);
+  assert.equal(
+    validateEventProps("price:quote_shown", {
+      action: "local.grid.run",
+      total_usd: "1",
+      blocked_code: null,
+    }).ok,
+    false,
+  );
+  assert.equal(
+    validateEventProps("tool:call", {
+      tool: "site_audit.run",
+      source: "assistant",
+      success: true,
+      error_code: null,
+      duration_ms: "12",
+      output_invalid: false,
+      truncated: false,
+    }).ok,
+    false,
+  );
 });
