@@ -6,8 +6,10 @@ import { usePortal } from "@/components/portal/PortalShell";
 import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
 import { Button, PageHeader } from "@/components/portal/ui";
 import { QueryError } from "@/components/app/QueryState";
+import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
 import { panelQueryOptions } from "@/lib/query/portalQueries";
 import GettingStarted, { buildChecklist } from "@/components/portal/overview/GettingStarted";
+import { SetupChecklist } from "@/components/portal/overview/SetupChecklist";
 import KpiRow from "@/components/portal/overview/KpiRow";
 import VisibilityTrend from "@/components/portal/overview/VisibilityTrend";
 import RecentScans from "@/components/portal/overview/RecentScans";
@@ -40,6 +42,8 @@ export default function OverviewPage() {
     gsc,
     scan,
   } = usePortal();
+  const workspace = useWorkspace();
+  const onboardingWizard = workspace?.features?.onboarding_wizard === true;
   const panelApproved = useApprovedPanel(brandKey);
 
   const name = brand?.display_name || overview?.brand?.display_name || "Your brand";
@@ -78,7 +82,11 @@ export default function OverviewPage() {
 
         <ScanProgressCard showIdle={!overview?.scans?.length} />
 
-        {overview ? <GettingStarted steps={checklist} /> : null}
+        {onboardingWizard ? (
+          <SetupChecklist />
+        ) : overview ? (
+          <GettingStarted steps={checklist} />
+        ) : null}
 
         <KpiRow overview={overview} gsc={gsc} />
 

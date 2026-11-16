@@ -36,6 +36,12 @@ import type {
 import { QueryError } from "@/components/app/QueryState";
 import { Card } from "@/components/ui/card";
 import { RecentSearches } from "@/components/app/RecentSearches";
+import { TrackedTargetsList } from "./TrackedTargetsList";
+import { TrackedHistoryPanel } from "./TrackedHistoryPanel";
+import { useSnapshotTargets } from "./hooks/useSnapshotTargets";
+import { useSnapshots } from "./hooks/useSnapshots";
+import type { SnapshotInterval } from "./hooks/useSnapshotTargets";
+import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
 
 export function BacklinksBody({
   brandKey,
@@ -76,10 +82,31 @@ export function BacklinksBody({
   onViewChange: (view: "all" | undefined) => void;
   onHideSpamChange: (hideSpam: boolean) => void;
 }) {
+  const workspace = useWorkspace();
+  const isOwner = workspace?.isOwner === true;
+  const snapshotsEnabled = workspace?.features?.backlink_snapshots === true;
   const overviewData = data.overviewData;
   const backlinksRowsPage = data.rowsQuery.data;
   const referringDomainsPage = data.referringDomainsQuery.data;
   const topPagesPage = data.topPagesQuery.data;
+  const targetScope = resolveBacklinksScope(searchState.target, searchState.scope);
+  const snapshotsScope = targetScope === "domain" ? "domain" : "subdomains";
+  const canReadSnapshots =
+    snapshotsEnabled &&
+    Boolean(searchState.target) &&
+    (targetScope === "domain" || targetScope === "subdomains");
+  const snapshotsQuery = useSnapshots(
+    brandKey,
+    searchState.target ?? "",
+    snapshotsScope,
+    canReadSnapshots,
+  );
+  const snapshotTargetsQuery = useSnapshotTargets(brandKey, snapshotsEnabled);
+  const snapshotInterval: SnapshotInterval | null =
+    snapshotTargetsQuery.data?.targets.find(
+      (item) => item.enabled && item.target === searchState.target && item.scope === snapshotsScope,
+    )?.interval ?? null;
+  const storedSnapshots = snapshotsQuery.data?.snapshots ?? [];
 
   const tabRows = useMemo<{
     backlinks: BacklinksRow[];
@@ -102,22 +129,28 @@ export function BacklinksBody({
 
   if (!searchState.target) {
     return (
-      <RecentSearches
-        items={history}
-        loaded={historyLoaded}
-        onRemove={onRemoveHistoryItem}
-        emptyIcon={Link2}
-        emptyTitle="Enter a domain or URL to get started"
-        getTitle={(item) => item.target}
-        getSubtitle={(item) => RESEARCH_SCOPE_LABELS[item.scope]}
-        renderLink={(item, props) => (
-          <button
-            type="button"
-            onClick={() => onSelectHistoryItem(item)}
-            {...props}
-          />
-        )}
-      />
+      <div>
+        <TrackedTargetsList
+          brandKey={brandKey}
+          enabled={snapshotsEnabled}
+        />
+        <RecentSearches
+          items={history}
+          loaded={historyLoaded}
+          onRemove={onRemoveHistoryItem}
+          emptyIcon={Link2}
+          emptyTitle="Enter a domain or URL to get started"
+          getTitle={(item) => item.target}
+          getSubtitle={(item) => RESEARCH_SCOPE_LABELS[item.scope]}
+          renderLink={(item, props) => (
+            <button
+              type="button"
+              onClick={() => onSelectHistoryItem(item)}
+              {...props}
+            />
+          )}
+        />
+      </div>
     );
   }
 
@@ -125,6 +158,7 @@ export function BacklinksBody({
     return (
       <>
         {tabControls}
+        <TrackedHistoryPanel snapshots={storedSnapshots} interval={snapshotInterval} />
         <BacklinksLoadingState />
       </>
     );
@@ -134,6 +168,7 @@ export function BacklinksBody({
     return (
       <>
         {tabControls}
+        <TrackedHistoryPanel snapshots={storedSnapshots} interval={snapshotInterval} />
         <BacklinksNotLoadedCard
           brandKey={brandKey}
           target={searchState.target}
@@ -152,6 +187,7 @@ export function BacklinksBody({
     return (
       <>
         {tabControls}
+        <TrackedHistoryPanel snapshots={storedSnapshots} interval={snapshotInterval} />
         <QueryError
           title="Could not load backlinks"
           cause={data.overviewQuery.error}
@@ -173,6 +209,11 @@ export function BacklinksBody({
         <BacklinksOverviewPanels
           data={overviewData}
           summaryStats={summaryStats}
+          brandKey={brandKey}
+          isOwner={isOwner}
+          snapshotsEnabled={snapshotsEnabled}
+          snapshots={storedSnapshots}
+          snapshotInterval={snapshotInterval}
         />
         <div className="px-4 pb-4">
           <BacklinksResultsCard

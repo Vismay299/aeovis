@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * F27 phase 2 browser checks. Every API response is a checked-in fixture or a
+ * F27 phase 2–3 browser checks. Every API response is a checked-in fixture or a
  * deterministic transformation of one. All mutating requests are recorded;
  * requests outside the loopback app are refused and counted.
  */
@@ -47,7 +47,7 @@ const browser = await chromium.launch({ headless: true });
 const results = [];
 let totalExternal = 0;
 
-async function startCase({ state = workspace, memberships = [], priceMode = "normal" } = {}) {
+async function startCase({ state = workspace, memberships = [], priceMode = "normal", setup = [], features = {} } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, reducedMotion: "reduce" });
   const page = await context.newPage();
   const scenario = {
@@ -55,6 +55,9 @@ async function startCase({ state = workspace, memberships = [], priceMode = "nor
     memberships: clone(memberships),
     writes: [],
     onboardingGets: 0,
+    setupGets: 0,
+    setupSteps: clone(setup),
+    features: { product_analytics: true, lifecycle_email: true, price_review: true, ...features },
     privacyWrites: [],
     emailWrites: [],
     priceMode,
@@ -159,7 +162,20 @@ async function startCase({ state = workspace, memberships = [], priceMode = "nor
     if (url.pathname === "/api/customer/ga4/properties" && method === "GET") return response(route, 200, { accounts: [] });
     if (url.pathname === "/api/customer/privacy" && method === "GET") return response(route, 200, { analytics: null, decidedAt: null, source: null, policyVersion: "2026-10-22", telemetryAvailable: true });
     if (url.pathname === "/api/customer/email/preferences" && method === "GET") return response(route, 200, emailPreferences);
-    if (url.pathname === "/api/customer/features" && method === "GET") return response(route, 200, { brandKey: "f27-workspace", features: { product_analytics: true, lifecycle_email: true, price_review: true } });
+    if (url.pathname === "/api/customer/features" && method === "GET") return response(route, 200, { brandKey: "f27-workspace", features: scenario.features });
+    if (url.pathname === "/api/customer/setup" && method === "GET") {
+      scenario.setupGets += 1;
+      return response(route, 200, { brandKey: "f27-workspace", steps: scenario.setupSteps });
+    }
+    if (url.pathname === "/api/customer/setup/dismiss" && method === "POST") {
+      const body = bodyOf(request);
+      scenario.setupSteps = scenario.setupSteps.map((step) =>
+        step.id === body.step
+          ? { ...step, status: body.dismissed ? (step.status === "done" ? "done" : "skipped") : "todo" }
+          : step
+      );
+      return response(route, 200, { brandKey: "f27-workspace", steps: scenario.setupSteps });
+    }
     if (url.pathname === "/api/customer/gsc" && method === "GET") return response(route, 200, { connected: false, connection: null });
     if (url.pathname.startsWith("/api/customer/")) return response(route, 200, {});
 
@@ -230,7 +246,8 @@ try {
       await normal.page.getByRole("button", { name: "Save and continue" }).click();
       const dialog = normal.page.getByRole("dialog");
       await dialog.getByRole("heading", { name: "Research your questions" }).waitFor();
-      assert.match(await dialog.innerText(), /Up to \$1\.23/);
+      // The quote loads after the dialog opens; wait for it instead of reading once.
+      await dialog.getByText(/Up to \$1\.23/).first().waitFor();
       await dialog.getByRole("button", { name: "Start research" }).click();
       await normal.page.getByRole("heading", { name: "Connect Google Search Console" }).waitFor();
       const researchWrite = normal.scenario.writes.find((write) => write.path === "/api/customer/questions/setup");
@@ -371,6 +388,94 @@ try {
       return { details: "Existing workspace remains on the requested page; a new user preserves the requested path through Finish.", writes: [...existing.scenario.writes, ...fresh.scenario.writes], external: [...existing.scenario.external, ...fresh.scenario.external] };
     } finally { await fresh.context.close(); }
   });
+
+  await record("W10", async () => {
+    const setupRows = [
+      { id: "questions", status: "todo" },
+      { id: "scan", status: "todo" },
+      { id: "gsc", status: "todo" },
+      { id: "audit", status: "done" },
+      { id: "draft", status: "done" },
+    ];
+
+    const enabled = await startCase({
+      memberships: membership,
+      features: { onboarding_wizard: true },
+      setup: setupRows,
+    });
+    try {
+      await enabled.page.goto(new URL("/portal", origin).href, { waitUntil: "networkidle" });
+      await enabled.page.getByRole("heading", { name: "Get started", exact: true, level: 2 }).waitFor();
+      assert.equal(
+        enabled.scenario.writes.some((write) => write.path === "/api/customer/setup/dismiss"),
+        false,
+        "no row is deferred before a click"
+      );
+      await enabled.page.getByRole("button", { name: /Approve your questions/ }).click();
+      await enabled.page.getByRole("button", { name: "Skip for now", exact: true }).first().click();
+      await enabled.page.getByRole("button", { name: "1 saved for later", exact: true }).waitFor();
+      const deferred = enabled.scenario.writes.find((write) => write.path === "/api/customer/setup/dismiss");
+      assert.equal(deferred?.body.step, "questions");
+      assert.equal(deferred?.body.dismissed, true);
+      await enabled.page.getByRole("button", { name: "1 saved for later", exact: true }).click();
+      await enabled.page.getByRole("button", { name: "Restore Approve your questions", exact: true }).click();
+      await enabled.page.getByRole("button", { name: "1 saved for later", exact: true }).waitFor({ state: "detached" });
+      await enabled.page.getByRole("button", { name: /Approve your questions/ }).waitFor();
+      assert.ok(
+        enabled.scenario.writes.some(
+          (write) => write.path === "/api/customer/setup/dismiss" && write.body.dismissed === false
+        ),
+        "Restore sends dismissed: false"
+      );
+      assert.ok(enabled.scenario.setupGets >= 1, "the checklist reads the setup route");
+      assert.deepEqual(enabled.scenario.external, []);
+    } finally {
+      await enabled.context.close();
+    }
+
+    const allDone = await startCase({
+      memberships: membership,
+      features: { onboarding_wizard: true },
+      setup: setupRows.map((step) => ({ ...step, status: "done" })),
+    });
+    try {
+      await allDone.page.goto(new URL("/portal", origin).href, { waitUntil: "networkidle" });
+      await allDone.page.getByRole("heading", { name: "Acme", exact: true, level: 1 }).waitFor();
+      assert.equal(await allDone.page.getByRole("heading", { name: "Get started", exact: true, level: 2 }).count(), 0, "nothing renders when every row is done");
+      assert.equal(await allDone.page.getByRole("heading", { name: "Getting started", exact: true, level: 2 }).count(), 0);
+      assert.deepEqual(allDone.scenario.external, []);
+    } finally {
+      await allDone.context.close();
+    }
+
+    const flagOff = await startCase({
+      memberships: membership,
+      features: { onboarding_wizard: false },
+      setup: setupRows,
+    });
+    try {
+      await flagOff.page.goto(new URL("/portal", origin).href, { waitUntil: "networkidle" });
+      await flagOff.page.getByRole("heading", { name: "Getting started", exact: true, level: 2 }).waitFor();
+      assert.equal(await flagOff.page.getByRole("heading", { name: "Get started", exact: true, level: 2 }).count(), 0);
+      assert.equal(flagOff.scenario.setupGets, 0, "the checklist route is not called when the flag is off");
+      assert.deepEqual(flagOff.scenario.external, []);
+      return {
+        details: "The checklist replaces Getting started only with the flag on, moves a skipped row into saved for later, and Restore brings it back; an all-done workspace renders no card.",
+        writes: [
+          ...enabled.scenario.writes,
+          ...allDone.scenario.writes,
+          ...flagOff.scenario.writes,
+        ],
+        external: [
+          ...enabled.scenario.external,
+          ...allDone.scenario.external,
+          ...flagOff.scenario.external,
+        ],
+      };
+    } finally {
+      await flagOff.context.close();
+    }
+  });
 } finally {
   await browser.close();
   const summary = {
@@ -383,8 +488,8 @@ try {
     results,
   };
   await writeFile(path.join(output, "report.json"), JSON.stringify(summary, null, 2));
-  if (summary.failed === 0 && summary.scenarios === 9 && summary.externalRequests === 0) {
-    console.log("ok 9 scenarios");
+  if (summary.failed === 0 && summary.scenarios === 10 && summary.externalRequests === 0) {
+    console.log("ok 10 scenarios");
     console.log("0 external requests");
   } else {
     console.error(`failed ${summary.failed} of ${summary.scenarios} scenarios; ${summary.externalRequests} external requests`);

@@ -905,3 +905,127 @@ test("measurement page swaps legacy question panel for QuestionsWorkspace when q
   const stub = findAllNodes(lifecycle.output, (node) => node.type === QuestionsWorkspaceStub)[0];
   assert.ok(stub, "QuestionsWorkspace must render when question_curation is on");
 });
+
+test("Overview swaps GettingStarted for SetupChecklist only when onboarding_wizard is on", async () => {
+  const ui = {
+    PageHeader: ({ title, description, actions, children }) =>
+      React.createElement(
+        "header",
+        null,
+        React.createElement("h1", null, title),
+        description,
+        actions,
+        children,
+      ),
+    Button: ({ children, href, onClick, loading, disabled, icon, ...rest }) =>
+      React.createElement(
+        href ? "a" : "button",
+        { ...rest, href, onClick, disabled },
+        children,
+      ),
+    Card: ({ title, description, actions, children }) =>
+      React.createElement(
+        "section",
+        null,
+        title ? React.createElement("h2", null, title) : null,
+        description,
+        actions,
+        children,
+      ),
+    ProgressBar: () => null,
+  };
+
+  const GettingStarted = await compileJsx(
+    path.join(here, "overview/GettingStarted.jsx"),
+    {
+      modules: new Map([
+        ["react", React],
+        ["../ui", ui],
+        ["./overview.css", {}],
+      ]),
+      autoNull: ["lucide-react"],
+    },
+  );
+
+  const SetupChecklistStub = () =>
+    React.createElement(
+      "div",
+      { "data-testid": "setup-checklist" },
+      "Get started",
+    );
+
+  let workspaceFeatures = { onboarding_wizard: false };
+  const OverviewPage = await compileJsx(
+    path.join(here, "../../app/portal/page.jsx"),
+    {
+      modules: new Map([
+        ["react", React],
+        [
+          "@tanstack/react-query",
+          createFakeReactQuery(React),
+        ],
+        [
+          "@/components/portal/PortalShell",
+          {
+            usePortal: () => ({
+              brand: { display_name: "Acme", website: "https://acme.example" },
+              brandKey: "acme",
+              overview: {},
+              overviewError: null,
+              overviewQueryError: null,
+              refreshOverview: noop,
+              gsc: null,
+              scan: { start: noop, starting: false, active: false },
+            }),
+          },
+        ],
+        ["@/components/portal/ScanProgressCard", { ScanProgressCard: () => null }],
+        ["@/components/portal/ui", ui],
+        ["@/components/app/QueryState", { QueryError: () => null }],
+        [
+          "@/lib/query/portalQueries",
+          {
+            panelQueryOptions: () => ({
+              queryKey: ["panel", "acme"],
+              queryFn: async () => ({ items: [] }),
+            }),
+          },
+        ],
+        ["@/components/portal/overview/GettingStarted", GettingStarted],
+        ["@/components/portal/overview/KpiRow", { __esModule: true, default: () => null }],
+        ["@/components/portal/overview/VisibilityTrend", { __esModule: true, default: () => null }],
+        ["@/components/portal/overview/RecentScans", { __esModule: true, default: () => null }],
+        ["@/components/portal/overview/ContentStudioCard", { __esModule: true, default: () => null }],
+        [
+          "@/components/portal/overview/overviewModel",
+          { websiteHost: () => "acme.example" },
+        ],
+        ["@/components/portal/schedule/NextRunBadge", { NextRunBadge: () => null }],
+        [
+          "@/components/app/workspace/WorkspaceContext",
+          {
+            useWorkspace: () => ({
+              brandKey: "acme",
+              features: workspaceFeatures,
+              isOwner: true,
+            }),
+          },
+        ],
+        [
+          "@/components/portal/overview/SetupChecklist",
+          { SetupChecklist: SetupChecklistStub },
+        ],
+      ]),
+      autoNull: ["lucide-react"],
+    },
+  );
+
+  const flagOff = renderToHtml(OverviewPage.default);
+  assert.match(textOf(flagOff), /Getting started/);
+  assert.doesNotMatch(flagOff, /setup-checklist/);
+
+  workspaceFeatures = { onboarding_wizard: true };
+  const flagOn = renderToHtml(OverviewPage.default);
+  assert.match(flagOn, /data-testid="setup-checklist"/);
+  assert.doesNotMatch(textOf(flagOn), /Getting started/);
+});
