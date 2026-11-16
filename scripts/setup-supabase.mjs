@@ -598,6 +598,12 @@ const EXPECTED_OBJECTS = {
     { kind: "table", name: "rank_keyword_questions" },
     { kind: "function", name: "rank_question_aio_status" },
   ],
+  "115_f16_backlink_snapshots.sql": [
+    { kind: "table", name: "backlink_snapshot_targets" },
+    { kind: "table", name: "backlink_snapshots" },
+    { kind: "function", name: "prune_backlink_snapshots" },
+    { kind: "function", name: "f16_snapshot_target_cap" },
+  ],
   "065_f06_exports.sql": [
     { kind: "bucket", name: "exports" },
     { kind: "table", name: "export_requests" },
@@ -617,6 +623,11 @@ const EXPECTED_OBJECTS = {
     { kind: "index", name: "scans_brand_listed_idx" },
     { kind: "index", name: "scans_brand_visibility_idx" },
     { kind: "index", name: "scans_engines_gin_idx" },
+  ],
+  "127_f18_site_audit_compare.sql": [
+    // Keep the plain entry visible to the R6.1.14 source parser; the following entry verifies the exact signature.
+    { kind: "function", name: "site_audit_compare" },
+    { kind: "function", name: "site_audit_compare", signature: "text, uuid, uuid, integer" },
   ],
 };
 
