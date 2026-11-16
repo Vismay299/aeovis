@@ -6,7 +6,7 @@ F25-AC-16 is the only acceptance criterion it covers; phases 1–3 are verified 
 > **Rules:**
 > 1. To be executed only by the owner, against the production deployment, after the rollout order in `docs/OPERATOR_LEDGER.md` § C ("F25 lifecycle email").
 > 2. No email addresses, customer domains, question text, answer text or secret values may be recorded here. Name environment variables only (`FEATURE_LIFECYCLE_EMAIL`, `LOOPS_API_KEY`, `LOOPS_PRODUCT_UPDATES_LIST_ID`, `LOOPS_TX_SCAN_FINISHED_ID`, `LOOPS_TX_SCHEDULE_SKIPPED_ID`, `LOOPS_TX_SPEND_CAP_ID`, `EMAIL_LINK_SECRET`).
-> 3. `scripts/qa/send-f25-test-email.mjs` is owner-only. It writes exactly one `email_outbox` row for `--to` and never calls Loops; the next `email.deliver` tick sends it. It prints only the outbox row id.
+> 3. `scripts/qa/send-f25-test-email.mjs` is owner-only. It writes exactly one `email_outbox` row for `--to` and never calls Loops; the next `email.deliver` tick sends it. It prints only the outbox row id. It reads `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` from the environment and loads no file itself, so run it as `node --env-file=<file holding the production values> scripts/qa/send-f25-test-email.mjs …` (without them it refuses with "Supabase admin configuration is required"). The address must belong to an existing, confirmed account. The `reportUrl` in E1 points at a fixture scan id, so that button opens a not-found report; only its presence is checked.
 > 4. Record results (PASS / FAIL, date, tester name/handle, notes) below and paste the summary into the phase 4 PR. A FAIL records the shortest decisive line, never a provider body or an address.
 
 ---
