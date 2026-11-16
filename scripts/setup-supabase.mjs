@@ -638,6 +638,9 @@ const EXPECTED_OBJECTS = {
   "148_f22_gsc_query_summary.sql": [
     { kind: "function", name: "assistant_gsc_query_summary" },
   ],
+  "149_f22_assistant_milestone_fix.sql": [
+    { kind: "column", name: "assistant_turns.created_at" },
+  ],
 };
 
 /**

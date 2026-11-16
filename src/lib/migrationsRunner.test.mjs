@@ -420,6 +420,8 @@ const FULL_CATALOG = [
   "assistant_stream_chunks", "prune_assistant_stream_chunks",
   "assistant_approvals", "claim_assistant_approval", "expire_assistant_approvals",
   "assistant_gsc_query_summary",
+  // F22 phase 2 migration 149 — F25 milestone compatibility column.
+  "assistant_turns.created_at",
 ];
 
 function withRegister(dir) {

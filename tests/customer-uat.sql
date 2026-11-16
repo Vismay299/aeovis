@@ -49,6 +49,7 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 \ir ../supabase/migrations/146_f22_assistant_stream_chunks.sql
 \ir ../supabase/migrations/147_f22_assistant_approvals.sql
 \ir ../supabase/migrations/148_f22_gsc_query_summary.sql
+\ir ../supabase/migrations/149_f22_assistant_milestone_fix.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',

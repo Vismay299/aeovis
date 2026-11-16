@@ -1070,6 +1070,11 @@ Branches `feat/f22-in-app-assistant-p<n>`. Every phase ends green on the full su
 
 **Checkpoint:** `node scripts/qa/check-f22-db.mjs` → all passed; full suite → pass. Completes F22-AC-15 (DB part), 18 (DB part), 22 (RLS part).
 
+> **Integration note (16 November 2026):** F25's `email_milestone_candidates`
+> (migration 161) reads `assistant_turns.created_at`. Migration 149 adds that
+> column as a generated mirror of `started_at`, so 145 stays verbatim and 161 is
+> untouched. `check-f25-db.mjs` seeds a valid turn when F22's table exists.
+
 ### Phase 3 — Full tool catalog
 
 **Precondition:** F10, F11, F12, F13, F14, F15, F16, F17, F18, F19, F20 merged. If one is not, stop and ask the owner which tools to drop from `TOOL_NAMES` (that edit also changes F21 skills that require them).

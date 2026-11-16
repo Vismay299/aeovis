@@ -32,6 +32,7 @@ const F22_MIGRATIONS = [
   "146_f22_assistant_stream_chunks.sql",
   "147_f22_assistant_approvals.sql",
   "148_f22_gsc_query_summary.sql",
+  "149_f22_assistant_milestone_fix.sql",
 ];
 const FRESH = process.argv.includes("--fresh");
 const groupFlagIdx = process.argv.indexOf("--group");
@@ -265,6 +266,15 @@ async function schema(client) {
     const denied = await client.query("SELECT has_function_privilege('authenticated',$1,'EXECUTE') AS ok", [fn]);
     assert.equal(denied.rows[0].ok, false, `authenticated must not execute ${fn}`);
   }
+
+  const createdColumn = await client.query(
+    "SELECT is_generated FROM information_schema.columns WHERE table_schema='public' AND table_name='assistant_turns' AND column_name='created_at'",
+  );
+  assert.equal(
+    createdColumn.rows[0]?.is_generated,
+    "ALWAYS",
+    "assistant_turns.created_at must be a generated mirror of started_at for F25",
+  );
 
   const indexes = [
     "assistant_sessions_list_idx",

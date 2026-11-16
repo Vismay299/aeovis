@@ -686,13 +686,14 @@ abandoned is not.
 - Migration 112 creates `rank_keyword_questions` with tenant RLS and foreign keys, plus `rank_question_aio_status` returning latest Google AI Overview status per question.
 - Verify with scripts/qa/check-f15-db.mjs against a loopback _qa database and tests/customer-uat.sql.
 
-### `145_f22_assistant_sessions`, `146_f22_assistant_stream_chunks`, `147_f22_assistant_approvals` and `148_f22_gsc_query_summary` (F22 phase 2)
+### `145_f22_assistant_sessions`, `146_f22_assistant_stream_chunks`, `147_f22_assistant_approvals`, `148_f22_gsc_query_summary` and `149_f22_assistant_milestone_fix` (F22 phase 2)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply 145, 146, 147, then 148, **before deploying F22 phase 2**. All additive; no data backfill.
 - Objects (145): tables `assistant_sessions`, `assistant_messages`, `assistant_turns` with user-private RLS; functions `begin_assistant_turn`, `rewind_assistant_session`, `prune_assistant_sessions`.
 - Objects (146): table `assistant_stream_chunks` with user-private RLS; function `prune_assistant_stream_chunks`.
 - Objects (147): table `assistant_approvals` with user-private RLS; functions `claim_assistant_approval`, `expire_assistant_approvals`.
 - Objects (148): read-only function `assistant_gsc_query_summary` (current connection generation only).
+- Objects (149): `assistant_turns.created_at`, generated from `started_at`, so F25's `email_milestone_candidates` reads the F22 column without editing 161.
 - Verify with scripts/qa/check-f22-db.mjs against a loopback _qa database and tests/customer-uat.sql.
 
 ## D. Content approval — the human gate, and what it does not yet do

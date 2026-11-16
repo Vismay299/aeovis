@@ -232,6 +232,7 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `146_f22_assistant_stream_chunks` | Transient stream frames so a reloaded page can resume a reply. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `147_f22_assistant_approvals` | Human approvals for paid or external assistant actions. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `148_f22_gsc_query_summary` | Read-only Search Console query totals for the assistant. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `149_f22_assistant_milestone_fix` | F25 email milestones: `assistant_turns.created_at` as a generated mirror of `started_at` (cross-spec compatibility; 145 stays verbatim). **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.

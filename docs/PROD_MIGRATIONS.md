@@ -1893,3 +1893,12 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - **Applied-check:** `select to_regclass('public.assistant_sessions');` returns `assistant_sessions`; `select count(*) from pg_proc where proname = 'assistant_gsc_query_summary';` returns 1.
 - **Rollback:** leaving 148 in place is harmless (unused read-only function).
 - **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f22-db.mjs`. Never run that harness against production.
+
+## `149_f22_assistant_milestone_fix.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply after 148 and before deploying F22 phase 2.
+- **Additive only.** Adds `assistant_turns.created_at` as a generated mirror of `started_at`. F25's `email_milestone_candidates` (migration 161) reads `created_at`; this keeps 145 byte-identical to the F22 spec and 161 untouched.
+- **Pre-check:** `select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'assistant_turns' and column_name = 'created_at';` returns 0.
+- **Applied-check:** the same query returns 1; `select is_generated from information_schema.columns where table_schema = 'public' and table_name = 'assistant_turns' and column_name = 'created_at';` returns `ALWAYS`.
+- **Rollback:** `alter table public.assistant_turns drop column if exists created_at;` is safe unless F25's milestone job already ran (it only reads the value).
+- **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f22-db.mjs` and `scripts/qa/check-f25-db.mjs`. Never run either harness against production.
