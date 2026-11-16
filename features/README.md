@@ -55,7 +55,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F19](./F19-indexnow.md) | IndexNow | IndexNow | 3 | F01, F04, F05; F18 for phase 3 | 130–134 | Merged |
 | [F20](./F20-ga4-and-opportunities.md) | Google Analytics 4 and search opportunities | Google Analytics 4 | 3 | F01, F04, F05 | 135–139 | Merged |
 | [F21](./F21-agent-skills.md) | Agent skills library | Agent skills | 4 | F01 | 140–144 | Merged |
-| [F22](./F22-in-app-assistant.md) | In-app assistant (chat over our tools) | In-app chat agent | 4 | F01, F03, F04, F05, F07–F20, F21 | 145–149 | Spec ✓ |
+| [F22](./F22-in-app-assistant.md) | In-app assistant (chat over our tools) | In-app chat agent | 4 | F01, F03, F04, F05, F07–F20, F21 | 145–149 | In progress |
 | [F23](./F23-reports-and-sharing.md) | Reports and public sharing | Reports and sharing | 4 | F21, F22 | 150–154 | Spec ✓ |
 | [F24](./F24-sign-in-hardening.md) | Sign-in hardening: Google, captcha, disposable email | Sign-in | 5 | F04 | 155–159 | In progress |
 | [F25](./F25-lifecycle-email.md) | Lifecycle email | Lifecycle email | 5 | F01, F10, F24 | 160–164 | In progress |

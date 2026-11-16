@@ -511,7 +511,11 @@ async function main() {
       const hasTurnsRes = await pool.query(
         "SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'assistant_turns'",
       );
-      if (hasTurnsRes.rowCount === 0) {
+      // F22 owns `assistant_turns` from migration 145 onwards: it has NOT NULL
+      // session/user keys and a generated `created_at`. Seed a valid turn there
+      // instead of the three-column stub. When F22 is absent, keep the stub.
+      const f22Turns = hasTurnsRes.rowCount > 0;
+      if (!f22Turns) {
         await pool.query(
           `CREATE TABLE public.assistant_turns (
             brand_key text,
@@ -534,11 +538,24 @@ async function main() {
          VALUES ($1, 'https://' || $1 || '/', 'https://' || $1 || '/', $1, 50, 'completed', now())`,
         [brandKey],
       );
-      await pool.query(
-        `INSERT INTO public.assistant_turns (brand_key, status, created_at)
-         VALUES ($1, 'completed', now())`,
-        [brandKey],
-      );
+      if (f22Turns) {
+        const sessionId = id();
+        await pool.query(
+          "INSERT INTO public.assistant_sessions (id, brand_key, user_id) VALUES ($1, $2, $3)",
+          [sessionId, brandKey, user],
+        );
+        await pool.query(
+          `INSERT INTO public.assistant_turns (session_id, brand_key, user_id, status, stop_reason, finished_at)
+           VALUES ($1, $2, $3, 'completed', 'finished', now())`,
+          [sessionId, brandKey, user],
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO public.assistant_turns (brand_key, status, created_at)
+           VALUES ($1, 'completed', now())`,
+          [brandKey],
+        );
+      }
 
       const stubCand = await pool.query(
         "SELECT * FROM public.email_milestone_candidates(500) WHERE brand_key = $1",

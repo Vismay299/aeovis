@@ -419,6 +419,14 @@ const FULL_CATALOG = [
   // F18 phase 8 migration 127 — compare issue pages between two audits in one workspace.
   "site_audit_compare",
   "site_audit_compare(text, uuid, uuid, integer)",
+  // F22 phase 2 migrations 145–148 — assistant storage and the GSC query summary.
+  "assistant_sessions", "assistant_messages", "assistant_turns", "begin_assistant_turn",
+  "rewind_assistant_session", "prune_assistant_sessions",
+  "assistant_stream_chunks", "prune_assistant_stream_chunks",
+  "assistant_approvals", "claim_assistant_approval", "expire_assistant_approvals",
+  "assistant_gsc_query_summary",
+  // F22 phase 2 migration 149 — F25 milestone compatibility column.
+  "assistant_turns.created_at",
 ];
 
 function withRegister(dir) {

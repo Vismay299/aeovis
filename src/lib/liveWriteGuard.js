@@ -242,6 +242,13 @@ export const NEVER_WRITABLE = Object.freeze([
   // F16 phase 5 — migration 115: tracked targets and customer backlink history.
   "backlink_snapshot_targets",
   "backlink_snapshots",
+  // F22 phase 2 - migrations 145-147: assistant chats are private customer data;
+  // live tests use the loopback-only check-f22-db.mjs harness.
+  "assistant_sessions",
+  "assistant_messages",
+  "assistant_turns",
+  "assistant_stream_chunks",
+  "assistant_approvals",
 ]);
 
 /**
@@ -309,6 +316,13 @@ export const WRITING_FUNCTIONS = Object.freeze({
   prune_local_seo: ["local_fetches", "local_fetch_items", "local_grid_runs", "local_searches"],
   // F16 phase 5 — migration 115: snapshot retention writer.
   prune_backlink_snapshots: ["backlink_snapshots"],
+  // F22 phase 2 - migrations 145-147 mutating assistant functions.
+  begin_assistant_turn: ["assistant_turns"],
+  rewind_assistant_session: ["assistant_messages", "assistant_sessions", "assistant_approvals"],
+  prune_assistant_sessions: ["assistant_sessions"],
+  prune_assistant_stream_chunks: ["assistant_stream_chunks"],
+  claim_assistant_approval: ["assistant_approvals"],
+  expire_assistant_approvals: ["assistant_approvals"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */

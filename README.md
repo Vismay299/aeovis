@@ -230,6 +230,11 @@ Migrations are idempotent and applied in filename order by `npm run setup:db`.
 | `095_f12_question_answer_links` | F12 phase 1: `question_answer_links` table with tenant RLS plus service-role `link_question_answers` (scan/explore/legacy linking, optional archived `import` creation) and `prune_question_answer_links` (395-day retention). **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 | `115_f16_backlink_snapshots` | Opt-in backlink history: tracked targets (weekly/monthly, approved maximum) and daily snapshots, 25-month retention. **NOT YET APPLIED to production** — apply before deploying F16 phase 5; see [`docs/PROD_MIGRATIONS.md`](docs/PROD_MIGRATIONS.md). |
 | `127_f18_site_audit_compare` | Compares issue pages between two audits of one workspace. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `145_f22_assistant_sessions` | Assistant sessions, messages and turns; private to the user; turn start and rewind functions. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `146_f22_assistant_stream_chunks` | Transient stream frames so a reloaded page can resume a reply. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `147_f22_assistant_approvals` | Human approvals for paid or external assistant actions. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `148_f22_gsc_query_summary` | Read-only Search Console query totals for the assistant. **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
+| `149_f22_assistant_milestone_fix` | F25 email milestones: `assistant_turns.created_at` as a generated mirror of `started_at` (cross-spec compatibility; 145 stays verbatim). **NOT YET APPLIED to production** — see `docs/PROD_MIGRATIONS.md` |
 
 Migration 005 is the analytics foundation: one row per prompt×engine, one row
 per cited URL, and a daily rollup per brand/day/engine that powers every trend.
