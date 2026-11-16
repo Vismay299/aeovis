@@ -594,11 +594,39 @@ abandoned is not.
 - Objects: `user_onboarding` (per-user progress, nullable brand_key, RLS read-own), `workspace_setup_dismissals` (per-user per-workspace checklist dismissals, RLS read-own with customer_can_access_brand), `gsc_oauth_attempts.return_path` (default '/portal/search-console').
 - Safety: no production changes made; flags default off.
 
+### F27 onboarding
+- Status: implemented in repo; not yet enabled — rollout and rollback below.
+- Operator note: §10 says `questions_setup`; the repo flag is `question_setup` and the paid control is the `questions.setup` spend feature.
+- Deployment note: env changes take effect on the next deployment; redeploy after setting the flag on preview and again on production, and after setting it off for rollback.
+
+**Env names:** `FEATURE_ONBOARDING_WIZARD`. **Default:** off in production → legacy `/onboarding` form and `GettingStarted`.
+
+**Owner steps:** apply migration 170; make sure F18 `site_audit` is on (else the audit row simply hides) and decide whether the `question_setup` flag and its `questions.setup` paid control are enabled (else research is offered as unavailable and free-scan suggestions carry the questions); set `FEATURE_ONBOARDING_WIZARD=on` on a preview, run O1–O5, then production.
+
+**Live checklist (`scripts/qa/check-f27-live.md`):** O1 run the free scan for a site you control, click "Track these questions in a workspace", sign up → onboarding shows the domain, brand and "…questions from your free scan…"; O2 save → workspace created, the audit starts (Site Audit shows it running), research price shown; approve research only if the paid control is on for this workspace; O3 connect Search Console and return to step 2's picker; O4 preferences saved (Settings → Privacy and Emails show the choices); O5 approve questions (via "Review questions") and run the first scan from the price dialog; an existing customer account logging in is never shown onboarding.
+
+**Rollback:** `FEATURE_ONBOARDING_WIZARD=off` restores the legacy form, the old checklist and today's portal behaviour immediately; GSC attempts with `return_path '/onboarding'` still complete (the callback honours the stored path). Data: `user_onboarding` and `workspace_setup_dismissals` can stay; to remove, drop both tables and the `return_path` column after the flag is off.
+
 ### `165_f26_privacy_and_telemetry_ids` (F26 phase 1)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply 165; no backfill needed: the column default fills existing rows.
 - Objects: `customer_brands.telemetry_id` (unique opaque PostHog workspace group key); `user_privacy_choices` (per-user analytics consent, RLS read-own).
 - Safety: never send `brand_key` to PostHog; consent defaults off (no row = undecided = off).
+
+### F26 product analytics
+
+Owner setup for F26 (product analytics and error tracking) and the live checks T1–T5; status: implemented in repo; **not yet enabled in production** (flag off, PostHog keys unset).
+
+**Owner steps:**
+1. Apply migration 165 — see the `165_f26_privacy_and_telemetry_ids` entry above; skip if already applied.
+2. Create or choose a PostHog project in the EU cloud. Project settings → turn on "Discard client IP data"; disable session replay, surveys, heatmaps and autocapture.
+3. Vercel environment, **Preview and Production**: set `NEXT_PUBLIC_POSTHOG_KEY`, `POSTHOG_PROJECT_KEY` and `POSTHOG_HOST`; for source maps set `POSTHOG_SOURCEMAPS`, `POSTHOG_CLI_TOKEN`, `POSTHOG_CLI_ENV_ID` and `POSTHOG_CLI_HOST`. Names and default values: `.env.example`; dashboard steps: `features/_ACCOUNT-SETUP.md` §4.
+4. `FEATURE_PRODUCT_ANALYTICS=on` on a preview first; run T1–T5; then production.
+5. **Erasure (manual for now):** §6.7's automatic PostHog person-delete is not implemented — the repo has no account-deletion flow and nothing logs `[telemetry] person delete failed`. For every account deletion or erasure request, delete the person by hand: PostHog → Persons → search the user id → Delete.
+
+**Rollback:** `FEATURE_PRODUCT_ANALYTICS=off` (server events stop; the Privacy tab and banner hide); `NEXT_PUBLIC_TELEMETRY_DISABLED=1` + redeploy (browser stops loading PostHog). Error reports are not gated by the flag, so stopping those needs `TELEMETRY_DISABLED=1` on the server or the keys removed; removing both keys stops everything.
+
+The live checklist is `scripts/qa/check-f26-live.md` T1–T5; results are recorded there and in the phase-5 PR.
 
 ### `155_f24_signup_guard` (F24 phase 1)
 - Status: implemented in repo; **not yet applied to production**.
@@ -629,6 +657,51 @@ abandoned is not.
 - Apply 160 then 161; no data backfill: defaults apply to existing users, outbox starts empty, sweeps look back 30 minutes only.
 - Objects (160): `user_email_preferences` (per-user preferences across workspaces, RLS read-own), `email_outbox` (service-role only delivery queue with unique `dedupe_key`), `workspace_milestones` (workspace milestones reached, member readable).
 - Objects (161): `claim_email_outbox` (concurrent safe skip-locked claim), `close_exhausted_email_outbox` (closes 5-attempt exhausted claims as failed), `email_milestone_candidates` (dynamic query tolerant of optional F10/F18/F22 tables), `prune_email_outbox` (retention prune).
+
+### F25 lifecycle email (F25 phase 4)
+
+Copied verbatim from `features/F25-lifecycle-email.md` §10 (enabling steps, defaults, rollback)
+and §6.4 (the template tables), so the runbook cannot drift from the spec.
+
+**Env names:** `FEATURE_LIFECYCLE_EMAIL`, `LOOPS_API_KEY`, `LOOPS_PRODUCT_UPDATES_LIST_ID`, `LOOPS_TX_SCAN_FINISHED_ID`, `LOOPS_TX_SCHEDULE_SKIPPED_ID`, `LOOPS_TX_SPEND_CAP_ID`, `EMAIL_LINK_SECRET`. Values go into Vercel by piping from the owner's local file (CLAUDE.md), never printed.
+
+**Defaults:** flag off in production; periodics enqueue nothing while off; existing users have no preferences row (defaults apply); no backfill emails (sweeps look back 30 minutes only; milestone sweeps update contact properties for existing members but never send a drip, which starts only from `signed_up`).
+
+**Owner steps:**
+1. Apply migrations 160 and 161.
+2. In Loops: verify the sending domain; create the mailing list "Product updates" (id → `LOOPS_PRODUCT_UPDATES_LIST_ID`); create the three transactional templates from §6.4 with exactly those variable names (ids → `LOOPS_TX_*`); create contact properties `workspaceCreated`, `firstScanCompleted`, `scheduleSet`, `gscConnected`, `auditRun`, `draftApproved`, `assistantUsed` (boolean) and `workspaceCount` (number); create the Loop "Perceev onboarding" triggered by event `signed_up` with D1–D7 (leave D5/D7 paused until F18/F22 are enabled for most workspaces); create an API key.
+3. Set the env vars in Vercel (Production), generate `EMAIL_LINK_SECRET` with `openssl rand -base64 48 | tr -d '\n' | vercel env add EMAIL_LINK_SECRET production` (the value is never shown).
+4. `FEATURE_LIFECYCLE_EMAIL=on` → redeploy.
+5. Run E1–E6.
+
+**Onboarding drip** — a Loop named "Perceev onboarding" triggered by event `signed_up`, built by the owner. Each email has a Loops audience filter evaluated at send time; Loops adds its own unsubscribe footer.
+
+| # | Delay after trigger | Send only if | Subject | Body (one short paragraph + button) | Button → |
+|---|---|---|---|---|---|
+| D1 | 1 day | `workspaceCreated` is false | "Finish setting up Perceev" | "Add your website and we'll start checking how AI assistants talk about your brand. It takes two minutes." | "Finish setup" → `/onboarding` |
+| D2 | 2 days | `workspaceCreated` true and `firstScanCompleted` false | "Approve your questions and run your first scan" | "Your first scan asks ChatGPT, Gemini, Perplexity and Google's AI Overviews the questions your buyers ask, and shows which brands they name. You see the price before it runs." | "Review questions" → `/portal/measurement` |
+| D3 | 4 days | `gscConnected` false | "See which Google searches bring people to your site" | "Connect Google Search Console to compare what people search for with what AI assistants answer." | "Connect Search Console" → `/portal/search-console` |
+| D4 | 6 days | `firstScanCompleted` true and `scheduleSet` false | "Track your AI visibility every week" | "Schedule scans so you can see whether you're gaining or losing ground. You approve the monthly cost once." | "Schedule scans" → `/portal/settings/schedule` |
+| D5 | 8 days | `auditRun` false | "Check whether AI crawlers can read your site" | "A site audit finds blocked AI crawlers, missing llms.txt and structured-data problems that keep you out of answers." | "Audit your site" → `/portal/audit` |
+| D6 | 11 days | `draftApproved` false | "Turn a question you're losing into content" | "Content Studio drafts an article for a question where competitors get named and you don't." | "Open Content Studio" → `/portal/content` |
+| D7 | 14 days | `assistantUsed` false | "Ask Perceev's assistant" | "Ask about your scans, competitors and site in plain language. It shows a price before any paid step." | "Open the assistant" → `/portal/assistant` |
+
+D5 and D7 point to pages behind F18/F22 flags; the owner enables those emails only when the features are on for most workspaces (§10).
+
+**Schedule-skip actions** (`schedule_skipped` button, §6.4):
+
+| Reason(s) | `actionLabel` | `actionUrl` path |
+|---|---|---|
+| `panel_not_approved` | Approve your questions | `/portal/measurement` |
+| `price_changed`, `over_scan_limit` | Review the price | `/portal/settings/schedule` |
+| `scheduling_disabled`, `feature_disabled`, `brand_not_allowlisted`, `dispatch_paused`, `no_engines`, `daily_capacity_reached`, `workspace_inactive`, `start_failed` | View schedule | `/portal/settings/schedule` |
+
+The three transactional templates' variables, subject, preview and body copy are specified in `features/F25-lifecycle-email.md` §6.4 items 1–3 and must be created with exactly those variable names.
+
+**Live checklist:** `scripts/qa/check-f25-live.md` (E1–E6). Owner-only; record only pass/fail and dates.
+
+**Rollback:** `FEATURE_LIFECYCLE_EMAIL=off` stops enqueueing and delivery immediately (pending rows are skipped as `flag_off` if the flag is off at send time; to keep them for later, pause by removing `LOOPS_API_KEY` instead, which leaves them `skipped loops_not_configured` — prefer the flag). Pause the Loop in Loops to stop drip emails already scheduled. Data cleanup: `DELETE FROM email_outbox WHERE status = 'pending';` (operator). Tables can stay; dropping them requires removing the spend hook first (P2.T2.S1 line).
+
 ### `135_f20_ga4` and `136_f20_ga4_functions` (F20 phase 1)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply 135 and 136 before deploying F20 phase 1.
