@@ -29,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { createSqlAuditStore } from "../../src/lib/audit/store.ts";
 import { createMemoryAuditStore } from "../../src/lib/audit/memoryStore.ts";
+import { saveCrawlerCredential } from "../../src/lib/audit/crawlerAccess.ts";
 
 const host = process.env.PGHOST || "";
 const database = process.env.PGDATABASE || "";
@@ -861,6 +862,74 @@ async function main() {
     await c.query("ROLLBACK TO SAVEPOINT probe_crawler_credentials");
     assert.ok(denied, "authenticated cannot read the credential table");
   });
+
+  // D1 regression: re-saving a credential must keep its primary key even when an
+  // audit references it. The adapter's upsert reproduces PostgREST's
+  // ON CONFLICT (brand_key, host) DO UPDATE over every payload column.
+  const resaveHost = `resave-${id().slice(0, 8)}.example`;
+  const resaveDeps = {
+    env: { CRAWLER_ACCESS_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") },
+    checkShopifySignature: async () => null,
+  };
+  const firstSave = await saveCrawlerCredential(
+    pgAdapter,
+    {
+      brandKey: brandA,
+      userId: userA,
+      host: resaveHost,
+      signatureInput: "sig1=(first);expires=1790000000",
+      signature: "sig1=:EXAMPLE-NOT-A-REAL-SIGNATURE:",
+      workspaceHost: resaveHost,
+    },
+    resaveDeps
+  );
+  assert.ok(firstSave.credential, "the first credential save succeeds");
+
+  const resaveAuditId = id();
+  await query(
+    `INSERT INTO public.site_audits
+       (id, brand_key, requested_url, start_url, start_host, max_pages, status, crawler_credential_id)
+     VALUES ($1, $2, $3, $3, $4, 50, 'completed', $5)`,
+    [resaveAuditId, brandA, `https://${resaveHost}/`, resaveHost, firstSave.credential.id]
+  );
+
+  const secondSave = await saveCrawlerCredential(
+    pgAdapter,
+    {
+      brandKey: brandA,
+      userId: userA,
+      host: resaveHost,
+      signatureInput: "sig1=(second);expires=1790003600",
+      signature: "sig1=:EXAMPLE-NOT-A-REAL-SIGNATURE-SECOND:",
+      workspaceHost: resaveHost,
+    },
+    resaveDeps
+  );
+  assert.equal(
+    secondSave.credential.id,
+    firstSave.credential.id,
+    "a re-save keeps the credential primary key"
+  );
+
+  const resaveRows = (
+    await query(
+      "SELECT id FROM public.site_audit_crawler_credentials WHERE brand_key = $1 AND host = $2",
+      [brandA, resaveHost]
+    )
+  ).rows;
+  assert.equal(resaveRows.length, 1, "a re-save leaves one row for (brand_key, host)");
+  assert.equal(resaveRows[0].id, firstSave.credential.id);
+
+  const linkedCredential = (
+    await query("SELECT crawler_credential_id FROM public.site_audits WHERE id = $1", [
+      resaveAuditId,
+    ])
+  ).rows[0].crawler_credential_id;
+  assert.equal(
+    linkedCredential,
+    firstSave.credential.id,
+    "the audit still references the credential after a re-save"
+  );
 
   console.log("PASS crawler access");
 

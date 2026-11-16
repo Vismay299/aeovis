@@ -4,7 +4,6 @@
 //   src/server/features/audit/repositories/CrawlerCredentialRepository.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { randomUUID } from "node:crypto";
 import { AppError } from "../http/appError.ts";
 import { isOwnedHost } from "./urlPolicy.ts";
 import {
@@ -286,9 +285,11 @@ export async function saveCrawlerCredential(
     deps?.env,
   );
 
+  // No `id` in the payload: the DB default supplies one on insert, and
+  // PostgREST's ON CONFLICT DO UPDATE must not rewrite the existing primary key
+  // (a re-save would break site_audits_crawler_credential_fk).
   const { error } = await admin.from(CRAWLER_CREDENTIALS_TABLE).upsert(
     {
-      id: randomUUID(),
       brand_key: input.brandKey,
       host,
       provider: "shopify",

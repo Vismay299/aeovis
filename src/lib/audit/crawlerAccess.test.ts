@@ -181,9 +181,22 @@ function memoryCredentialsAdmin(initial: CredentialRow[] = []) {
           const existing = [...rows.values()].find(
             (row) => row.brand_key === values.brand_key && row.host === values.host,
           );
-          const row = existing ? { ...existing, ...values, id: existing.id } : { ...values, created_at: values.created_at ?? "2026-11-16T09:00:00.000Z" };
-          rows.set(row.id, row);
-          return { data: [row], error: null };
+          if (existing) {
+            // PostgREST's ON CONFLICT DO UPDATE rewrites every payload column,
+            // including id if a future change adds it. Keep this realistic: no
+            // masking the primary key.
+            const merged = { ...existing, ...values };
+            rows.delete(existing.id);
+            rows.set(merged.id, merged);
+            return { data: [merged], error: null };
+          }
+          const inserted = {
+            ...values,
+            id: values.id ?? crypto.randomUUID(),
+            created_at: values.created_at ?? "2026-11-16T09:00:00.000Z",
+          };
+          rows.set(inserted.id, inserted);
+          return { data: [inserted], error: null };
         },
         delete() {
           const deleting: any = {
@@ -485,6 +498,11 @@ test("saveCrawlerCredential stores ciphertext and returns the summary", async ()
   );
   assert.equal(admin.calls.upserts.length, 1);
   assert.deepEqual(admin.calls.upserts[0].opts, { onConflict: "brand_key,host" });
+  assert.equal(
+    Object.hasOwn(admin.calls.upserts[0].values, "id"),
+    false,
+    "the upsert must not send a primary key: ON CONFLICT DO UPDATE would rewrite it",
+  );
   const row = [...admin.rows.values()][0];
   assert.ok(row.encrypted_signature_input !== SIGNATURE_INPUT_SECRET);
   assert.ok(row.encrypted_signature !== SIGNATURE_SECRET);
@@ -503,7 +521,7 @@ test("saveCrawlerCredential replaces a second save for the same host", async () 
   const env = testEnv();
   const admin = memoryCredentialsAdmin([]);
   const deps = { env, checkShopifySignature: async () => null };
-  await saveCrawlerCredential(
+  const firstSave = await saveCrawlerCredential(
     admin,
     {
       brandKey: "brand-a",
@@ -515,8 +533,9 @@ test("saveCrawlerCredential replaces a second save for the same host", async () 
     },
     deps,
   );
+  assert.ok("credential" in firstSave);
   const first = [...admin.rows.values()][0].encrypted_signature_input;
-  await saveCrawlerCredential(
+  const secondSave = await saveCrawlerCredential(
     admin,
     {
       brandKey: "brand-a",
@@ -528,8 +547,11 @@ test("saveCrawlerCredential replaces a second save for the same host", async () 
     },
     deps,
   );
+  assert.ok("credential" in secondSave);
+  assert.equal(secondSave.credential.id, firstSave.credential.id, "a re-save keeps the primary key");
   assert.equal(admin.rows.size, 1);
   const row = [...admin.rows.values()][0];
+  assert.equal(row.id, firstSave.credential.id);
   assert.notEqual(row.encrypted_signature_input, first);
   assert.equal(row.expires_at, new Date(1790000000 * 1000).toISOString());
 });
