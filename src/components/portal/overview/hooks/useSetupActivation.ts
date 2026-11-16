@@ -21,7 +21,7 @@ export type SetupActivationResponse = {
 /**
  * F27 §6.6.9 — the Overview checklist's own state. A workspace-scoped query;
  * `enabled` lets a render test pass a fixture activation through props instead
- * of fetching. A scan that becomes active invalidates the checklist so a row
+ * of fetching. A scan that starts or finishes invalidates the checklist so a row
  * that just completed shows up without a reload.
  */
 export function useSetupActivation({
@@ -45,9 +45,11 @@ export function useSetupActivation({
     retry: false,
   });
 
-  const sawActiveScan = useRef(false);
+  // The scan row turns done only when a `scans` row exists, which is written
+  // when the scan finishes, so refetch on both edges: start and finish.
+  const sawActiveScan = useRef(scanActive);
   useEffect(() => {
-    if (scanActive && !sawActiveScan.current) {
+    if (scanActive !== sawActiveScan.current) {
       void queryClient.invalidateQueries({
         queryKey: setupKeys.activation(brandKey),
       });
