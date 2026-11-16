@@ -124,7 +124,9 @@ export function AuditDetail({
   brandKey: string;
   auditId: string;
 }) {
-  const { features } = usePortal();
+  const { brand, features } = usePortal();
+  const isOwner = brand?.role === "owner";
+  const crawlerAccessEnabled = features?.site_audit_crawler_access === true;
   const statusQuery = useAuditStatus(auditId, brandKey);
   const audit = statusQuery.data;
   const active = isAuditActive(audit);
@@ -255,6 +257,8 @@ export function AuditDetail({
           auditId={auditId}
           summary={summary}
           canRender={features?.site_audit_render === true}
+          isOwner={isOwner}
+          crawlerAccessEnabled={crawlerAccessEnabled}
         />
       ) : null}
 

@@ -10,7 +10,7 @@ import { AUDIT_CRAWLER_USER_AGENT } from "../../shared/audit.ts";
 import { sha256Hex } from "./ids.ts";
 import { normalizeUrl } from "./urlUtils.ts";
 import type { CrawlThrottle } from "./crawlThrottle.ts";
-import { crawlerHeadersFor, type CrawlerAccess } from "./discovery.ts";
+import { crawlerHeadersFor, type CrawlerAccess } from "./crawlerAccess.ts";
 import { analyzeHtml } from "./pageAnalyzer.ts";
 import { inspectJsonLd } from "./structuredData.ts";
 import { assertPublicUrl, SsrfBlockedError } from "../ssrfGuard.js";

@@ -1875,6 +1875,16 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - **Rollback:** leaving the function in place after reverting F18 phase 8 is harmless; it is unused.
 - **Verify locally:** apply it twice to a disposable loopback `*_qa` database and run `scripts/qa/check-f18-db.mjs`. Never run that harness against production.
 
+## `128_f18_crawler_access.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply after `127_f18_site_audit_compare.sql` and before deploying F18 phase 9. It is safe to apply on a fresh schema, more than once, and after migration 170.
+- **Additive only.** Creates the service-role-only `site_audit_crawler_credentials` table (one encrypted Shopify signature pair per workspace host, unique `(brand_key, host)`, RLS enabled with no customer policy) and adds `site_audits_crawler_credential_fk` (`crawler_credential_id` -> `site_audit_crawler_credentials.id`, `ON DELETE SET NULL`).
+- **Pre-check:** `select to_regclass('public.site_audit_crawler_credentials');` returns null.
+- **Applied-check:** `select to_regclass('public.site_audit_crawler_credentials');` returns `site_audit_crawler_credentials`; `has_table_privilege('authenticated', 'public.site_audit_crawler_credentials', 'SELECT')` is false; `select conname from pg_constraint where conname = 'site_audits_crawler_credential_fk';` returns the constraint.
+- **Rollback:** leaving the table in place after reverting F18 phase 9 is harmless; it is unused and no customer can read it. To remove F18 entirely, drop `site_audits_crawler_credential_fk` first, then `site_audit_crawler_credentials`.
+- **Verify locally:** apply it twice to a disposable loopback `*_qa` database and run `scripts/qa/check-f18-db.mjs`. Never run that harness against production.
+- **Key:** set `CRAWLER_ACCESS_ENCRYPTION_KEY` (64 hex characters) before enabling the flag; without it every save and read is 503 `crawler_access_unavailable`.
+
 ## `145_f22_assistant_sessions.sql`
 
 - **Status:** in repo; **NOT YET APPLIED to production**. Apply 145, 146, 147, then 148, before deploying F22 phase 2.

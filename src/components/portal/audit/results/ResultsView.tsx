@@ -44,11 +44,15 @@ export function ResultsView({
   auditId,
   summary,
   canRender,
+  isOwner,
+  crawlerAccessEnabled,
 }: {
   brandKey: string;
   auditId: string;
   summary: UseQueryResult<AuditSummary>;
   canRender: boolean;
+  isOwner: boolean;
+  crawlerAccessEnabled: boolean;
 }) {
   const [state, setState] = useUrlSearchState(VIEW_SCHEMA, VIEW_DEFAULTS);
   const view: View = VIEWS.has(state.view ?? "")
@@ -123,7 +127,14 @@ export function ResultsView({
 
         return (
           <div className="space-y-4">
-            <AuditBanners summary={data} canRender={canRender} />
+            <AuditBanners
+              summary={data}
+              canRender={canRender}
+              brandKey={brandKey}
+              host={host}
+              isOwner={isOwner}
+              crawlerAccessEnabled={crawlerAccessEnabled}
+            />
             <StatsStrip summary={data} />
 
             <div className="space-y-3">

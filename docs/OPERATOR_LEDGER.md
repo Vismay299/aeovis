@@ -770,6 +770,12 @@ The three transactional templates' variables, subject, preview and body copy are
 - Apply after `126_f18_site_audit_functions.sql` before deploying F18 phase 8. The migration is additive and safe to re-apply, including after migration 170; it creates the service-role-only `site_audit_compare` function.
 - Verify locally on a disposable loopback database by applying it twice and running `scripts/qa/check-f18-db.mjs`.
 
+### `128_f18_crawler_access` (F18 phase 9)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply after `127_f18_site_audit_compare.sql` before deploying F18 phase 9. The migration is additive and safe to re-apply, including after migration 170; it creates the service-only `site_audit_crawler_credentials` table (unique `(brand_key, host)`) and adds the `site_audits_crawler_credential_fk` foreign key (`ON DELETE SET NULL`) to `site_audits`.
+- `CRAWLER_ACCESS_ENCRYPTION_KEY` must be set (64 hex characters) before enabling the `site_audit_crawler_access` flag; otherwise every save and read returns 503 `crawler_access_unavailable`.
+- Verify locally with `scripts/qa/check-f18-db.mjs` on a loopback `*_qa` database.
+
 ### `145_f22_assistant_sessions`, `146_f22_assistant_stream_chunks`, `147_f22_assistant_approvals`, `148_f22_gsc_query_summary` and `149_f22_assistant_milestone_fix` (F22 phase 2)
 - Status: implemented in repo; **not yet applied to production**.
 - Apply 145, 146, 147, then 148, **before deploying F22 phase 2**. All additive; no data backfill.

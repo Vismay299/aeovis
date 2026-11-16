@@ -19,6 +19,8 @@ import { selectLighthouseSample, failedLighthouseFetch, fetchLighthouseResult as
 import { DB_STEP } from "../jobs/stepConfigs.ts";
 import { jobStepKey } from "../jobs/runner.ts";
 import { metered as defaultMetered, type SpendDeps } from "../spend/index.ts";
+import { resolveCrawlerAccess } from "./crawlerAccess.ts";
+import { isCrawlerAccessConfigured } from "./crawlerAccessCrypto.ts";
 
 // F03 price: DataForSEO OnPage Lighthouse live = USD 0.005 per call (fixtures bill $0.00425).
 const LIGHTHOUSE_LIVE_USD = 0.005;
@@ -27,11 +29,15 @@ export interface PhaseDeps {
   safeFetch?: any;
   lookup?: (hostname: string) => Promise<string[]>;
   now?: () => number;
+  admin?: any;
+  env?: Record<string, string | undefined>;
+  resolveCrawlerAccess?: typeof resolveCrawlerAccess;
+  isCrawlerAccessConfigured?: typeof isCrawlerAccessConfigured;
 }
 
 /**
  * Resolves the start URL through up to 5 redirects, enforces the owned-host boundary,
- * and detects Shopify.
+ * detects Shopify, and resolves the host's unexpired crawler credential.
  */
 export async function resolveAuditStart(
   audit: AuditRow,
@@ -40,6 +46,7 @@ export async function resolveAuditStart(
   startUrl: string;
   origin: string;
   sitePlatform: "shopify" | null;
+  crawlerCredentialId: string | null;
 }> {
   const probe = await resolveStartUrlRedirects(audit.start_url, {
     safeFetch: deps?.safeFetch ?? safeFetch,
@@ -71,11 +78,31 @@ export async function resolveAuditStart(
     sitePlatform = "shopify";
   }
 
+  // The credential is bound to the final host: apex to www is a different host
+  // and needs its own row. Only the id crosses the step boundary.
+  let crawlerCredentialId: string | null = null;
+  const resolver = deps?.resolveCrawlerAccess;
+  if (resolver || deps?.admin) {
+    const found = resolver
+      ? await resolver(deps?.admin, audit.brand_key, finalHost)
+      : await resolveCrawlerAccess(deps!.admin, audit.brand_key, finalHost);
+    if (found) {
+      // A live credential and no key is a configuration failure: fail closed
+      // rather than silently crawl unsigned.
+      if (!(deps?.isCrawlerAccessConfigured ?? isCrawlerAccessConfigured)(deps?.env)) {
+        throw new AuditPhaseError("start_failed", "starting", "Crawler access encryption is not configured");
+      }
+      crawlerCredentialId = found.id;
+      sitePlatform = "shopify";
+    }
+  }
+
   const origin = getOrigin(finalUrl);
   return {
     startUrl: finalUrl,
     origin,
     sitePlatform,
+    crawlerCredentialId,
   };
 }
 

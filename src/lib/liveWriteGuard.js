@@ -211,6 +211,8 @@ export const NEVER_WRITABLE = Object.freeze([
   "site_audit_lighthouse",
   "site_audit_frontier",
   "site_audit_links",
+  // F18 phase 9 - migration 128: encrypted Shopify crawler-access signatures.
+  "site_audit_crawler_credentials",
   // F13 phase 2 — migration 101: keyword metrics cache table.
   "keyword_metrics",
   // F13 phase 3 — migration 100: saved keywords, tags, tag assignments.

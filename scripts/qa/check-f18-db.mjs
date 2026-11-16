@@ -4,7 +4,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 /**
- * F18 database harness (migrations 125, 126 and 127):
+ * F18 database harness (migrations 125, 126, 127 and 128):
  *   - 125: site_audits, site_audit_pages, site_audit_issues, site_audit_lighthouse,
  *          site_audit_frontier, site_audit_links, storage bucket site-audit-lighthouse, RLS
  *   - 126: site_audit_create, site_audit_seed, site_audit_frontier_stats,
@@ -12,6 +12,8 @@
  *          site_audit_abandon_chunk, site_audit_broken_links, site_audit_orphan_pages,
  *          site_audit_issue_summary, site_audit_destroy_scratch, prune_site_audits
  *   - 127: site_audit_compare (workspace-scoped before/after issue pages)
+ *   - 128: site_audit_crawler_credentials (service-only encrypted Shopify signatures)
+ *          and site_audits_crawler_credential_fk
  *
  * Runs against a disposable loopback PostgreSQL database.
  * Usage:
@@ -27,6 +29,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { createSqlAuditStore } from "../../src/lib/audit/store.ts";
 import { createMemoryAuditStore } from "../../src/lib/audit/memoryStore.ts";
+import { saveCrawlerCredential } from "../../src/lib/audit/crawlerAccess.ts";
 
 const host = process.env.PGHOST || "";
 const database = process.env.PGDATABASE || "";
@@ -45,24 +48,26 @@ const pool = new pg.Pool({ max: 8 });
 const query = (sql, values = []) => pool.query(sql, values);
 const id = () => crypto.randomUUID();
 
-async function apply125Through127() {
+async function apply125Through128() {
   const sql125 = fs.readFileSync(path.join(ROOT, "supabase/migrations/125_f18_site_audit.sql"), "utf8");
   const sql126 = fs.readFileSync(path.join(ROOT, "supabase/migrations/126_f18_site_audit_functions.sql"), "utf8");
   const sql127 = fs.readFileSync(path.join(ROOT, "supabase/migrations/127_f18_site_audit_compare.sql"), "utf8");
+  const sql128 = fs.readFileSync(path.join(ROOT, "supabase/migrations/128_f18_crawler_access.sql"), "utf8");
   await query(sql125);
   await query(sql126);
   await query(sql127);
+  await query(sql128);
 }
 
 if (process.argv.includes("--only") && process.argv[process.argv.indexOf("--only") + 1] === "schema") {
   try {
-    await apply125Through127();
-    await apply125Through127();
-    console.log("125/126/127 applied twice without error");
+    await apply125Through128();
+    await apply125Through128();
+    console.log("125/126/127/128 applied twice without error");
     await pool.end();
     process.exit(0);
   } catch (err) {
-    console.error("Failed to apply 125/126:", err);
+    console.error("Failed to apply 125/126/127/128:", err);
     await pool.end();
     process.exit(1);
   }
@@ -297,7 +302,7 @@ async function asUser(userId, fn) {
 }
 
 async function main() {
-  await apply125Through127();
+  await apply125Through128();
 
   const userA = await createUser("usera");
   const userB = await createUser("userb");
@@ -761,6 +766,172 @@ async function main() {
   )).rows;
   assert.deepEqual(crossWorkspaceRows, [], "compare exposes no issue rows when either audit is outside the workspace");
   console.log("PASS site_audit_compare");
+
+  // --- Group: crawler access (migration 128) ---
+  console.log("Running crawler access tests...");
+  const crawlerHost = `crawler-${id().slice(0, 8)}.example`;
+  const credentialId = id();
+  await query(
+    `INSERT INTO public.site_audit_crawler_credentials
+       (id, brand_key, host, encrypted_signature_input, encrypted_signature, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [credentialId, brandA, crawlerHost, "ciphertext-input", "ciphertext-signature", userA]
+  );
+
+  const crawlerRegclass = (await query(
+    "SELECT to_regclass('public.site_audit_crawler_credentials') AS name"
+  )).rows[0].name;
+  assert.equal(crawlerRegclass, "site_audit_crawler_credentials", "migration 128 creates the table");
+
+  const crawlerRls = (await query(
+    "SELECT relrowsecurity FROM pg_class WHERE oid = 'public.site_audit_crawler_credentials'::regclass"
+  )).rows[0].relrowsecurity;
+  assert.equal(crawlerRls, true, "the credential table has RLS enabled");
+
+  const crawlerPrivileges = (await query(
+    `SELECT has_table_privilege('service_role', 'public.site_audit_crawler_credentials', 'SELECT') AS service,
+            has_table_privilege('authenticated', 'public.site_audit_crawler_credentials', 'SELECT') AS customer`
+  )).rows[0];
+  assert.equal(crawlerPrivileges.service, true, "service_role can read the credential table");
+  assert.equal(crawlerPrivileges.customer, false, "authenticated has no read grant");
+
+  let duplicateCode = null;
+  try {
+    await query(
+      `INSERT INTO public.site_audit_crawler_credentials
+         (id, brand_key, host, encrypted_signature_input, encrypted_signature)
+       VALUES ($1, $2, $3, 'x', 'y')`,
+      [id(), brandA, crawlerHost]
+    );
+  } catch (err) {
+    duplicateCode = err.code;
+  }
+  assert.equal(duplicateCode, "23505", "one credential per (brand_key, host)");
+
+  const crawlerFk = (await query(
+    "SELECT conname FROM pg_constraint WHERE conname = 'site_audits_crawler_credential_fk'"
+  )).rows;
+  assert.equal(crawlerFk.length, 1, "site_audits.crawler_credential_id has its FK");
+
+  const linkedAuditId = id();
+  await query(
+    `INSERT INTO public.site_audits
+       (id, brand_key, requested_url, start_url, start_host, max_pages, status, crawler_credential_id)
+     VALUES ($1, $2, $3, $3, $4, 50, 'completed', $5)`,
+    [linkedAuditId, brandA, `https://${crawlerHost}/`, crawlerHost, credentialId]
+  );
+  await query("DELETE FROM public.site_audit_crawler_credentials WHERE id = $1", [credentialId]);
+  const linkedAfterDelete = (await query(
+    "SELECT crawler_credential_id FROM public.site_audits WHERE id = $1",
+    [linkedAuditId]
+  )).rows[0].crawler_credential_id;
+  assert.equal(linkedAfterDelete, null, "deleting a credential leaves the audit with a NULL id");
+
+  const touchCredentialId = id();
+  await query(
+    `INSERT INTO public.site_audit_crawler_credentials
+       (id, brand_key, host, encrypted_signature_input, encrypted_signature)
+     VALUES ($1, $2, $3, 'ciphertext-input', 'ciphertext-signature')`,
+    [touchCredentialId, brandA, `crawler-touch-${id().slice(0, 8)}.example`]
+  );
+  await query(
+    "UPDATE public.site_audit_crawler_credentials SET updated_at = '2000-01-01T00:00:00Z' WHERE id = $1",
+    [touchCredentialId]
+  );
+  await query(
+    "UPDATE public.site_audit_crawler_credentials SET expires_at = now() + interval '1 day' WHERE id = $1",
+    [touchCredentialId]
+  );
+  const touchedAt = (await query(
+    "SELECT updated_at FROM public.site_audit_crawler_credentials WHERE id = $1",
+    [touchCredentialId]
+  )).rows[0].updated_at;
+  assert.ok(
+    new Date(touchedAt).getTime() > Date.parse("2001-01-01T00:00:00Z"),
+    "the touch trigger moves updated_at"
+  );
+
+  await asUser(userA, async (c) => {
+    let denied = false;
+    await c.query("SAVEPOINT probe_crawler_credentials");
+    try {
+      await c.query("SELECT * FROM public.site_audit_crawler_credentials");
+    } catch (err) {
+      denied = err.code === "42501";
+    }
+    await c.query("ROLLBACK TO SAVEPOINT probe_crawler_credentials");
+    assert.ok(denied, "authenticated cannot read the credential table");
+  });
+
+  // D1 regression: re-saving a credential must keep its primary key even when an
+  // audit references it. The adapter's upsert reproduces PostgREST's
+  // ON CONFLICT (brand_key, host) DO UPDATE over every payload column.
+  const resaveHost = `resave-${id().slice(0, 8)}.example`;
+  const resaveDeps = {
+    env: { CRAWLER_ACCESS_ENCRYPTION_KEY: crypto.randomBytes(32).toString("hex") },
+    checkShopifySignature: async () => null,
+  };
+  const firstSave = await saveCrawlerCredential(
+    pgAdapter,
+    {
+      brandKey: brandA,
+      userId: userA,
+      host: resaveHost,
+      signatureInput: "sig1=(first);expires=1790000000",
+      signature: "sig1=:EXAMPLE-NOT-A-REAL-SIGNATURE:",
+      workspaceHost: resaveHost,
+    },
+    resaveDeps
+  );
+  assert.ok(firstSave.credential, "the first credential save succeeds");
+
+  const resaveAuditId = id();
+  await query(
+    `INSERT INTO public.site_audits
+       (id, brand_key, requested_url, start_url, start_host, max_pages, status, crawler_credential_id)
+     VALUES ($1, $2, $3, $3, $4, 50, 'completed', $5)`,
+    [resaveAuditId, brandA, `https://${resaveHost}/`, resaveHost, firstSave.credential.id]
+  );
+
+  const secondSave = await saveCrawlerCredential(
+    pgAdapter,
+    {
+      brandKey: brandA,
+      userId: userA,
+      host: resaveHost,
+      signatureInput: "sig1=(second);expires=1790003600",
+      signature: "sig1=:EXAMPLE-NOT-A-REAL-SIGNATURE-SECOND:",
+      workspaceHost: resaveHost,
+    },
+    resaveDeps
+  );
+  assert.equal(
+    secondSave.credential.id,
+    firstSave.credential.id,
+    "a re-save keeps the credential primary key"
+  );
+
+  const resaveRows = (
+    await query(
+      "SELECT id FROM public.site_audit_crawler_credentials WHERE brand_key = $1 AND host = $2",
+      [brandA, resaveHost]
+    )
+  ).rows;
+  assert.equal(resaveRows.length, 1, "a re-save leaves one row for (brand_key, host)");
+  assert.equal(resaveRows[0].id, firstSave.credential.id);
+
+  const linkedCredential = (
+    await query("SELECT crawler_credential_id FROM public.site_audits WHERE id = $1", [
+      resaveAuditId,
+    ])
+  ).rows[0].crawler_credential_id;
+  assert.equal(
+    linkedCredential,
+    firstSave.credential.id,
+    "the audit still references the credential after a re-save"
+  );
+
+  console.log("PASS crawler access");
 
   console.log("F18 DB checks: all passed");
   await pool.end();

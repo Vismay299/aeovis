@@ -629,6 +629,10 @@ const EXPECTED_OBJECTS = {
     { kind: "function", name: "site_audit_compare" },
     { kind: "function", name: "site_audit_compare", signature: "text, uuid, uuid, integer" },
   ],
+  "128_f18_crawler_access.sql": [
+    { kind: "table", name: "site_audit_crawler_credentials" },
+    { kind: "constraint", name: "site_audits_crawler_credential_fk" },
+  ],
   "145_f22_assistant_sessions.sql": [
     { kind: "table", name: "assistant_sessions" },
     { kind: "table", name: "assistant_messages" },

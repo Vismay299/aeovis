@@ -12,19 +12,37 @@ import { ShieldAlert } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { AuditSummary } from "./hooks/useAuditSummary";
 import { BotProtectionAdvice } from "./shared";
+import { ShopifyCrawlWarning } from "./crawlerAccess/ShopifyCrawlWarning";
 
 export function AuditBanners({
   summary,
   canRender,
+  brandKey,
+  host,
+  isOwner,
+  crawlerAccessEnabled,
 }: {
   summary: AuditSummary;
   canRender: boolean;
+  brandKey: string;
+  host: string;
+  isOwner: boolean;
+  crawlerAccessEnabled: boolean;
 }) {
   const { audit, stats, issueGroups, flags } = summary;
   const rendered = Boolean(audit.renderJavaScript);
   const hasRobotsBlock = issueGroups.some(
     (group) => group.issueType === "crawl-blocked-by-robots",
   );
+  // F18 phase 9 — a Shopify audit limited by the store gets one Shopify-specific
+  // notice in place of the four generic bot/rate-limit banners below.
+  const shopifyWarning =
+    crawlerAccessEnabled &&
+    audit.sitePlatform === "shopify" &&
+    (flags.siteBlocked ||
+      stats.pagesBlocked > 0 ||
+      flags.crawlStopped ||
+      stats.pagesRateLimited > 0);
 
   const banners: Array<{
     key: string;
@@ -33,7 +51,7 @@ export function AuditBanners({
     body: React.ReactNode;
   }> = [];
 
-  if (flags.siteBlocked) {
+  if (!shopifyWarning && flags.siteBlocked) {
     banners.push({
       key: "site-blocked",
       variant: "destructive",
@@ -53,7 +71,7 @@ export function AuditBanners({
     });
   }
 
-  if (stats.pagesBlocked > 0 && !flags.siteBlocked) {
+  if (!shopifyWarning && stats.pagesBlocked > 0 && !flags.siteBlocked) {
     banners.push({
       key: "pages-blocked",
       variant: "warning",
@@ -62,7 +80,7 @@ export function AuditBanners({
     });
   }
 
-  if (flags.crawlStopped) {
+  if (!shopifyWarning && flags.crawlStopped) {
     banners.push({
       key: "crawl-stopped",
       variant: "warning",
@@ -72,7 +90,7 @@ export function AuditBanners({
     });
   }
 
-  if (stats.pagesRateLimited > 0 && !flags.crawlStopped) {
+  if (!shopifyWarning && stats.pagesRateLimited > 0 && !flags.crawlStopped) {
     banners.push({
       key: "rate-limited",
       variant: "warning",
@@ -132,10 +150,18 @@ export function AuditBanners({
     });
   }
 
-  if (banners.length === 0) return null;
+  if (!shopifyWarning && banners.length === 0) return null;
 
   return (
     <div className="space-y-2">
+      {shopifyWarning ? (
+        <ShopifyCrawlWarning
+          brandKey={brandKey}
+          host={host}
+          isOwner={isOwner}
+          enabled={crawlerAccessEnabled}
+        />
+      ) : null}
       {banners.map((banner) => (
         <Alert key={banner.key} variant={banner.variant}>
           <ShieldAlert aria-hidden />

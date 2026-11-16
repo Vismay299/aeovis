@@ -393,6 +393,10 @@ SOFTWARE.
 - `src/lib/audit/retention.test.ts` (from `src/server/workflows/SiteAuditWorkflow.test.ts`)
 - `src/lib/audit/telemetry.ts` (from `src/server/features/audit/telemetry.ts`)
 - `scripts/qa/check-f18-db.mjs` (from `src/server/features/audit/AuditScratchpad.test.ts`)
+- `src/lib/audit/crawlerAccess.ts` (from `src/shared/crawler-access.ts`, `src/server/features/audit/services/CrawlerCredentialService.ts`, `src/server/features/audit/repositories/CrawlerCredentialRepository.ts`)
+- `src/lib/audit/shopifySignature.ts` (from `src/server/features/audit/services/shopifySignature.ts`)
+- `src/lib/audit/crawlerAccess.test.ts` (from `src/shared/crawler-access.test.ts`, `src/server/features/audit/services/CrawlerCredentialService.test.ts`, `src/server/features/audit/services/AuditService.crawlerAccess.test.ts`)
+- `src/components/portal/audit/crawlerAccess/ShopifyCrawlWarning.tsx` (from `src/client/features/audit/results/ShopifyCrawlWarning.tsx`)
 - `src/lib/providers/dataforseo/client.ts`
 - `src/lib/providers/dataforseo/client.test.ts`
 - `src/lib/providers/dataforseo/serp.ts`
