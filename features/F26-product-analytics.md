@@ -636,8 +636,8 @@ Branches `feat/f26-product-analytics-p1` … `-p5`. `NT` = `node --import ./src/
 
 ### Phase 5 — Owner setup and live checks
 
-- [ ] **P5.T1 Runbook**
-  - [ ] **P5.T1.S1** *Files:* `docs/OPERATOR_LEDGER.md` § C ("F26 product analytics": the §10 steps verbatim), `scripts/qa/check-f26-live.md` (T1–T5). *Verify:* `NT src/lib/docStatus.test.mjs` → pass.
+- [x] **P5.T1 Runbook**
+  - [x] **P5.T1.S1** *Files:* `docs/OPERATOR_LEDGER.md` § C ("F26 product analytics": the §10 steps verbatim), `scripts/qa/check-f26-live.md` (T1–T5). *Verify:* `NT src/lib/docStatus.test.mjs` → pass.
 - [ ] **P5.T2 Owner-run live checks (only on the owner's instruction)**
   - [ ] **P5.T2.S1** *Do:* the owner runs T1–T5 on a preview deployment and records results in the phase-5 PR. *Verify:* five passes (F26-AC-16).
 
