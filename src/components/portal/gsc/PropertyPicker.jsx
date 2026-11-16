@@ -8,6 +8,7 @@
 import { useEffect, useState } from "react";
 import { Globe, Link2 } from "lucide-react";
 import { Badge, Banner, Button, Card, EmptyState, SkeletonRows } from "../ui";
+import { trackEvent } from "@/lib/telemetry/client";
 
 const PERMISSION_LABELS = {
   siteOwner: "Owner",
@@ -63,6 +64,7 @@ export default function PropertyPicker({ brandKey, attemptId, website, onConnect
       if (response.status === 401) { redirectToLogin(); return; }
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Could not connect this property.");
+      trackEvent("gsc:property_select", {});
       onConnected(body.property || { siteUrl: selected });
     } catch (failure) {
       setError(failure.message || "Could not connect this property.");

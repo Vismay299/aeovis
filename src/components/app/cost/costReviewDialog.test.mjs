@@ -23,6 +23,7 @@ async function loadDialog() {
       ["@/components/ui/alert", { Alert: children, AlertDescription: children, AlertTitle: children }],
       ["@/components/ui/skeleton", anyNamedExport],
       ["@/shared/pricing", await import("../../../shared/pricing.ts")],
+      ["@/lib/telemetry/client", { trackEvent() {} }],
     ]),
   });
 }

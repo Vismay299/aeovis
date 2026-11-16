@@ -5,6 +5,7 @@ import { Sparkles } from "lucide-react";
 import { Banner, Button, Card } from "../ui";
 import { PLAYBOOK_OPTIONS, contentRequest, cx } from "./shared";
 import { FORMATS } from "@/lib/content/agents/formats";
+import { trackEvent } from "@/lib/telemetry/client";
 
 const TOPIC_MAX = 300;
 const BRIEF_MAX = 8000;
@@ -34,6 +35,7 @@ export default function ComposerCard({ brandKey, topicRef, onCreated, onUnauthor
       });
       setTopic("");
       setBrief("");
+      trackEvent("content:draft_requested", {});
       onCreated();
     } catch (err) {
       if (err.status === 401) onUnauthorized();

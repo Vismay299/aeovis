@@ -97,6 +97,7 @@ async function trackerLifecycle(t, fetch) {
       ["@/lib/query/polling", await import("../../lib/query/polling.ts")],
       ["@/lib/query/keys", await import("../../lib/query/keys.ts")],
       ["./scanTrackerModel", await import("./scanTrackerModel.js")],
+      ["@/lib/telemetry/client", { trackEvent() {} }],
     ]),
   });
   return { lifecycle, useScanTracker };
@@ -311,6 +312,7 @@ async function draftLifecycle(t, request) {
       ["../status", { contentItemStatus: () => ({ label: "Needs review" }) }],
       ["@/components/studio/Markdown", { Markdown: noop }],
       ["./ReviewFindings", review],
+      ["@/lib/telemetry/client", { trackEvent() {} }],
     ]),
     autoNull: ["lucide-react", "./IndexNowOffer"],
   });

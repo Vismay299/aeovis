@@ -4,7 +4,9 @@
 //   src/client/features/projects/project-context/ProjectContextPage.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
+import { useEffect, useRef } from "react";
 import { PageHeader } from "@/components/app/PageHeader";
+import { trackEvent } from "@/lib/telemetry/client";
 import type { ProjectContext } from "@/shared/project-context";
 import { BrandIdentityCard } from "./BrandIdentityCard";
 import { CompetitorsSection } from "./CompetitorsSection";
@@ -22,6 +24,13 @@ export function ProjectContextPage({
   context: ProjectContext;
   currentUserId?: string | null;
 }) {
+  const viewedBrandRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (viewedBrandRef.current === brandKey) return;
+    viewedBrandRef.current = brandKey;
+    trackEvent("project_context:viewed", {});
+  }, [brandKey]);
+
   return (
     // key remounts the whole page when the workspace switches under it, so no
     // draft, open form, or edit state can carry over to another workspace.

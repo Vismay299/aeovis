@@ -34,6 +34,7 @@ import {
 import { engineLabel } from "@/components/portal/scans/reportData";
 import { formatUsd } from "@/shared/money";
 import type { ScanCost } from "@/shared/costs";
+import { trackEvent } from "@/lib/telemetry/client";
 
 /** How many per-answer rows one "Show more" adds. */
 const PER_ANSWER_PAGE = 25;
@@ -84,7 +85,11 @@ function CostPerAnswer({ results }: { results: ScanResultRow[] }) {
           variant="outline"
           size="sm"
           aria-expanded={open}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => {
+            const next = !open;
+            if (next) trackEvent("scan_report:cost_expanded", {});
+            setOpen(next);
+          }}
         >
           {open ? "Hide cost per answer" : "Show cost per answer"}
         </Button>

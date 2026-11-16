@@ -8,6 +8,7 @@ import { contentItemStatus } from "../status";
 import { contentRequest, countWords, cx, playbookLabel, readingMinutes } from "./shared";
 import ReviewFindings from "./ReviewFindings";
 import IndexNowOffer from "./IndexNowOffer";
+import { trackEvent } from "@/lib/telemetry/client";
 
 /** Statuses the customer API accepts edits for (PATCH). */
 const EDITABLE_STATUSES = ["draft", "awaiting_approval", "approved", "rejected"];
@@ -130,6 +131,7 @@ export default function DraftEditor({ brandKey, itemId, generating, onClose, onC
     try {
       await contentRequest(`/api/customer/content/${itemId}`, { brandKey, method: "POST", body: { verdict, content_version: item.content_version, content_hash: item.content_hash } });
       await refresh();
+      trackEvent("content:review_submitted", { verdict });
       setMessage(verdict === "approved"
         ? "Review recorded as approved. Nothing was published to your website."
         : "Review recorded as rejected.");

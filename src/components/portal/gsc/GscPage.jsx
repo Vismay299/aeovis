@@ -11,6 +11,7 @@ import { usePortal } from "../PortalShell";
 import { Badge, Banner, Button, Card, PageHeader, SkeletonRows, formatDate, formatRelative } from "../ui";
 import PropertyPicker from "./PropertyPicker";
 import PerformanceCard from "./PerformanceCard";
+import { trackEvent } from "@/lib/telemetry/client";
 import "./gsc.css";
 
 const CALLBACK_PARAMS = ["gsc_attempt", "gsc_connected", "gsc_error", "brand_key"];
@@ -53,6 +54,7 @@ export default function GscPage() {
   const startConnect = useCallback(async () => {
     setBusy("connect");
     setBanner(null);
+    trackEvent("gsc:connect_start", {});
     try {
       const response = await fetch("/api/customer/gsc/connect", {
         method: "POST",
@@ -107,6 +109,7 @@ export default function GscPage() {
       if (response.status === 401) { redirectToLogin(); return; }
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.error || "Could not disconnect Google Search Console.");
+      trackEvent("gsc:disconnect", {});
       setCallback({ attempt: "", error: "" });
       stripCallbackParams();
       setBanner({ tone: "success", text: "Google Search Console is disconnected." });
