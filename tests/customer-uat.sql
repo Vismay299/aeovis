@@ -50,6 +50,8 @@ SELECT public.create_customer_workspace('10000000-0000-0000-0000-000000000002','
 -- Migration 127 is numbered below 170; re-apply it after 170 to verify late application is safe.
 RESET ROLE;
 \ir ../supabase/migrations/127_f18_site_audit_compare.sql
+-- Migration 128 is numbered below 170; re-apply it after 170 to verify late application is safe.
+\ir ../supabase/migrations/128_f18_crawler_access.sql
 \ir ../supabase/migrations/145_f22_assistant_sessions.sql
 \ir ../supabase/migrations/146_f22_assistant_stream_chunks.sql
 \ir ../supabase/migrations/147_f22_assistant_approvals.sql

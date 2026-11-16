@@ -419,6 +419,8 @@ const FULL_CATALOG = [
   // F18 phase 8 migration 127 — compare issue pages between two audits in one workspace.
   "site_audit_compare",
   "site_audit_compare(text, uuid, uuid, integer)",
+  // F18 phase 9 migration 128 - encrypted Shopify crawler-access signatures and the audit FK.
+  "site_audit_crawler_credentials", "site_audits_crawler_credential_fk",
   // F22 phase 2 migrations 145–148 — assistant storage and the GSC query summary.
   "assistant_sessions", "assistant_messages", "assistant_turns", "begin_assistant_turn",
   "rewind_assistant_session", "prune_assistant_sessions",
