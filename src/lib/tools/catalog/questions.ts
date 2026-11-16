@@ -1,5 +1,10 @@
+import {
+  generateQuestionsTool,
+  researchQuestionsTool,
+} from "../own/questionsResearch.ts";
 import { addQuestionsTool, listQuestionsTool } from "../../questions/tools.ts";
 import { defineRegistration, type ToolRegistration } from "../types.ts";
+import { actionQuoteInput, paidAnnotations } from "./quote.ts";
 
 export const registrations: ToolRegistration[] = [
   defineRegistration({
@@ -52,6 +57,58 @@ export const registrations: ToolRegistration[] = [
     example: {
       input: { questions: [{ text: "Which products fit this need?" }] },
       output: { added: 0, revived: 0, skipped: 1 },
+    },
+  }),
+  defineRegistration({
+    def: researchQuestionsTool as never,
+    area: "questions",
+    feature: "prompt_research",
+    effect: "paid",
+    approval: (_ctx, input) => ({
+      kind: "price",
+      action: "questions.research.run",
+      quoteInput: actionQuoteInput("questions.research.run", input),
+      label: "Research questions for “" + String(input.keyword ?? "") + "”",
+    }),
+    annotations: paidAnnotations(),
+    summarize: (output: any, input: any) =>
+      (output?.questions?.length ?? 0) +
+      " questions for “" +
+      String(input?.keyword ?? "") +
+      "”.",
+    link: () => ({ path: "/portal/measurement", label: "Questions" }),
+    untrustedPaths: [
+      "questions[*].text",
+      "questions[*].sources[*].title",
+    ],
+    example: {
+      input: { keyword: "example keyword", maxUsd: 0.2 },
+      output: {
+        keyword: "example keyword",
+        questions: [{ text: "Which example product fits this need?" }],
+        recent: null,
+        dataset: "us-en",
+      },
+    },
+  }),
+  defineRegistration({
+    def: generateQuestionsTool as never,
+    area: "questions",
+    feature: "question_setup",
+    effect: "paid",
+    approval: (_ctx, input) => ({
+      kind: "price",
+      action: "questions.generate.run",
+      quoteInput: actionQuoteInput("questions.generate.run", input),
+      label: "Draft buyer questions",
+    }),
+    annotations: paidAnnotations(),
+    summarize: (output: any) =>
+      (output?.questions?.length ?? 0) + " questions drafted.",
+    link: () => ({ path: "/portal/measurement", label: "Questions" }),
+    example: {
+      input: { topic: "example topic", maxUsd: 0.2 },
+      output: { topic: "example topic", questions: [] },
     },
   }),
 ];
