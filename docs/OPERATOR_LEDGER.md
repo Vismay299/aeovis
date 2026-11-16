@@ -602,14 +602,14 @@ abandoned is not.
 
 ### F26 product analytics
 
-Owner setup for F26 (product analytics and error tracking) and the live checks T1–T5; status: implemented in repo, **not yet applied to production**.
+Owner setup for F26 (product analytics and error tracking) and the live checks T1–T5; status: implemented in repo; **not yet enabled in production** (flag off, PostHog keys unset).
 
 **Owner steps:**
 1. Apply migration 165 — see the `165_f26_privacy_and_telemetry_ids` entry above; skip if already applied.
 2. Create or choose a PostHog project in the EU cloud. Project settings → turn on "Discard client IP data"; disable session replay, surveys, heatmaps and autocapture.
 3. Vercel environment, **Preview and Production**: set `NEXT_PUBLIC_POSTHOG_KEY`, `POSTHOG_PROJECT_KEY` and `POSTHOG_HOST`; for source maps set `POSTHOG_SOURCEMAPS`, `POSTHOG_CLI_TOKEN`, `POSTHOG_CLI_ENV_ID` and `POSTHOG_CLI_HOST`. Names and default values: `.env.example`; dashboard steps: `features/_ACCOUNT-SETUP.md` §4.
 4. `FEATURE_PRODUCT_ANALYTICS=on` on a preview first; run T1–T5; then production.
-5. **Fallback — only when the log line appears:** on an account deletion whose automatic person-delete logged `[telemetry] person delete failed`, PostHog → Persons → search the user id → Delete.
+5. **Erasure (manual for now):** §6.7's automatic PostHog person-delete is not implemented — the repo has no account-deletion flow and nothing logs `[telemetry] person delete failed`. For every account deletion or erasure request, delete the person by hand: PostHog → Persons → search the user id → Delete.
 
 **Rollback:** `FEATURE_PRODUCT_ANALYTICS=off` (server events stop; the Privacy tab and banner hide); `NEXT_PUBLIC_TELEMETRY_DISABLED=1` + redeploy (browser stops loading PostHog). Error reports are not gated by the flag, so stopping those needs `TELEMETRY_DISABLED=1` on the server or the keys removed; removing both keys stops everything.
 
