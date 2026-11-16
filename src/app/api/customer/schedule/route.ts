@@ -120,7 +120,10 @@ export async function PUT(request: Request, _ctx: unknown, deps?: ScheduleRouteD
       if (!body.enabled) {
         void captureServerEvent({ name: "schedule:paused", props: {}, ...identity }).catch(() => {});
       } else if (body.interval) {
-        const intervalChanged = Boolean(previous?.interval) && previous?.interval !== body.interval;
+        // Only a schedule that was already running can change interval; resuming a
+        // paused or off schedule with a new interval is `schedule:enabled`.
+        const intervalChanged =
+          previous?.status === "on" && Boolean(previous.interval) && previous.interval !== body.interval;
         if (intervalChanged) {
           void captureServerEvent({
             name: "schedule:changed",
