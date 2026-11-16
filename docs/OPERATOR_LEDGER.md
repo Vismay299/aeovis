@@ -601,7 +601,7 @@ abandoned is not.
 
 **Env names:** `FEATURE_ONBOARDING_WIZARD`. **Default:** off in production → legacy `/onboarding` form and `GettingStarted`.
 
-**Owner steps:** apply migration 170; make sure F18 `site_audit` is on (else the audit row simply hides) and decide whether `questions_setup` paid control is enabled (else research is offered as unavailable and free-scan suggestions carry the questions); set `FEATURE_ONBOARDING_WIZARD=on` on a preview, run O1–O5, then production.
+**Owner steps:** apply migration 170; make sure F18 `site_audit` is on (else the audit row simply hides) and decide whether the `question_setup` flag and its `questions.setup` paid control are enabled (else research is offered as unavailable and free-scan suggestions carry the questions); set `FEATURE_ONBOARDING_WIZARD=on` on a preview, run O1–O5, then production.
 
 **Live checklist (`scripts/qa/check-f27-live.md`):** O1 run the free scan for a site you control, click "Track these questions in a workspace", sign up → onboarding shows the domain, brand and "…questions from your free scan…"; O2 save → workspace created, the audit starts (Site Audit shows it running), research price shown; approve research only if the paid control is on for this workspace; O3 connect Search Console and return to step 2's picker; O4 preferences saved (Settings → Privacy and Emails show the choices); O5 approve questions (via "Review questions") and run the first scan from the price dialog; an existing customer account logging in is never shown onboarding.
 
