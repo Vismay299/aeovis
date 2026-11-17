@@ -825,3 +825,10 @@ SOFTWARE.
 
 ### F22 Phase 3 ports
 - `src/server/tools/own/siteReading.ts` (from `src/server/lib/scrape.ts`, `src/server/features/sam/samChatTools.ts`)
+
+### F22 Phase 4 ports
+- `src/server/assistant/aiTools.ts` (from `src/server/features/sam/samChatTools.ts`)
+- `src/server/assistant/compaction.ts` (from `src/server/features/sam/SamChatAgent.ts`)
+- `src/server/assistant/jobs.ts` (from `src/server/features/sam/SamChatAgent.ts`)
+- `src/server/assistant/prompt.ts` (from `src/server/features/sam/samSystemPrompt.ts`)
+- `src/server/assistant/turn.ts` (from `src/server/features/sam/SamChatAgent.ts`)
