@@ -68,7 +68,7 @@ export const WRAPPER_CSP =
 
 // The page's own light and dark palettes, so the bar matches the product
 // without loading its stylesheet. Dark follows the OS: an anonymous reader
-// has no stored preference. `--primary` is Perceev's brand, not OpenSEO's.
+// has no stored preference. `--primary` follows the product palette.
 const STYLES = `
 :root{color-scheme:light dark;--bg:oklch(97% 0 0);--surface:oklch(100% 0 0);--border:oklch(92% 0 0);--text:oklch(20% 0 0);--muted:oklch(20% 0 0 / .5);--primary:#3730CE;--primary-text:oklch(100% 0 0);--ghost-hover:oklch(20% 0 0 / .08)}
 @media (prefers-color-scheme:dark){:root{--bg:oklch(12% 0 0);--surface:oklch(18% 0 0);--border:oklch(27% 0 0);--text:oklch(92% 0 0);--muted:oklch(92% 0 0 / .5);--primary:#5B54F0;--ghost-hover:oklch(92% 0 0 / .1)}}
