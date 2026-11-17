@@ -348,7 +348,10 @@ export async function decideApproval(
       .select("*");
     if (declined.error) throw declined.error;
     if (!Array.isArray(declined.data) || declined.data.length === 0) {
-      const expired = row.status === "expired" || (row.status === "pending" && row.expires_at <= at);
+      // Compare instants, not strings: PostgREST renders `+00:00`, `toISOString` renders `Z`.
+      const expired =
+        row.status === "expired" ||
+        (row.status === "pending" && Date.parse(row.expires_at) <= Date.parse(at));
       if (expired) {
         if (row.status === "pending") {
           await admin.from("assistant_approvals").update({ status: "expired" }).eq("id", row.id);

@@ -65,6 +65,26 @@ test("rate limit: a turn older than 60 minutes does not count against the user",
   );
 });
 
+test("rate limit: a limit above PostgREST max_rows still fires (head count, not a row read)", async () => {
+  const admin = createFakeAdmin(
+    {
+      assistant_turns: Array.from({ length: 1_200 }, (_, index) =>
+        turn({ user_id: "user-" + (index % 50), started_at: "2026-11-17T09:30:00.000Z" }),
+      ),
+    },
+    { maxRows: 1_000 },
+  );
+  await assert.rejects(
+    assertTurnRate(
+      admin as never,
+      { userId: "user-1", brandKey: "acme-tees" },
+      { perUserHour: 10_000, perWorkspaceDay: 1_100 },
+      { now: () => new Date("2026-11-17T10:00:00.000Z") },
+    ),
+    { status: 429, code: "assistant_rate_limited" },
+  );
+});
+
 test("rate limit: the workspace daily limit counts only since UTC midnight", async () => {
   const admin = createFakeAdmin({
     assistant_turns: [

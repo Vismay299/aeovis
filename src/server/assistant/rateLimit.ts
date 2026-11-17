@@ -15,13 +15,15 @@ async function countSince(
   value: string,
   since: Date,
 ): Promise<number> {
-  const { data, error } = await admin
+  // A head count, not a row read: a plain select is cut at PostgREST `max_rows`
+  // (1,000), which would make any limit above that unreachable.
+  const { count, error } = await admin
     .from("assistant_turns")
-    .select("id")
+    .select("id", { count: "exact", head: true })
     .eq(column, value)
     .gte("started_at", since.toISOString());
   if (error) throw error;
-  return Array.isArray(data) ? data.length : 0;
+  return count ?? 0;
 }
 
 /** §6.2.8 AC-21: a rolling hour per user and a UTC day per workspace. */

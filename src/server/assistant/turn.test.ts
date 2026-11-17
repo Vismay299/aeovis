@@ -545,6 +545,33 @@ test("turn: conversation_too_long is a 409, deletes the user message and calls n
   assert.equal(admin.rows("assistant_messages").some((row: any) => row.id === "u_1"), false);
 });
 
+test("turn: a setup failure after beginTurn finishes the turn row and drops the user message", async () => {
+  const admin = seed();
+  const store = spendStore();
+  const model = modelFromSteps(fixture("stream-text-no-cost.json").steps);
+  await assert.rejects(
+    run(
+      admin,
+      baseDeps(admin, model, store, {
+        availableTools: async () => {
+          throw new Error("tool catalog unavailable");
+        },
+      }),
+    ),
+    { message: "tool catalog unavailable" },
+  );
+  const turns = admin.rows("assistant_turns");
+  assert.equal(turns.length, 1);
+  assert.equal(turns[0].status, "error");
+  assert.equal(turns[0].stop_reason, "error");
+  assert.equal(turns[0].error_code, "turn_setup_failed");
+  // No streaming row is left behind, so the user's next send is not a 409.
+  assert.equal(turns.some((row: any) => row.status === "streaming"), false);
+  assert.equal(admin.rows("assistant_messages").some((row: any) => row.id === "u_1"), false);
+  assert.equal(store.holds.size, 0);
+  assert.equal((model as unknown as { doStreamCalls: unknown[] }).doStreamCalls.length, 0);
+});
+
 test("turn: a repeated message id is 409 duplicate_message before a turn starts", async () => {
   const admin = seed({
     assistant_messages: [

@@ -273,12 +273,28 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
     throw error;
   }
 
+  // Every failure between beginTurn and the first streamText call must finish
+  // the turn row and drop the user message. Otherwise the row stays `streaming`
+  // with no heartbeat and the user's next send is a 409 `turn_in_progress`
+  // until the 90 s staleness cutoff.
+  const abandonTurn = async (error: unknown, compactedNow = false): Promise<never> => {
+    if (userMessageId) await deleteMessage(admin, i.sessionId, userMessageId).catch(() => {});
+    const view = toToolError(error);
+    await finishTurn(admin, turnId, {
+      status: "error",
+      stopReason: "error",
+      errorCode: view.code === "internal_error" ? "turn_setup_failed" : view.code,
+      compacted: compactedNow,
+    }).catch(() => {});
+    throw error;
+  };
+
   const regs = await (deps.availableTools ?? availableTools)(
     { brandKey: i.ws.brandKey, role: i.ws.role },
     deps.isFeatureEnabled ? { isFeatureEnabled: deps.isFeatureEnabled as never } : {},
-  );
+  ).catch(abandonTurn);
   const toolNames = new Set(regs.map((reg) => reg.def.name));
-  const skillsEnabled = await flag("assistant_skills", i.ws.brandKey);
+  const skillsEnabled = await flag("assistant_skills", i.ws.brandKey).catch(abandonTurn);
   const skills: SkillSummary[] = (deps.listSkills ?? listSkills)({
     availableTools: toolNames,
     enabled: skillsEnabled,
@@ -287,7 +303,7 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
     (deps.loadSkill ?? loadSkill)(name, { availableTools: toolNames, enabled: skillsEnabled });
 
   let memoryMarkdown: string | null = null;
-  if (await flag("project_memory", i.ws.brandKey)) {
+  if (await flag("project_memory", i.ws.brandKey).catch(abandonTurn)) {
     try {
       const context = await (deps.projectContext ?? getProjectContext)(admin, i.ws.brand);
       memoryMarkdown = (deps.renderProjectContext ?? renderProjectContextMarkdown)(context);
@@ -337,7 +353,7 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
     modelInput = await buildModelInput({ system, uiMessages });
   };
 
-  await rebuild();
+  await rebuild().catch(abandonTurn);
   if (shouldCompact(modelInput.estimatedTokens, cfg)) {
     try {
       const compactResult = await compactSession(
@@ -362,15 +378,7 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
   try {
     assertInputFits(modelInput.estimatedTokens, cfg);
   } catch (error) {
-    if (userMessageId) await deleteMessage(admin, i.sessionId, userMessageId).catch(() => {});
-    const code = errorCodeOf(error);
-    await finishTurn(admin, turnId, {
-      status: "error",
-      stopReason: "error",
-      errorCode: code,
-      compacted,
-    }).catch(() => {});
-    throw error;
+    await abandonTurn(error, compacted);
   }
 
   const ready = deferred<Response>();

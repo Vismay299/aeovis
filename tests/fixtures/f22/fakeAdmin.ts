@@ -20,7 +20,7 @@ function iso(ms) {
   return new Date(ms).toISOString();
 }
 
-export function createFakeAdmin(seed = {}) {
+export function createFakeAdmin(seed = {}, options = {}) {
   const tables = new Map();
   for (const name of TABLES) tables.set(name, []);
   for (const [name, rows] of Object.entries(seed)) {
@@ -157,6 +157,8 @@ export function createFakeAdmin(seed = {}) {
       return { data: hit.map(clone), error: null };
     }
     let out = rows.filter((row) => matches(row, state.filters));
+    // A head count is answered from the full match, like PostgREST's Content-Range.
+    if (state.head && state.count) return { data: null, count: out.length, error: null };
     for (const [column, ascending] of [...state.orders].reverse()) {
       out = out.slice().sort((a, b) => {
         if (a[column] === b[column]) return 0;
@@ -164,11 +166,13 @@ export function createFakeAdmin(seed = {}) {
       });
     }
     if (state.limit !== null) out = out.slice(0, state.limit);
+    // PostgREST cuts a plain read at max_rows (1,000 on Supabase).
+    if (options.maxRows !== undefined) out = out.slice(0, options.maxRows);
     return { data: out.map(clone), error: null };
   }
 
   function from(table) {
-    const state = { action: null, filters: [], orders: [], limit: null };
+    const state = { action: null, filters: [], orders: [], limit: null, count: null, head: false };
     const settle = (mode) => {
       queryCalls.push({ table, action: state.action?.kind ?? "select", filters: [...state.filters] });
       ops.push({ table, action: state.action?.kind ?? "select" });
@@ -186,8 +190,10 @@ export function createFakeAdmin(seed = {}) {
       return result;
     };
     const builder = {
-      select() {
+      select(_columns, selectOptions = {}) {
         if (!state.action) state.action = { kind: "select" };
+        if (selectOptions.count) state.count = selectOptions.count;
+        if (selectOptions.head) state.head = true;
         return builder;
       },
       insert(row) {
