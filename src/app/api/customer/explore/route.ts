@@ -2,18 +2,18 @@
 //   src/serverFunctions/ai-search.ts:19-24
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { requireWorkspace } from "../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../lib/workspace/requireWorkspace.ts";
-import { readJsonBody, toErrorResponse, jsonOk } from "../../../../lib/http/errors.ts";
+import { requireWorkspace } from "../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../server/workspace/requireWorkspace.ts";
+import { readJsonBody, toErrorResponse, jsonOk } from "../../../../shared/http/errors.ts";
 import {
   exploreStartRequestBody,
   exploreListQuery,
-} from "../../../../lib/explore/explore.contract.ts";
+} from "../../../../server/explore/explore.contract.ts";
 import {
   startExploreRun,
   listExploreRuns,
   type ExploreServiceDeps,
-} from "../../../../lib/explore/service.ts";
+} from "../../../../server/explore/service.ts";
 
 export const dynamic = "force-dynamic";
 

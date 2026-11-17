@@ -2,9 +2,9 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { keys } from "@/lib/query/keys";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { ApiError } from "@/lib/query/fetchJson";
+import { keys } from "@/shared/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { ApiError } from "@/shared/query/fetchJson";
 import type { QuestionsState } from "./useQuestions";
 
 export type QuestionsPatch = {

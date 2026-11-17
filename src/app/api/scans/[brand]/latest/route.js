@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getScansForBrand } from "@/lib/db";
+import { getScansForBrand } from "@/server/db";
 import { enrichScanForClient } from "../../_lib/scanRow";
 
 // P0.3: the single most recent scan for a brand. Same `ilike` display-name

@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CardShell } from "@/components/app/CardShell";
 import { QueryError } from "@/components/app/QueryState";
 import { RowActionsMenu } from "@/components/app/RowActionsMenu";
-import { describeError } from "@/lib/query/errors";
+import { describeError } from "@/shared/query/errors";
 import { GoogleAccountRemovalDialog } from "./GoogleAccountRemovalDialog";
 import { useGa4Accounts, useRemoveGa4Account, type Ga4LinkedAccount } from "./hooks/useGa4Accounts";
 

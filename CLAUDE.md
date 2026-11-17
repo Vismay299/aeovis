@@ -62,5 +62,5 @@ first was reported, and nothing about that failure is specific to one agent.
   by name, never by value — so the operator can rotate it. A self-disclosed leak
   is a rotation ticket; a hidden one is a breach.
 
-`src/lib/agentSecretsGuard.test.mjs` asserts this section is present here, and
+`src/server/agentSecretsGuard.test.mjs` asserts this section is present here, and
 that every `.claude/agents/rebuild-*.md` points to it.

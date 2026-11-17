@@ -5,7 +5,7 @@
 "use client";
 
 import { useOptimisticMutation } from "@/components/app/hooks/useOptimisticMutation";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import { trackRankEvent } from "../telemetry";
 import type { RankResultsResponse } from "./useRankResults";
 

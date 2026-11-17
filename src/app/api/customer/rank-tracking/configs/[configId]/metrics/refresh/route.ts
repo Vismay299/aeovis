@@ -1,13 +1,13 @@
-import { AppError } from "../../../../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../../../../lib/features/flags.ts";
-import { requireWorkspace } from "../../../../../../../../lib/workspace/requireWorkspace.ts";
+import { AppError } from "../../../../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../../../../server/features/flags.ts";
+import { requireWorkspace } from "../../../../../../../../server/workspace/requireWorkspace.ts";
 import { z } from "zod";
-import { refreshKeywordMetrics } from "../../../../../../../../lib/rank-tracking/metrics.ts";
-import { createRankTrackingRepository } from "../../../../../../../../lib/rank-tracking/repository.ts";
-import { requireApprovedPrice } from "../../../../../../../../lib/pricing/pricedActions.ts";
-import { toResearchError } from "../../../../../../../../lib/research/providerErrors.ts";
-import "../../../../../../../../lib/pricing/actions/index.ts";
+import { refreshKeywordMetrics } from "../../../../../../../../shared/rank-tracking/metrics.ts";
+import { createRankTrackingRepository } from "../../../../../../../../shared/rank-tracking/repository.ts";
+import { requireApprovedPrice } from "../../../../../../../../shared/pricing/pricedActions.ts";
+import { toResearchError } from "../../../../../../../../server/research/providerErrors.ts";
+import "../../../../../../../../shared/pricing/actions/index.ts";
 
 export const dynamic = "force-dynamic";
 

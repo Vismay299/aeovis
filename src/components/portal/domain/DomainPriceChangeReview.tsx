@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { PricedActionButton } from "@/components/app/cost/PricedActionButton";
 import type { PricedActionButtonProps } from "@/components/app/cost/PricedActionButton";
-import { isApiError } from "@/lib/query/fetchJson";
+import { isApiError } from "@/shared/query/fetchJson";
 import { priceQuoteSchema, type PriceQuote } from "@/shared/pricing";
 
 export type DomainPriceChange = {

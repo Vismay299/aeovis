@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getCitationsForBrand } from "@/lib/db/analytics";
-import { parseDateParam } from "@/lib/brandAnalyticsApi";
-import { parseGroupParam, aggregateCitations } from "@/lib/analytics/citationStats";
+import { getCitationsForBrand } from "@/server/db/analytics";
+import { parseDateParam } from "@/shared/brandAnalyticsApi";
+import { parseGroupParam, aggregateCitations } from "@/shared/analytics/citationStats";
 
 // Citation rows land continuously (every finalized scan materializes a fresh
 // batch — see runFinalizePhase) — never statically cache, same rationale as
@@ -28,7 +28,7 @@ const SECONDARY_CAP = 10;
  * Query params (all optional):
  *   from, to — ISO date, inclusive bounds on citations.created_at (a full
  *              calendar day on each end — see getCitationsForBrand /
- *              endOfDayIso in src/lib/db/analytics.js)
+ *              endOfDayIso in src/server/db/analytics.js)
  *   group    — which of domains/urls is returned IN FULL (capped at 50
  *              rows); the other is still included, capped at 10. Default
  *              "domain".

@@ -15,7 +15,7 @@ import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
 import { usePortal } from "@/components/portal/PortalShell";
 import { useQuery } from "@tanstack/react-query";
-import { panelQueryOptions } from "@/lib/query/portalQueries";
+import { panelQueryOptions } from "@/shared/query/portalQueries";
 import { formatUsd } from "@/shared/pricing";
 import type { PriceQuote } from "@/shared/pricing";
 import type { ExploreModel } from "@/shared/explore";

@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 function Label({ className, ...props }: React.ComponentProps<"label">) {
   return (

@@ -12,8 +12,8 @@ import {
   useJobStatus,
   type JobStatusResponse,
 } from "@/components/app/hooks/useJobStatus";
-import { fetchJson, isApiError } from "@/lib/query/fetchJson";
-import { describeError } from "@/lib/query/errors";
+import { fetchJson, isApiError } from "@/shared/query/fetchJson";
+import { describeError } from "@/shared/query/errors";
 import { formatUsd, type PriceQuote } from "@/shared/pricing";
 
 export const REFRESH_STATS_DETAIL =

@@ -25,12 +25,12 @@ These findings came from reading the working tree on 8 October. They are not a f
 | --- | --- | --- |
 | Customer authentication | `/signup`, `/login`, `/auth/callback`, `/auth/accept`, `/auth/reset`; Supabase browser/server/admin helpers | Verify complete signup, email confirmation, recovery, session refresh, logout, and page/API protection in deployed UAT. |
 | Tenant access | `customer_brands`, `customer_brand_memberships`, alias registry, migration 023 | Finish explicit workspace ownership. Current name/domain/URL matching is insufficient for customer isolation. |
-| Onboarding | `src/app/api/customer/onboard/route.js`, `src/lib/customerOnboarding.js`, `/onboarding` | Remove shared service-account dependency. Workspace creation must work without GSC. |
-| GSC connection | `src/app/api/customer/gsc/route.js`, `src/lib/gsc/customerProperty.js` | Replace manual service-account instructions and typed property input with customer OAuth and a property picker. |
-| Google API client | `src/lib/engines/gsc.js` | Currently uses one service account and a process-global access-token cache. Introduce explicit per-workspace credentials. |
-| GSC storage/sync | Migration 018, `src/lib/db/gsc.js`, `src/lib/gsc/ingest.js`, `/api/gsc/worker` | Reuse parsing/pagination/upserts where appropriate; add OAuth credentials, connection generations, resumable initial sync, and workspace-scoped reads. |
+| Onboarding | `src/app/api/customer/onboard/route.js`, `src/server/customerOnboarding.js`, `/onboarding` | Remove shared service-account dependency. Workspace creation must work without GSC. |
+| GSC connection | `src/app/api/customer/gsc/route.js`, `src/server/gsc/customerProperty.js` | Replace manual service-account instructions and typed property input with customer OAuth and a property picker. |
+| Google API client | `src/shared/engines/gsc.js` | Currently uses one service account and a process-global access-token cache. Introduce explicit per-workspace credentials. |
+| GSC storage/sync | Migration 018, `src/server/db/gsc.js`, `src/server/gsc/ingest.js`, `/api/gsc/worker` | Reuse parsing/pagination/upserts where appropriate; add OAuth credentials, connection generations, resumable initial sync, and workspace-scoped reads. |
 | Customer portal | `/portal`, `/api/customer/overview` | Currently shows a summary and lists. It does not yet prove that customers can run scans or complete a content workflow. |
-| API perimeter | `src/middleware.js`, `src/lib/operatorPerimeter.js` | Customer routes already bypass the operator gate and must authenticate themselves. Preserve operator/cron boundaries and add customer session refresh. |
+| API perimeter | `src/middleware.js`, `src/server/operatorPerimeter.js` | Customer routes already bypass the operator gate and must authenticate themselves. Preserve operator/cron boundaries and add customer session refresh. |
 | Models | Local OpenRouter routing changes exist | Audit and deploy them with this work. Verify the exact configured IDs live; do not silently substitute models or demand native provider keys. |
 | Production database | `docs/PROD_MIGRATIONS.md` records migration 023 as **not yet applied** | Check the live migration ledger/catalog before deciding what to apply. Documentation alone is not proof of current database state. |
 
@@ -151,7 +151,7 @@ Property rules: support domain and URL-prefix properties; exclude unverified/ina
 
 ## 5. GSC sync and useful reporting
 
-- Refactor `src/lib/engines/gsc.js` to accept an explicit OAuth credential/token provider. Update **all** its callers so none silently fall back to the shared service account for customer data.
+- Refactor `src/shared/engines/gsc.js` to accept an explicit OAuth credential/token provider. Update **all** its callers so none silently fall back to the shared service account for customer data.
 - Reuse existing Search Analytics parsing, pagination, overlap, and error bookkeeping. Preserve legacy operator service-account support only as an explicit legacy auth mode if needed; never use it in new customer onboarding.
 - Queue a first import immediately after property selection. Use a 90-day target, processed in bounded date/page chunks with durable checkpoints, leases, and retry. Do not rely on a detached promise inside a Vercel request.
 - Start with recent available dates so useful data appears early; continue historical backfill in the background. Checkpoint date/page progress and advance completed coverage only for fully read intervals.

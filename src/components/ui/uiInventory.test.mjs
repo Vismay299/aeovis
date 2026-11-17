@@ -73,7 +73,7 @@ test("all 32 UI primitives exist and conform to conventions", () => {
     // No from "cn"
     assert.ok(
       !content.includes('from "cn"') && !content.includes("from 'cn'"),
-      `${filename} must not import from "cn"; must use "@/lib/utils"`
+      `${filename} must not import from "cn"; must use "@/shared/utils"`
     );
 
     // No openseo / OpenSEO outside the licence header

@@ -15,17 +15,17 @@
 
 ## R6.4.17 — `assertCorpusIntact` shared helper (IN PROGRESS)
 
-**File reviewed:** `src/lib/testCorpus.mjs` (123 lines), `src/lib/testCorpus.test.mjs` (166 lines)
+**File reviewed:** `src/server/testCorpus.mjs` (123 lines), `src/server/testCorpus.test.mjs` (166 lines)
 
 ### Current state
 
-The shared helper exists at `src/lib/testCorpus.mjs:33` and covers:
+The shared helper exists at `src/server/testCorpus.mjs:33` and covers:
 - Floor check (array length vs minimum)
 - Shape check (isTuple mode with rowLength, non-tuple string/RegExp mode)
 - Uniqueness check (duplicate detection via Set)
 - Required members check (exact equality or substringMatch)
 
-The test file at `src/lib/testCorpus.test.mjs` covers:
+The test file at `src/server/testCorpus.test.mjs` covers:
 1. Nine "GUARD TEETH" tests proving the helper rejects: under-floor, duplicates, missing required, non-string entries, blank entries, tuples with no reason, RegExp accepted/rejected correctly, substring matching, valid tuples, valid string arrays.
 2. One repo-wide guard that walks all `*.test.mjs` files under `src/` and fails if any defines its own local `function assertCorpusIntact(` without importing from `testCorpus.mjs`.
 
@@ -33,7 +33,7 @@ The test file at `src/lib/testCorpus.test.mjs` covers:
 
 | # | Criterion | Pass/Fail | Evidence |
 |---|-----------|-----------|----------|
-| 1 | `assertCorpusIntact` exists in `src/lib/testCorpus.mjs` as a named export, not duplicated elsewhere | PASS | Single definition at line 33; test at line 136 walks all test files for local copies |
+| 1 | `assertCorpusIntact` exists in `src/server/testCorpus.mjs` as a named export, not duplicated elsewhere | PASS | Single definition at line 33; test at line 136 walks all test files for local copies |
 | 2 | Floor rejection: `assertCorpusIntact([], "X", { floor: 1 })` throws with "under its floor" | PASS | Test at line 23 |
 | 3 | Duplicate rejection: `["a","a"]` throws with "repeats" | PASS | Test at line 30 |
 | 4 | Missing required rejection: `["a"]` with `required: ["b"]` throws with "no longer contains" | PASS | Test at line 37 |
@@ -59,7 +59,7 @@ These three items from the task description remain in their original broken stat
 
 ## R6.4.16 — Source-reading guard determinism (TODO, READY)
 
-**Anchors:** `src/lib/migrationsLedger.test.mjs`, `src/lib/docStatus.test.mjs`
+**Anchors:** `src/server/migrationsLedger.test.mjs`, `src/server/docStatus.test.mjs`
 
 ### Problem
 
@@ -81,7 +81,7 @@ Source-reading guards (`readFile` / `readFileSync` during test execution) can ob
 
 ## R6.4.10 — NUL-byte detection guard (TODO, READY)
 
-**Anchors:** `src/lib/rateLimit.test.mjs`, `.gitattributes`
+**Anchors:** `src/server/rateLimit.test.mjs`, `.gitattributes`
 
 ### Problem
 
@@ -147,7 +147,7 @@ Infrastructure vendor names (Bright Data, MiMo, Firecrawl) must never appear in 
 
 ## R6.4.8 — Doc-to-source staleness tripwire (TODO, READY)
 
-**Anchors:** `docs/vendors/README.md:97`, `src/lib/docStatus.test.mjs`
+**Anchors:** `docs/vendors/README.md:97`, `src/server/docStatus.test.mjs`
 
 ### Problem
 
@@ -168,7 +168,7 @@ When a cited source file changes in a commit that does not touch the doc citing 
 
 ## R6.5.8 — Scan worker sweep branch testability (TODO, READY)
 
-**Anchors:** `src/app/api/scan/worker/route.js:390`, `src/app/api/scans/_lib/scanRow.js`, `src/lib/scanWorkerRoute.route.test.mjs`
+**Anchors:** `src/app/api/scan/worker/route.js:390`, `src/app/api/scans/_lib/scanRow.js`, `src/server/scanWorkerRoute.route.test.mjs`
 
 ### Problem
 

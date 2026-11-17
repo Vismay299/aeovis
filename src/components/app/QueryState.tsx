@@ -10,7 +10,7 @@ import { ErrorState } from "@/components/app/ErrorState";
 import { SkeletonCard } from "@/components/app/SkeletonPresets";
 import { SpendRefusedError } from "@/components/app/SpendRefusedError";
 import { queryStateView } from "@/components/app/queryStateView";
-import { describeError, isSpendRefused } from "@/lib/query/errors";
+import { describeError, isSpendRefused } from "@/shared/query/errors";
 
 /**
  * A load failure with a retry button. The message goes through

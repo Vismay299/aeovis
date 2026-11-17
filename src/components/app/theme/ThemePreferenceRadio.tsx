@@ -14,7 +14,7 @@ import {
   DropdownMenuRadioItem,
 } from "@/components/ui/dropdown-menu";
 import { useThemePreference } from "@/components/app/theme/useThemePreference";
-import type { ThemePreference } from "@/lib/theme/theme";
+import type { ThemePreference } from "@/shared/theme/theme";
 
 const THEME_OPTIONS: {
   value: ThemePreference;

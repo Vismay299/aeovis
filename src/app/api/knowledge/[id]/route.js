@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { updateKnowledgeBlock, deleteKnowledgeBlock } from "@/lib/db/knowledge";
+import { updateKnowledgeBlock, deleteKnowledgeBlock } from "@/server/db/knowledge";
 
 export const dynamic = "force-dynamic";
 

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { supabase, getScanJob, HEARTBEAT_STALE_MS } from "@/lib/db";
-import { normalizeRun } from "@/lib/scanRuns";
-import { terminalOutcomeFromRecord } from "@/lib/scanOutcome";
-import { runScanChunk } from "@/lib/workers/scanWorker";
-import { keepAlive } from "@/lib/keepAlive";
+import { supabase, getScanJob, HEARTBEAT_STALE_MS } from "@/server/db";
+import { normalizeRun } from "@/server/scanRuns";
+import { terminalOutcomeFromRecord } from "@/shared/scanOutcome";
+import { runScanChunk } from "@/server/workers/scanWorker";
+import { keepAlive } from "@/server/keepAlive";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -136,7 +136,7 @@ export const RESCUE_REASONS = Object.freeze({
 // THE SERIALISATION BOUNDARY (R3.2.3, security re-work)
 //
 // This route is ANONYMOUSLY REACHABLE. `isPublicRoute` in
-// src/lib/operatorPerimeter.js matches `GET /api/scan/<id>/status` in
+// src/server/operatorPerimeter.js matches `GET /api/scan/<id>/status` in
 // PUBLIC_PATTERNS, so no credential of any kind is required to read this body —
 // a job_id is an unguessable v4 uuid, but anyone may start a free scan and then
 // poll it. Everything below therefore treats `scan_runs` as an INTERNAL table
@@ -168,7 +168,7 @@ export const RESCUE_REASONS = Object.freeze({
  * The `detail` keys an anonymous caller may see, and the ONLY ones.
  *
  * Every entry is a bounded vocabulary written by `chunkRunOutcome`
- * (src/lib/workers/scanWorker.js): phase names, chunk reasons, a schedule-row
+ * (src/server/workers/scanWorker.js): phase names, chunk reasons, a schedule-row
  * state, integers. Nothing here is free text assembled from an exception.
  *
  * ADDING TO THIS LIST IS THE DANGEROUS EDIT IN THIS FILE. A key belongs here
@@ -615,7 +615,7 @@ export async function GET(request, { params }) {
     }
 
     if (job?.brand_key) {
-      const { getCustomerContext } = await import("@/lib/supabase/customer");
+      const { getCustomerContext } = await import("@/shared/supabase/customer");
       const context = await getCustomerContext();
       if (context.error || !context.brands.some((brand) => brand.brandKey === job.brand_key)) {
         return NextResponse.json({ detail: "Job not found." }, { status: 404 });

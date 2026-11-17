@@ -12,8 +12,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys, stableStringify } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys, stableStringify } from "@/shared/query/keys";
 import { trackBacklinksEvent } from "./telemetry";
 
 /** Map of domain (as held in table rows) → Ahrefs DR, or null when unknown. */

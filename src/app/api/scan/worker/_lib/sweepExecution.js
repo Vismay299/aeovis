@@ -1,8 +1,8 @@
 import {
   runScanChunk,
   shouldRescueJob,
-} from "@/lib/workers/scanWorker";
-import { keepAlive } from "@/lib/keepAlive";
+} from "@/server/workers/scanWorker";
+import { keepAlive } from "@/server/keepAlive";
 
 const MAX_CONCURRENT_RESUMES = 3;
 
@@ -11,7 +11,7 @@ const MAX_CONCURRENT_RESUMES = 3;
  * module so the supabase client is an injectable parameter rather than a
  * module-level import binding.
  *
- * The original route imported `supabase` from `@/lib/db` and used it directly
+ * The original route imported `supabase` from `@/server/db` and used it directly
  * at the module scope. That binding has no seam: a test that clears env vars
  * to null the client can never enter the sweep branch, and a test that needs
  * the branch to execute cannot replace the binding. This module accepts the

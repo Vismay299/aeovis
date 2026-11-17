@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { listAgents, insertAgent } from "@/lib/db/content";
-import { normalizeAgent } from "@/lib/content/agents/model";
-import { FORMATS } from "@/lib/content/agents/formats";
-import { CREW } from "@/lib/content/agents/crew";
-import { BLOCKS, DEFAULT_PIPELINES } from "@/lib/content/agents/blocks";
+import { listAgents, insertAgent } from "@/server/db/content";
+import { normalizeAgent } from "@/shared/content/agents/model";
+import { FORMATS } from "@/shared/content/agents/formats";
+import { CREW } from "@/shared/content/agents/crew";
+import { BLOCKS, DEFAULT_PIPELINES } from "@/shared/content/agents/blocks";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

@@ -42,7 +42,7 @@ was ever measured.
 
 ### Root cause
 
-[promptGen.js:40](../../src/lib/scoring/promptGen.js) instructed the model:
+[promptGen.js:40](../../src/shared/scoring/promptGen.js) instructed the model:
 
 > "You are a market researcher reconstructing the REAL Google Search Console query
 > report..."
@@ -83,7 +83,7 @@ Not verifiable from here, but the likely methodology differences, in order:
 
 ## 3. The fix
 
-### F3 — `src/lib/scoring/promptQuality.js` (new)
+### F3 — `src/shared/scoring/promptQuality.js` (new)
 
 Two deliberately separate signals:
 

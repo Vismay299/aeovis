@@ -15,7 +15,7 @@ import {
   tagSwatchClass,
 } from "@/shared/tag-colors";
 import type { SavedKeywordTagSummary } from "@/shared/keywords";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 /** One tag in the manage list: inline rename, colour swatches, delete. */
 export function ManageTagRow({

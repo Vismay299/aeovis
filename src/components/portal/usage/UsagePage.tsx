@@ -18,7 +18,7 @@ import { ErrorState } from "@/components/app/ErrorState";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { formatUsd } from "@/shared/money";
 import type { WorkspaceUsage } from "@/shared/costs";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 import {
   useUsage,
   viewerTimeZone,

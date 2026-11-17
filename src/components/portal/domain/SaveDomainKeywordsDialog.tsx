@@ -11,8 +11,8 @@ import { FormDialog } from "@/components/app/FormDialog";
 import { HelpLabel } from "@/components/app/HelpLabel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { describeError } from "@/lib/query/errors";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { describeError } from "@/shared/query/errors";
 import { trackDomainEvent } from "./telemetry";
 
 type Props = {

@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys, stableStringify } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys, stableStringify } from "@/shared/query/keys";
 
 export type Ga4ReportParams = Record<
   string,

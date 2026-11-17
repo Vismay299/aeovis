@@ -7,8 +7,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { useExportRows } from "@/components/app/export/useExportRows";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { describeError } from "@/lib/query/errors";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { describeError } from "@/shared/query/errors";
 import {
   SAVED_KEYWORD_EXPORT_HEADERS,
   formatCentsForCsv,

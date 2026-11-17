@@ -7,7 +7,7 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { type ExploreModel, exploreModelLabel } from "@/shared/explore";
 import { ENGINE_ACCENTS } from "./engineAccents";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 export function ExploreLoadingCard({ model }: { model: ExploreModel }) {
   const accent = ENGINE_ACCENTS[model] ?? {

@@ -1,6 +1,6 @@
-import { trackEvent } from "../../../lib/telemetry/client.ts";
-import type { ClientEventName, EventProps } from "../../../lib/telemetry/events.ts";
-import { setExportTracker } from "../../../lib/export/telemetry.ts";
+import { trackEvent } from "../../../shared/telemetry/client.ts";
+import type { ClientEventName, EventProps } from "../../../shared/telemetry/events.ts";
+import { setExportTracker } from "../../../shared/export/telemetry.ts";
 import { setKeywordEventTracker } from "../../portal/keywords/telemetry.ts";
 import { setDomainEventTracker } from "../../portal/domain/telemetry.ts";
 import { setRankEventTracker } from "../../portal/rank-tracking/telemetry.ts";

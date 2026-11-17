@@ -5,8 +5,8 @@
 // reads the moment it finishes.
 
 import { useQueryClient } from "@tanstack/react-query";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 import { useServerPacedQuery } from "@/components/app/hooks/useServerPacedQuery";
 import type { AuditPhase, AuditStatus } from "@/shared/audit";
 

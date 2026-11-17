@@ -8,7 +8,7 @@
 | ID | F17 |
 | Wave | 2 |
 | Comparison rows covered | "Local SEO" (OpenSEO: business profile, reviews, local rank grid, local SERP, as MCP tools. Perceev: none) |
-| Depends on | F01 (merged): `requireWorkspace`, `AppError`/`toErrorResponse`/`jsonOk`, `metered`, `cached`, `isFeatureEnabled`, `definePeriodic`/`enqueueSystemJob`/`defineJob`, `keepAlive`, `f01_touch_updated_at()`, route-contract harness. F02 phase 2: `src/lib/providers/dataforseo/{core,envelope,client,serp}.ts` (`meter`, `dataforseoPost`/`dataforseoGet`, `assertOk`, `buildTaskBilling`, `isTaskInProgress`, `isNoResultsTask`, `isRecord`, `createDataforseoClient().serp.local` / `.localTaskPost`, `fetchLocalSerpTaskResult`). F03 phase 1: `dataforseoPricing.business.*`, `.serp.local`, `.serp.localTaskPost`. F07 phase 1: `appendResearch`, `findRecentResearch`. F09 phase 1 (`definePricedAction`, `requireApprovedPrice`, `recordApproval`) and phase 3 (`CostReviewDialog`, `usePriceQuote`). F13 phase 1: `src/shared/keyword-locations.ts` (`LOCATION_OPTIONS`, `workspaceMarket`, `getLanguageCode`, `SERP_LANGUAGE_OPTIONS`), `src/lib/research/{cache,providerErrors}.ts`, `PricedActionButton`. F06 (tables). UI phases need F04 and F05. |
+| Depends on | F01 (merged): `requireWorkspace`, `AppError`/`toErrorResponse`/`jsonOk`, `metered`, `cached`, `isFeatureEnabled`, `definePeriodic`/`enqueueSystemJob`/`defineJob`, `keepAlive`, `f01_touch_updated_at()`, route-contract harness. F02 phase 2: `src/shared/providers/dataforseo/{core,envelope,client,serp}.ts` (`meter`, `dataforseoPost`/`dataforseoGet`, `assertOk`, `buildTaskBilling`, `isTaskInProgress`, `isNoResultsTask`, `isRecord`, `createDataforseoClient().serp.local` / `.localTaskPost`, `fetchLocalSerpTaskResult`). F03 phase 1: `dataforseoPricing.business.*`, `.serp.local`, `.serp.localTaskPost`. F07 phase 1: `appendResearch`, `findRecentResearch`. F09 phase 1 (`definePricedAction`, `requireApprovedPrice`, `recordApproval`) and phase 3 (`CostReviewDialog`, `usePriceQuote`). F13 phase 1: `src/shared/keyword-locations.ts` (`LOCATION_OPTIONS`, `workspaceMarket`, `getLanguageCode`, `SERP_LANGUAGE_OPTIONS`), `src/server/research/{cache,providerErrors}.ts`, `PricedActionButton`. F06 (tables). UI phases need F04 and F05. |
 | Blocks | F21 (local-seo skill), F22 (local tools), F23 (local report sections) |
 | Reserved migrations | 120–124. **120** `120_f17_local_seo.sql` (phase 2). **121** `121_f17_local_seo_functions.sql` (phase 2). 122–124 unused. |
 | Feature flag | `FEATURE_LOCAL_SEO` (name `local_seo`, spend `["local.business","local.reviews","local.serp","local.grid"]`): page, routes, sidebar item. In `CLIENT_FEATURES`; off in production by default. |
@@ -34,29 +34,29 @@ Customers see how their business appears on Google Maps and in local results: fi
 
 - No local SEO, no business-data provider, no Maps SERP. The only DataForSEO use is planned by F02/F13–F16.
 - F15 local trackers rank a domain in a city's organic results (`location_name`); they do not cover Maps.
-- Nothing existing is touched: P0 controls, scans and portal pages stay as they are. Local SEO is classic SEO: none of its endpoints asks an answer engine, so everything goes through `metered()` (conventions §6.2) and none of it imports `src/lib/providers/dataforseo/answers.ts`.
+- Nothing existing is touched: P0 controls, scans and portal pages stay as they are. Local SEO is classic SEO: none of its endpoints asks an answer engine, so everything goes through `metered()` (conventions §6.2) and none of it imports `src/shared/providers/dataforseo/answers.ts`.
 
 ## 4. Target behaviour and acceptance criteria
 
 | ID | Statement | Verified by |
 |---|---|---|
 | F17-AC-01 | Migrations 120–121 create `local_businesses`, `local_fetches`, `local_fetch_items`, `local_grid_runs` and `local_searches` with RLS and read policies; one own business per workspace; at most 10 competitors; members read only their workspace's rows. | DB `scripts/qa/check-f17-db.mjs`; `tests/customer-uat.sql` |
-| F17-AC-02 | `business.ts` passes OpenSEO's five cases: coordinate for `my_business_info` and the single item with `check_url` merged; location-code fallback and no-results as empty success; no replay of a `task_post` on a 5xx; queued task read as pending; categories mapped to `{ category, businessCount }`. | unit `src/lib/providers/dataforseo/business.test.ts` (port of `business.test.ts:37-190`) |
-| F17-AC-03 | Exactly one identifier (name, CID or place_id) is required (`400 identifier_required`); CID/place_id are sent as `cid:`/`place_id:` keywords; business_data radius is metres (200–199,999), listings radius whole kilometres, Maps coordinates carry `<zoom>z`. | unit `src/lib/local/shared.test.ts` (port of `local-seo-tools.test.ts:65-130`) |
+| F17-AC-02 | `business.ts` passes OpenSEO's five cases: coordinate for `my_business_info` and the single item with `check_url` merged; location-code fallback and no-results as empty success; no replay of a `task_post` on a 5xx; queued task read as pending; categories mapped to `{ category, businessCount }`. | unit `src/shared/providers/dataforseo/business.test.ts` (port of `business.test.ts:37-190`) |
+| F17-AC-03 | Exactly one identifier (name, CID or place_id) is required (`400 identifier_required`); CID/place_id are sent as `cid:`/`place_id:` keywords; business_data radius is metres (200–199,999), listings radius whole kilometres, Maps coordinates carry `<zoom>z`. | unit `src/server/local/shared.test.ts` (port of `local-seo-tools.test.ts:65-130`) |
 | F17-AC-04 | Every paid call goes through `meter` with its spend feature and an F03 estimate > 0; `task_get` and categories are free and never metered; posts are never retried. | unit `business.test.ts` "every entry is priced"; F02 `noPrices.test.mjs` |
-| F17-AC-05 | Reviews and posts: one paid post, inline polling up to 20 s, then `202 processing` with a `fetchId`; `GET` collects at no cost; a collection error keeps the fetch collectable; the same business and parameters within 60 minutes reuse the earlier fetch with no spend; a repeated `requestId` returns the same fetch. | unit `src/lib/local/fetches.test.ts`; route test |
+| F17-AC-05 | Reviews and posts: one paid post, inline polling up to 20 s, then `202 processing` with a `fetchId`; `GET` collects at no cost; a collection error keeps the fetch collectable; the same business and parameters within 60 minutes reuse the earlier fetch with no spend; a repeated `requestId` returns the same fetch. | unit `src/server/local/fetches.test.ts`; route test |
 | F17-AC-06 | Q&A combines answered and unanswered questions, trims rows to the allow-list, and is stored like a completed fetch. | unit `fetches.test.ts` |
-| F17-AC-07 | Grid: 3×3 or 5×5 points north row first; zoom from spacing and latitude; match CID > place_id > name; per-point rank, results count and top result; a refused point is an error cell; all failing → `502 local_grid_failed` and the run is not reused; a repeat with the same parameters within 60 minutes reuses the run; collection is free. | unit `src/lib/local/grid.test.ts` (ports of `local-seo-tools.test.ts:281-440`) |
-| F17-AC-08 | Local results: defaults zoom 12, mobile, Maps, depth 20; rows trimmed; cached globally for 12 hours; rows matching the own business are flagged `isOwn`. | unit `src/lib/local/localSerp.test.ts` |
-| F17-AC-09 | Listings search maps `minRating`/`minReviews` to filters and `sortBy` to `order_by`, caches globally for 24 hours; categories are cached for 7 days and filtered in memory. | unit `src/lib/local/listings.test.ts` (port of `local-seo-tools.test.ts:448`) |
-| F17-AC-10 | Saving a business stores identity only (title, CID, place_id, coordinates) from a server-fetched result or explicit IDs; profile data comes only from a server fetch; own/competitor caps hold. | unit `src/lib/local/businesses.test.ts`; DB group `caps` |
-| F17-AC-11 | Paid actions are priced through F09: inline approval for lookups quoted at ≤ $0.25; the grid always opens `CostReviewDialog`; `409 price_changed` and `400 approval_required` behave as F09 §6.2.2. | unit `src/lib/pricing/actions/local.test.ts`; route test |
+| F17-AC-07 | Grid: 3×3 or 5×5 points north row first; zoom from spacing and latitude; match CID > place_id > name; per-point rank, results count and top result; a refused point is an error cell; all failing → `502 local_grid_failed` and the run is not reused; a repeat with the same parameters within 60 minutes reuses the run; collection is free. | unit `src/server/local/grid.test.ts` (ports of `local-seo-tools.test.ts:281-440`) |
+| F17-AC-08 | Local results: defaults zoom 12, mobile, Maps, depth 20; rows trimmed; cached globally for 12 hours; rows matching the own business are flagged `isOwn`. | unit `src/server/local/localSerp.test.ts` |
+| F17-AC-09 | Listings search maps `minRating`/`minReviews` to filters and `sortBy` to `order_by`, caches globally for 24 hours; categories are cached for 7 days and filtered in memory. | unit `src/server/local/listings.test.ts` (port of `local-seo-tools.test.ts:448`) |
+| F17-AC-10 | Saving a business stores identity only (title, CID, place_id, coordinates) from a server-fetched result or explicit IDs; profile data comes only from a server fetch; own/competitor caps hold. | unit `src/server/local/businesses.test.ts`; DB group `caps` |
+| F17-AC-11 | Paid actions are priced through F09: inline approval for lookups quoted at ≤ $0.25; the grid always opens `CostReviewDialog`; `409 price_changed` and `400 approval_required` behave as F09 §6.2.2. | unit `src/shared/pricing/actions/local.test.ts`; route test |
 | F17-AC-12 | Each purchase writes one F07 research-log entry (kind = spend feature) and quotes show `recent_research` when the same lookup ran in the last 90 days. | unit `research.test.ts` |
 | F17-AC-13 | `/portal/local` renders the business picker, Profile, Reviews (10 per page, deeper collection on demand), Posts, Questions, Map rankings (SVG grid with no external map tiles) and Local results, with loading, empty, error and processing states as §6.6. | browser `scripts/qa/check-f17-browser.mjs` B1–B8 |
 | F17-AC-14 | The Maps-link parser accepts `@lat,lng,<z>z`, `!3d<lat>!4d<lng>` and "lat, lng", rejects out-of-range values, and makes no network call. | unit `src/shared/local-coordinates.test.ts` |
 | F17-AC-15 | Flag off → page hidden and routes `404 feature_unavailable`; a disabled spend control → `403 feature_disabled`. | route tests |
 | F17-AC-16 | No reviewer names, review or post text, coordinates or business names appear in logs or telemetry; fetches, items, grids and searches older than 395 days are pruned. | unit `telemetry.test.mjs`; DB group `retention` |
-| F17-AC-17 | `src/lib/local/tools.ts` exports the eight tools under OpenSEO's names with strict inputs, loose outputs, `maxUsd` on paid tools and resume ids (`fetchId`, `gridId`). | unit `tools.test.ts` |
+| F17-AC-17 | `src/server/local/tools.ts` exports the eight tools under OpenSEO's names with strict inputs, loose outputs, `maxUsd` on paid tools and resume ids (`fetchId`, `gridId`). | unit `tools.test.ts` |
 
 ## 5. Scope
 
@@ -319,9 +319,9 @@ Error mapping: `local_business_cap:competitors` → `AppError(409,"competitor_li
 
 ### 6.2 Server modules
 
-TypeScript under `src/lib/**`, erasable syntax, relative imports with extensions; COPY/PORT files carry the licence header.
+TypeScript under `src/server/**` and `src/shared/**`, erasable syntax, relative imports with extensions; COPY/PORT files carry the licence header.
 
-#### 6.2.1 `src/lib/providers/dataforseo/business.ts` (PORT of `openseo:src/server/lib/dataforseo/business.ts:1-334`; F02 §6.2.3 rule: sections owned by other specs live in their own file)
+#### 6.2.1 `src/shared/providers/dataforseo/business.ts` (PORT of `openseo:src/server/lib/dataforseo/business.ts:1-334`; F02 §6.2.3 rule: sections owned by other specs live in their own file)
 
 Exports with OpenSEO's names, inputs and request bodies: `fetchBusinessListingsSearch`, `fetchQuestionsAnswers`, `fetchMyBusinessInfo`, `postGoogleReviewsTask`, `postMyBusinessUpdatesTask`, `fetchBusinessDataTaskResult`, `fetchBusinessListingsCategories`, types `BusinessTaskEndpoint`, `BusinessTaskOutcome`, `BusinessCategoryRow`. Changes: imports from F02 `./core.ts`/`./envelope.ts`; `NO_RETRY` is redundant (F02 POSTs never retry) and is dropped; `fetchBusinessDataTaskResult` failures throw F02's `AppError(502,"dataforseo_task_failed")` with the status message. **Added:**
 
@@ -341,7 +341,7 @@ export type BusinessClient = ReturnType<typeof createBusinessClient>;
 
 `fetchBusinessDataTaskResult` and `fetchBusinessListingsCategories` are free and are **not** wrapped (`business.ts:154-158`, `:314`). Local SERP fetchers come from F02's `serp.ts`: `createDataforseoClient().serp.local` (feature passed by caller `local.serp`), `.serp.localTaskPost` (feature `local.grid`), and the free `fetchLocalSerpTaskResult`.
 
-#### 6.2.2 `src/lib/local/shared.ts` (PORT of `openseo:src/server/mcp/tools/local-seo-shared.ts:1-149`, `dataforseo-research-tools.ts:83-136, 466-471`, `openseo:src/server/mcp/table.ts:105-112`)
+#### 6.2.2 `src/server/local/shared.ts` (PORT of `openseo:src/server/mcp/tools/local-seo-shared.ts:1-149`, `dataforseo-research-tools.ts:83-136, 466-471`, `openseo:src/server/mcp/table.ts:105-112`)
 
 ```ts
 export const BUSINESS_DATA_MIN_RADIUS_M = 200, BUSINESS_DATA_MAX_RADIUS_M = 199_999, BUSINESS_DATA_DEFAULT_RADIUS_KM = 10;
@@ -360,11 +360,11 @@ export function readPath(source: unknown, ...path: string[]): unknown;   // COPY
 export function pickRowFields(row: unknown, fields: readonly string[]): Record<string, unknown>;
 ```
 
-`src/lib/local/rowFields.ts` (COPY): `LOCAL_BUSINESS_ROW_FIELDS` (`dataforseo-research-tools.ts:682-699`), `LOCAL_SERP_ROW_FIELDS` (`:703-726`), `BUSINESS_QUESTION_ROW_FIELDS`, `BUSINESS_ANSWER_ROW_FIELDS`, `trimBusinessQuestionRow`, `latestAnswerText` (`:760-810`), `REVIEW_ROW_FIELDS` (`local-seo-tools.ts:322-340`), `BUSINESS_UPDATE_ROW_FIELDS` (`:484-493`), `formatPostLinks` (`:497-506`).
+`src/server/local/rowFields.ts` (COPY): `LOCAL_BUSINESS_ROW_FIELDS` (`dataforseo-research-tools.ts:682-699`), `LOCAL_SERP_ROW_FIELDS` (`:703-726`), `BUSINESS_QUESTION_ROW_FIELDS`, `BUSINESS_ANSWER_ROW_FIELDS`, `trimBusinessQuestionRow`, `latestAnswerText` (`:760-810`), `REVIEW_ROW_FIELDS` (`local-seo-tools.ts:322-340`), `BUSINESS_UPDATE_ROW_FIELDS` (`:484-493`), `formatPostLinks` (`:497-506`).
 
 `src/shared/local-coordinates.ts` (new, client-safe): `parseMapsLocation(input: string): { latitude: number; longitude: number; zoom: number | null } | null` — accepts a Google Maps URL containing `@<lat>,<lng>,<z>z` (zoom kept, rounded, clamped 4–18), or `!3d<lat>!4d<lng>` (place URLs; zoom null), or plain "lat, lng" / "lat lng"; rejects latitude outside ±90, longitude outside ±180, and any other text; never fetches (short links like `maps.app.goo.gl` are rejected with null, and the UI says "Paste the full Google Maps link from your browser's address bar."). `googleMapsPointUrl(lat, lng, zoom, keyword?)` builds `https://www.google.com/maps/search/<encoded keyword>/@lat,lng,<z>z` (or `/@lat,lng,<z>z` without a keyword) for "Open in Google Maps" links.
 
-#### 6.2.3 `src/lib/local/profile.ts` (PORT of `local-seo-tools.ts:127-252`)
+#### 6.2.3 `src/server/local/profile.ts` (PORT of `local-seo-tools.ts:127-252`)
 
 ```ts
 export type BusinessProfileView = { title: string | null; category: string | null; additionalCategories: string[];
@@ -380,7 +380,7 @@ export async function refreshBusinessProfile(ws, businessId: string, i: { maxUsd
 
 Location: `near` → `formatBusinessDataCoordinate`; else `locationCode ?? workspaceMarket(brand).locationCode`; language default `getLanguageCode(locationCode)` (`local-seo-tools.ts:54-68`). Call `business.myBusinessInfo({ brandKey, feature: "local.business", idempotencyKey: "local.profile:" + requestId, maxUsd }, …)`. `website`/`checkUrl` pass `safeHttpUrl` (F02/F04 `src/shared/safe-url.ts`) or become null. A profile with `save` → `save_local_business(…, profile)`. Research log: kind `local.business`, key `profile|<cid ?? placeId ?? name>`, summary "Google Business Profile for <title>: <category>, <rating>★ from <votes> reviews." or "No Google Business Profile matched <identifier>.".
 
-#### 6.2.4 `src/lib/local/listings.ts` (PORT of `dataforseo-research-tools.ts:229-282, 533-559, 954-999`; `local-seo-tools.ts:594-689`)
+#### 6.2.4 `src/server/local/listings.ts` (PORT of `dataforseo-research-tools.ts:229-282, 533-559, 954-999`; `local-seo-tools.ts:594-689`)
 
 ```ts
 export async function searchLocalBusinesses(ws, i: { near; query?: string; categories?: string[]; minRating?: number; minReviews?: number;
@@ -391,7 +391,7 @@ export async function listBusinessCategories(i: { query?: string; limit: number 
 
 Filters: `minRating` → `["rating.value", ">=", n]`, `minReviews` → `["rating.votes_count", ">=", n]` joined with `"and"` (F13 `filters.ts` `pushAnd`); `sortBy` rating → `["rating.value,desc"]`, reviews → `["rating.votes_count,desc"]`, relevance → none. Cache: `cached({ namespace: "local.listings", version: 1, keyParts: [lat, lng, radiusKm, query, categories, minRating, minReviews, isClaimed, sortBy, limit, offset], ttlSeconds: 86400, scope: "global", schema })` through F13 `cachedIf` (keep non-empty). Rows → `pickRowFields(LOCAL_BUSINESS_ROW_FIELDS)` then `LocalBusinessRow = { title, category, additionalCategories, rating, votes, isClaimed, domain, url (safe), phone, address, cid, placeId, latitude, longitude, totalPhotos, checkUrl (safe), isSaved: "own" | "competitor" | null }`. A `local_searches` row records parameters and counts. Categories: `cached({ namespace: "local.categories", version: 1, keyParts: [], ttlSeconds: 604800, scope: "global" })` over the free `fetchBusinessListingsCategories()` (not metered), filtered in memory by case-insensitive substring, sliced to `limit` (default 50, max 200).
 
-#### 6.2.5 `src/lib/local/fetches.ts` (PORT of `local-seo-tools.ts:80-121, 258-588`, `dataforseo-research-tools.ts:1050-1091`)
+#### 6.2.5 `src/server/local/fetches.ts` (PORT of `local-seo-tools.ts:80-121, 258-588`, `dataforseo-research-tools.ts:1050-1091`)
 
 ```ts
 export const INLINE_POLL_ATTEMPTS = 5, INLINE_POLL_INTERVAL_MS = 4000, REUSE_WINDOW_MINUTES = 60;
@@ -419,7 +419,7 @@ export type FetchView = { id: string; kind: FetchKind; status: "processing" | "c
 
 `collectFetch`: completed/failed → stored view; processing → `claim_local_poll(…, 4)` true → one free `fetchBusinessDataTaskResult`; completed → items written (`local_fetch_items` upsert by `idx`, idempotent), status completed; a provider failure status → `failed` with the message trimmed; a transient error → stays processing. `pollAfterSeconds` 5 while processing.
 
-#### 6.2.6 `src/lib/local/grid.ts` (PORT of `local-seo-tools.ts:691-1180`)
+#### 6.2.6 `src/server/local/grid.ts` (PORT of `local-seo-tools.ts:691-1180`)
 
 ```ts
 export const KM_PER_DEGREE_LATITUDE = 110.574, KM_PER_DEGREE_LONGITUDE = 111.32, MIN_LONGITUDE_COSINE = 0.01;
@@ -448,7 +448,7 @@ export type GridView = { id: string; status: "processing" | "completed" | "faile
 
 `collectGrid`: processing → `claim_local_poll(…, "grid", id, 4)` → one free `fetchLocalSerpTaskResult` per still-pending point (25 in flight max); write `points`/`point_rows`/`summary`/`matched` when every point is ready.
 
-#### 6.2.7 `src/lib/local/localSerp.ts` (PORT of `dataforseo-research-tools.ts:284-309, 1001-1048`)
+#### 6.2.7 `src/server/local/localSerp.ts` (PORT of `dataforseo-research-tools.ts:284-309, 1001-1048`)
 
 ```ts
 export async function getLocalSerpResults(ws, i: { keyword: string; near: { latitude: number; longitude: number; zoom?: number };
@@ -458,7 +458,7 @@ export async function getLocalSerpResults(ws, i: { keyword: string; near: { lati
 
 `createDataforseoClient().serp.local({ brandKey, feature: "local.serp", idempotencyKey: "local.serp:" + requestId, maxUsd }, { keyword, locationCoordinate: formatLocalSerpCoordinate({ ...near, zoom: near.zoom ?? 12 }), languageCode, searchType, device, depth, searchPlaces: false })`, cached `cached({ namespace: "local.serp", version: 1, keyParts: [keyword, lat, lng, zoom, searchType, device, depth, languageCode], ttlSeconds: 43200, scope: "global" })` via `cachedIf` (non-empty). Rows → `LOCAL_SERP_ROW_FIELDS` → `LocalSerpRow = { rank (rank_absolute ?? rank_group), title, domain, url (safe), phone, address, category, additionalCategories, rating, votes, priceLevel, isClaimed, cid, placeId, latitude, longitude, totalPhotos, isOwn, isCompetitor }`; `isOwn` = CID or place_id equals the own business, else `domain` equals the workspace `website_host` without `www.`. A `local_searches` row stores parameters, `result_count`, `own_rank`. Research log kind `local.serp` on a miss: "Local results for “<keyword>” near <lat>,<lng>: <n> businesses; you rank <r | not in the results>.".
 
-#### 6.2.8 `src/lib/local/businesses.ts`
+#### 6.2.8 `src/server/local/businesses.ts`
 
 ```ts
 export async function listBusinesses(ws): Promise<SavedBusinessView[]>;    // own first, then competitors by title
@@ -470,7 +470,7 @@ export async function removeBusiness(ws, businessId: string): Promise<void>;
 
 `saveBusiness` requires a CID or place_id (`400 identifier_required`); the profile stays `null` until a priced lookup.
 
-#### 6.2.9 Priced actions (`src/lib/pricing/actions/local.ts`, one import line in `src/lib/pricing/actions/index.ts`)
+#### 6.2.9 Priced actions (`src/shared/pricing/actions/local.ts`, one import line in `src/shared/pricing/actions/index.ts`)
 
 | Key | Feature | Input (`z.strictObject`) | `requireApproval` | Estimate (exact labels) |
 |---|---|---|---|---|
@@ -486,10 +486,10 @@ Every paid route calls `requireApprovedPrice(key, ctx, input, body.maxUsd)` befo
 
 #### 6.2.10 Contracts, tools, telemetry, registrations
 
-- `src/lib/local/local.contract.ts`: contracts for every §6.5 route.
-- `src/lib/local/tools.ts` (shape of F13 §6.2.6; F22 registers them): `search_local_businesses`, `get_local_serp_results`, `get_local_rank_grid` (input adds optional `gridId` to resume), `get_business_profile`, `get_business_reviews` (optional `fetchId` to resume), `get_business_updates` (`fetchId`), `get_google_business_questions`, `list_business_categories` (free). Descriptions adapted from OpenSEO's (`local-seo-tools.ts:223-224`, `:372-373`, `:528-529`, `:636-637`, `:957-958`; `dataforseo-research-tools.ts:958-959`, `:1005-1006`, `:1054-1055`) with "Charges credits" replaced by "Paid: call the price estimate for <action> first and pass the approved maxUsd." Handlers call the §6.2.3–6.2.7 services.
-- `src/lib/local/jobs.ts`: periodic `local.retention` (86,400 s) → `enqueueSystemJob("local.retention", {}, { dedupeKey: "local.retention:" + YYYY-MM-DD })`; kind `local.retention`: `prune-1`…`prune-20` (`DB_STEP`) `prune_local_seo(now − 395 days, 1000)` while any count is 1,000. `src/lib/jobs/kinds.ts` gains `import "../local/jobs.ts";`.
-- `src/shared/spend-features.ts`: the four keys with labels "Local business profiles and listings", "Business reviews", "Local search results", "Local rank grids". `src/lib/features/names.ts`: `local_seo: { spend: ["local.business","local.reviews","local.serp","local.grid"] as const }`. `src/lib/features/clientFeatures.ts` appends `"local_seo"`.
+- `src/server/local/local.contract.ts`: contracts for every §6.5 route.
+- `src/server/local/tools.ts` (shape of F13 §6.2.6; F22 registers them): `search_local_businesses`, `get_local_serp_results`, `get_local_rank_grid` (input adds optional `gridId` to resume), `get_business_profile`, `get_business_reviews` (optional `fetchId` to resume), `get_business_updates` (`fetchId`), `get_google_business_questions`, `list_business_categories` (free). Descriptions adapted from OpenSEO's (`local-seo-tools.ts:223-224`, `:372-373`, `:528-529`, `:636-637`, `:957-958`; `dataforseo-research-tools.ts:958-959`, `:1005-1006`, `:1054-1055`) with "Charges credits" replaced by "Paid: call the price estimate for <action> first and pass the approved maxUsd." Handlers call the §6.2.3–6.2.7 services.
+- `src/server/local/jobs.ts`: periodic `local.retention` (86,400 s) → `enqueueSystemJob("local.retention", {}, { dedupeKey: "local.retention:" + YYYY-MM-DD })`; kind `local.retention`: `prune-1`…`prune-20` (`DB_STEP`) `prune_local_seo(now − 395 days, 1000)` while any count is 1,000. `src/server/jobs/kinds.ts` gains `import "../local/jobs.ts";`.
+- `src/shared/spend-features.ts`: the four keys with labels "Local business profiles and listings", "Business reviews", "Local search results", "Local rank grids". `src/server/features/names.ts`: `local_seo: { spend: ["local.business","local.reviews","local.serp","local.grid"] as const }`. `src/server/features/clientFeatures.ts` appends `"local_seo"`.
 
 ### 6.3 Jobs
 
@@ -620,17 +620,17 @@ Form: "Search term", "Near" (default the business coordinates; Maps link or coor
 
 | OpenSEO source | Perceev target | Mode | Adaptation notes |
 |---|---|---|---|
-| `openseo:src/server/lib/dataforseo/business.ts` (+ `business.test.ts`) | `src/lib/providers/dataforseo/business.ts` (+ test) | PORT | F02 core/envelope; `createBusinessClient` on F02 `meter` with F03 estimators; free calls unwrapped. |
-| `openseo:src/server/mcp/tools/local-seo-shared.ts`, `openseo:src/server/mcp/table.ts:105-112`, `dataforseo-research-tools.ts:83-136, 466-471` | `src/lib/local/shared.ts` (+ test) | PORT | zod schemas without MCP `describe` text; errors as `AppError`. |
-| `dataforseo-research-tools.ts:682-810`, `local-seo-tools.ts:320-340, 483-506` | `src/lib/local/rowFields.ts` | COPY | — |
-| `local-seo-tools.ts:127-252` | `src/lib/local/profile.ts` | PORT | Text formatter → structured `BusinessProfileView`; saving; research log. |
-| `local-seo-tools.ts:80-121, 258-588`; `dataforseo-research-tools.ts:1050-1091` | `src/lib/local/fetches.ts` (+ tests) | PORT | Task id stored in `local_fetches` instead of returned to an agent; reuse window in SQL; free collection via `GET`. |
-| `local-seo-tools.ts:594-689`; `dataforseo-research-tools.ts:229-282, 533-559, 954-999` | `src/lib/local/listings.ts` (+ test) | PORT | R2 → F01 provider cache. |
-| `local-seo-tools.ts:691-1180` (+ `local-seo-tools.test.ts:242-440`) | `src/lib/local/grid.ts` (+ test) | PORT | Receipt → `local_grid_runs` row; inline collect 20 s instead of 40 s; stored top rows allow re-matching. |
-| `dataforseo-research-tools.ts:284-309, 1001-1048` | `src/lib/local/localSerp.ts` (+ test) | PORT | Cached globally; `isOwn` flag. |
+| `openseo:src/server/lib/dataforseo/business.ts` (+ `business.test.ts`) | `src/shared/providers/dataforseo/business.ts` (+ test) | PORT | F02 core/envelope; `createBusinessClient` on F02 `meter` with F03 estimators; free calls unwrapped. |
+| `openseo:src/server/mcp/tools/local-seo-shared.ts`, `openseo:src/server/mcp/table.ts:105-112`, `dataforseo-research-tools.ts:83-136, 466-471` | `src/server/local/shared.ts` (+ test) | PORT | zod schemas without MCP `describe` text; errors as `AppError`. |
+| `dataforseo-research-tools.ts:682-810`, `local-seo-tools.ts:320-340, 483-506` | `src/server/local/rowFields.ts` | COPY | — |
+| `local-seo-tools.ts:127-252` | `src/server/local/profile.ts` | PORT | Text formatter → structured `BusinessProfileView`; saving; research log. |
+| `local-seo-tools.ts:80-121, 258-588`; `dataforseo-research-tools.ts:1050-1091` | `src/server/local/fetches.ts` (+ tests) | PORT | Task id stored in `local_fetches` instead of returned to an agent; reuse window in SQL; free collection via `GET`. |
+| `local-seo-tools.ts:594-689`; `dataforseo-research-tools.ts:229-282, 533-559, 954-999` | `src/server/local/listings.ts` (+ test) | PORT | R2 → F01 provider cache. |
+| `local-seo-tools.ts:691-1180` (+ `local-seo-tools.test.ts:242-440`) | `src/server/local/grid.ts` (+ test) | PORT | Receipt → `local_grid_runs` row; inline collect 20 s instead of 40 s; stored top rows allow re-matching. |
+| `dataforseo-research-tools.ts:284-309, 1001-1048` | `src/server/local/localSerp.ts` (+ test) | PORT | Cached globally; `isOwn` flag. |
 | `openseo:src/server/lib/dataforseo/serp.ts:353-517` | F02 `serp.ts` | (owned by F02) | Used through `createDataforseoClient().serp.local` / `.localTaskPost`. |
-| `openseo:src/server/lib/dataforseo/pricing.ts:94-154, 186-279` | F03 `src/lib/pricing/dataforseo.ts` | (owned by F03) | Estimators bound in `createBusinessClient`. |
-| `openseo:src/server/mcp/tools/{local-seo-tools,dataforseo-research-tools}.ts` tool definitions | `src/lib/local/tools.ts` | PATTERN | Same names and inputs; F22 registry shape; resume ids. |
+| `openseo:src/server/lib/dataforseo/pricing.ts:94-154, 186-279` | F03 `src/shared/pricing/dataforseo.ts` | (owned by F03) | Estimators bound in `createBusinessClient`. |
+| `openseo:src/server/mcp/tools/{local-seo-tools,dataforseo-research-tools}.ts` tool definitions | `src/server/local/tools.ts` | PATTERN | Same names and inputs; F22 registry shape; resume ids. |
 | `openseo:.agents/skills/local-seo/SKILL.md` | `/portal/local` flow, copy of guardrails | PATTERN | Read as data; the page follows its order (business → results → profile → reviews → grid → Q&A/posts). |
 
 ## 8. Implementation plan
@@ -640,43 +640,43 @@ Form: "Search term", "Near" (default the business coordinates; Maps link or coor
 **Goal:** the metered business-data client and every pure helper, with tests, and no database.
 
 - [x] **P1.T1 Provider**
-  - [x] **P1.T1.S1** *Files:* `src/lib/providers/dataforseo/business.ts`, `business.test.ts`, fixtures `tests/fixtures/f17/{business-info,business-info-no-results,listings-search,qa,reviews-task-post,reviews-task-get-pending,reviews-task-get-done,categories}.json`. *Do:* §6.2.1; port the five cases of `business.test.ts:37-190` with an injected `fetchImpl` through F02 `core.ts`; "every entry is priced" walks `createBusinessClient({ meter: spyMeter })` and asserts each estimator > 0 and the feature names. *Verify:* `node --test src/lib/providers/dataforseo/business.test.ts` → pass (F17-AC-02, 04).
+  - [x] **P1.T1.S1** *Files:* `src/shared/providers/dataforseo/business.ts`, `business.test.ts`, fixtures `tests/fixtures/f17/{business-info,business-info-no-results,listings-search,qa,reviews-task-post,reviews-task-get-pending,reviews-task-get-done,categories}.json`. *Do:* §6.2.1; port the five cases of `business.test.ts:37-190` with an injected `fetchImpl` through F02 `core.ts`; "every entry is priced" walks `createBusinessClient({ meter: spyMeter })` and asserts each estimator > 0 and the feature names. *Verify:* `node --test src/shared/providers/dataforseo/business.test.ts` → pass (F17-AC-02, 04).
 - [x] **P1.T2 Helpers**
-  - [x] **P1.T2.S1** *Files:* `src/lib/local/shared.ts`, `shared.test.ts`, `src/lib/local/rowFields.ts`, `rowFields.test.ts`. *Do:* §6.2.2; port `local-seo-tools.test.ts:65-130` (identifier rule, `cid:` keyword with a metre radius, project-market fallback); listings km rounding (`radiusKm 2.6` → `3`); zoom suffix; `trimBusinessQuestionRow` keeps nested answers trimmed. *Verify:* `node --test src/lib/local/shared.test.ts src/lib/local/rowFields.test.ts` → pass (F17-AC-03).
+  - [x] **P1.T2.S1** *Files:* `src/server/local/shared.ts`, `shared.test.ts`, `src/server/local/rowFields.ts`, `rowFields.test.ts`. *Do:* §6.2.2; port `local-seo-tools.test.ts:65-130` (identifier rule, `cid:` keyword with a metre radius, project-market fallback); listings km rounding (`radiusKm 2.6` → `3`); zoom suffix; `trimBusinessQuestionRow` keeps nested answers trimmed. *Verify:* `node --test src/server/local/shared.test.ts src/server/local/rowFields.test.ts` → pass (F17-AC-03).
   - [x] **P1.T2.S2** *Files:* `src/shared/local-coordinates.ts`, `local-coordinates.test.ts`. *Do:* §6.2.2 parser cases: `https://www.google.com/maps/@19.0760,72.8777,14z` → zoom 14; place URL with `!3d19.07!4d72.87`; "19.0760, 72.8777"; `91,0` → null; `https://maps.app.goo.gl/abc` → null; the module has no `fetch` reference. *Verify:* `node --test src/shared/local-coordinates.test.ts` → pass (F17-AC-14).
-  - [x] **P1.T2.S3** *Files:* `src/lib/local/grid.ts` (pure half), `grid.test.ts`. *Do:* `rankGridZoom` (2 km at 37.3° → 13; clamps), `buildRankGridPoints` (3×3 north row first, longitude step widened by latitude), `matchGridItem` (CID beats name; name case-insensitive), `gridPointResult`/`summarizeGrid` (ports of `local-seo-tools.test.ts:312-375`). *Verify:* `node --test src/lib/local/grid.test.ts` → pass (F17-AC-07 pure half).
-  - [x] **P1.T2.S4** *Files:* `src/lib/pricing/actions/local.ts`, `local.test.ts`, `src/lib/pricing/actions/index.ts` (one line). *Do:* §6.2.9; labels and totals (profile 0.0054; listings 20 → 0.0192; reviews 20 → 0.004, 200 → 0.031, other sites 20 → 0.01; posts 10 → 0.0045; Q&A 20 → 0.0054; Maps 0.002; Local Finder 20 → 0.004; grid 3×3 → 0.0108, 5×5 → 0.03); grid requires approval; `local_grid_limit` blocked. *Verify:* `node --test src/lib/pricing/actions/local.test.ts` → pass (F17-AC-11 unit half).
-  - [x] **P1.T2.S5** *Files:* `src/shared/spend-features.ts`, `src/lib/features/names.ts`, `src/lib/features/clientFeatures.ts`, `.env.example` (`FEATURE_LOCAL_SEO=`, `FEATURE_LOCAL_SEO_BRANDS=`), `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/features/flags.test.ts src/shared/*.test.ts src/lib/platform/thirdPartyNotices.test.mjs` → pass; `grep -c "^FEATURE_LOCAL_SEO=$" .env.example` → 1.
+  - [x] **P1.T2.S3** *Files:* `src/server/local/grid.ts` (pure half), `grid.test.ts`. *Do:* `rankGridZoom` (2 km at 37.3° → 13; clamps), `buildRankGridPoints` (3×3 north row first, longitude step widened by latitude), `matchGridItem` (CID beats name; name case-insensitive), `gridPointResult`/`summarizeGrid` (ports of `local-seo-tools.test.ts:312-375`). *Verify:* `node --test src/server/local/grid.test.ts` → pass (F17-AC-07 pure half).
+  - [x] **P1.T2.S4** *Files:* `src/shared/pricing/actions/local.ts`, `local.test.ts`, `src/shared/pricing/actions/index.ts` (one line). *Do:* §6.2.9; labels and totals (profile 0.0054; listings 20 → 0.0192; reviews 20 → 0.004, 200 → 0.031, other sites 20 → 0.01; posts 10 → 0.0045; Q&A 20 → 0.0054; Maps 0.002; Local Finder 20 → 0.004; grid 3×3 → 0.0108, 5×5 → 0.03); grid requires approval; `local_grid_limit` blocked. *Verify:* `node --test src/shared/pricing/actions/local.test.ts` → pass (F17-AC-11 unit half).
+  - [x] **P1.T2.S5** *Files:* `src/shared/spend-features.ts`, `src/server/features/names.ts`, `src/server/features/clientFeatures.ts`, `.env.example` (`FEATURE_LOCAL_SEO=`, `FEATURE_LOCAL_SEO_BRANDS=`), `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/server/features/flags.test.ts src/shared/*.test.ts src/server/platform/thirdPartyNotices.test.mjs` → pass; `grep -c "^FEATURE_LOCAL_SEO=$" .env.example` → 1.
 
-**Checkpoint:** full suite `node --import ./src/lib/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'`, `npm run typecheck`, F02 `noPrices.test.mjs` and `answerImportGuard.test.mjs` pass. Completes F17-AC-02, 03, 04, 14.
+**Checkpoint:** full suite `node --import ./src/server/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'`, `npm run typecheck`, F02 `noPrices.test.mjs` and `answerImportGuard.test.mjs` pass. Completes F17-AC-02, 03, 04, 14.
 
 ### Phase 2 — Database, services and API
 
 **Goal:** every local lookup works through the API with storage, reuse and research logging.
 
 - [x] **P2.T1 Database**
-  - [x] **P2.T1.S1** *Files:* `supabase/migrations/120_f17_local_seo.sql`, `121_f17_local_seo_functions.sql`. *Do:* §6.1. *Verify:* `node --test src/lib/migrationsRunner.test.mjs src/lib/migrationsLedger.test.mjs` → pass.
+  - [x] **P2.T1.S1** *Files:* `supabase/migrations/120_f17_local_seo.sql`, `121_f17_local_seo_functions.sql`. *Do:* §6.1. *Verify:* `node --test src/server/migrationsRunner.test.mjs src/server/migrationsLedger.test.mjs` → pass.
   - [x] **P2.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`. *Verify:* CI customer-database commands against local Postgres 16 → exit 0.
-  - [x] **P2.T1.S3** *Files:* `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+  - [x] **P2.T1.S3** *Files:* `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Verify:* `node --test src/server/docStatus.test.mjs src/server/migrationsRunner.test.mjs` → pass.
   - [x] **P2.T1.S4** *Files:* `scripts/qa/check-f17-db.mjs`. *Do:* groups `schema`, `rls`, `caps` (second own demotes the first to competitor; 11th competitor raises), `reuse` (`find_local_reuse` window and failed exclusion), `poll` (`claim_local_poll` twice within 4 s → second false), `retention`. *Verify:* `node scripts/qa/check-f17-db.mjs` → "ok 6 groups" (F17-AC-01, 10 DB half, 16 DB half).
 - [x] **P2.T2 Services**
-  - [x] **P2.T2.S1** *Files:* `src/lib/local/businesses.ts`, `businesses.test.ts`, `src/lib/local/profile.ts`, `profile.test.ts`. *Do:* §6.2.3, §6.2.8; `toProfileView` from `business-info.json` (hours spans, rating distribution, unsafe URL → null); save own/competitor; research log entry. *Verify:* `node --test src/lib/local/businesses.test.ts src/lib/local/profile.test.ts` → pass (F17-AC-10).
-  - [x] **P2.T2.S2** *Files:* `src/lib/local/listings.ts`, `listings.test.ts`. *Do:* §6.2.4; port `local-seo-tools.test.ts:448` (categories cached and filtered in memory); filter/order mapping; cache hit costs nothing. *Verify:* `node --test src/lib/local/listings.test.ts` → pass (F17-AC-09).
-  - [x] **P2.T2.S3** *Files:* `src/lib/local/fetches.ts`, `fetches.test.ts`. *Do:* §6.2.5 with F01 memory spend and a fake clock; ports of `local-seo-tools.test.ts:136-240` (resumable when queued; collection failure keeps the fetch; resume without a new post); reuse within 60 minutes; repeated `requestId`; Q&A combine (F17-AC-06). *Verify:* `node --test src/lib/local/fetches.test.ts` → pass (F17-AC-05, 06).
-  - [x] **P2.T2.S4** *Files:* `src/lib/local/grid.ts` (service half), `grid.service.test.ts`. *Do:* §6.2.6; ports of `local-seo-tools.test.ts:281`, `:375`, `:392`, `:410`, `:431` (posts 9 searches; one refused point; all failing → error and no reuse; processing then free collect; different arguments post again); re-match for another target from stored rows; daily limit. *Verify:* `node --test src/lib/local/grid.service.test.ts` → pass (F17-AC-07).
-  - [x] **P2.T2.S5** *Files:* `src/lib/local/localSerp.ts`, `localSerp.test.ts`. *Do:* §6.2.7; defaults; `isOwn` by CID and by domain; cached second call has no spend. *Verify:* `node --test src/lib/local/localSerp.test.ts` → pass (F17-AC-08).
-  - [x] **P2.T2.S6** *Files:* `src/lib/local/research.ts`, `research.test.ts`. *Do:* summaries and keys of §6.2.3–6.2.7; `recent_research` warning in quotes. *Verify:* `node --test src/lib/local/research.test.ts` → pass (F17-AC-12).
-  - [x] **P2.T2.S7** *Files:* `src/lib/local/jobs.ts`, `retention.test.ts`, `src/lib/jobs/kinds.ts` (one import). *Verify:* `node --test src/lib/local/retention.test.ts` → pass; `node scripts/qa/check-f17-db.mjs --only retention` → ok (F17-AC-16 retention half).
+  - [x] **P2.T2.S1** *Files:* `src/server/local/businesses.ts`, `businesses.test.ts`, `src/server/local/profile.ts`, `profile.test.ts`. *Do:* §6.2.3, §6.2.8; `toProfileView` from `business-info.json` (hours spans, rating distribution, unsafe URL → null); save own/competitor; research log entry. *Verify:* `node --test src/server/local/businesses.test.ts src/server/local/profile.test.ts` → pass (F17-AC-10).
+  - [x] **P2.T2.S2** *Files:* `src/server/local/listings.ts`, `listings.test.ts`. *Do:* §6.2.4; port `local-seo-tools.test.ts:448` (categories cached and filtered in memory); filter/order mapping; cache hit costs nothing. *Verify:* `node --test src/server/local/listings.test.ts` → pass (F17-AC-09).
+  - [x] **P2.T2.S3** *Files:* `src/server/local/fetches.ts`, `fetches.test.ts`. *Do:* §6.2.5 with F01 memory spend and a fake clock; ports of `local-seo-tools.test.ts:136-240` (resumable when queued; collection failure keeps the fetch; resume without a new post); reuse within 60 minutes; repeated `requestId`; Q&A combine (F17-AC-06). *Verify:* `node --test src/server/local/fetches.test.ts` → pass (F17-AC-05, 06).
+  - [x] **P2.T2.S4** *Files:* `src/server/local/grid.ts` (service half), `grid.service.test.ts`. *Do:* §6.2.6; ports of `local-seo-tools.test.ts:281`, `:375`, `:392`, `:410`, `:431` (posts 9 searches; one refused point; all failing → error and no reuse; processing then free collect; different arguments post again); re-match for another target from stored rows; daily limit. *Verify:* `node --test src/server/local/grid.service.test.ts` → pass (F17-AC-07).
+  - [x] **P2.T2.S5** *Files:* `src/server/local/localSerp.ts`, `localSerp.test.ts`. *Do:* §6.2.7; defaults; `isOwn` by CID and by domain; cached second call has no spend. *Verify:* `node --test src/server/local/localSerp.test.ts` → pass (F17-AC-08).
+  - [x] **P2.T2.S6** *Files:* `src/server/local/research.ts`, `research.test.ts`. *Do:* summaries and keys of §6.2.3–6.2.7; `recent_research` warning in quotes. *Verify:* `node --test src/server/local/research.test.ts` → pass (F17-AC-12).
+  - [x] **P2.T2.S7** *Files:* `src/server/local/jobs.ts`, `retention.test.ts`, `src/server/jobs/kinds.ts` (one import). *Verify:* `node --test src/server/local/retention.test.ts` → pass; `node scripts/qa/check-f17-db.mjs --only retention` → ok (F17-AC-16 retention half).
 - [x] **P2.T3 Routes**
-  - [x] **P2.T3.S1** *Files:* `src/app/api/customer/local/{businesses,businesses/[businessId],businesses/[businessId]/profile,profile,listings,categories,fetches,fetches/[fetchId],serp,grids,grids/[gridId]}/route.ts`, `src/lib/local/local.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [x] **P2.T3.S2** *Files:* `src/lib/local/local.route.test.mjs`. *Do:* flag off → 404; disabled spend → 403; grid without `maxUsd` → 400 `approval_required`; lower `maxUsd` → 409 `price_changed`; `POST /fetches` → 202 then `GET` → 200 completed (fixtures); foreign `businessId` → 404; extra field → 400. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/local/local.route.test.mjs` → pass (F17-AC-05 route half, 11, 15).
+  - [x] **P2.T3.S1** *Files:* `src/app/api/customer/local/{businesses,businesses/[businessId],businesses/[businessId]/profile,profile,listings,categories,fetches,fetches/[fetchId],serp,grids,grids/[gridId]}/route.ts`, `src/server/local/local.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass.
+  - [x] **P2.T3.S2** *Files:* `src/server/local/local.route.test.mjs`. *Do:* flag off → 404; disabled spend → 403; grid without `maxUsd` → 400 `approval_required`; lower `maxUsd` → 409 `price_changed`; `POST /fetches` → 202 then `GET` → 200 completed (fixtures); foreign `businessId` → 404; extra field → 400. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/server/local/local.route.test.mjs` → pass (F17-AC-05 route half, 11, 15).
 
 **Checkpoint:** full suite, `npm run build`, `check-f17-db.mjs` pass. Completes F17-AC-01, 05–12, 15.
 
 ### Phase 3 — Page: picker, profile, reviews, posts, questions (requires F04, F05, F06, F09 phase 3, F13 phase 1 merged)
 
 - [x] **P3.T1 Components**
-  - [x] **P3.T1.S1** *Files:* `src/app/portal/local/page.tsx`, `src/components/portal/local/{LocalSeoPage,BusinessPicker,CompetitorList,ProfileTab}.tsx`, `hooks/{useLocalBusinesses,useLocalFetch}.ts`, `telemetry.ts`, `src/components/app/navigation/items.ts` (entry), `src/lib/query/keys.ts`. *Do:* §6.6.1–6.6.2. *Verify:* `npm run build` → exit 0.
+  - [x] **P3.T1.S1** *Files:* `src/app/portal/local/page.tsx`, `src/components/portal/local/{LocalSeoPage,BusinessPicker,CompetitorList,ProfileTab}.tsx`, `hooks/{useLocalBusinesses,useLocalFetch}.ts`, `telemetry.ts`, `src/components/app/navigation/items.ts` (entry), `src/shared/query/keys.ts`. *Do:* §6.6.1–6.6.2. *Verify:* `npm run build` → exit 0.
   - [x] **P3.T1.S2** *Files:* `src/components/portal/local/{ReviewsTab,ReviewCard,PostsTab,QuestionsTab}.tsx`. *Do:* §6.6.3–6.6.4; polling with F05 `useServerPacedQuery` (`isActive = status === "processing"`, stop after 10 minutes). *Verify:* `npm run build` → exit 0.
   - [x] **P3.T1.S3** *Files:* `scripts/qa/check-f17-browser.mjs`, `tests/fixtures/f17/api/*.json`. *Do:* fixture API server; B1 no business → "By name" lookup shows the price and the result card; B2 "Nearby" search table and "Save as competitor"; B3 profile head-to-head shows "Not loaded" (not 0) for a competitor without a profile; B4 reviews: processing then completed, "owner replied to 6 of 20", page 2 of 2, rating filter; B5 posts and questions empty states. *Verify:* `node scripts/qa/check-f17-browser.mjs --only B1,B2,B3,B4,B5` → "ok 5 scenarios".
 
@@ -693,7 +693,7 @@ Form: "Search term", "Near" (default the business coordinates; Maps link or coor
 
 ### Phase 5 — Tool definitions for F22
 
-- [x] **P5.T1.S1** *Files:* `src/lib/local/tools.ts`, `tools.test.ts`. *Do:* §6.2.10; eight names exactly as OpenSEO; strict inputs (`z.toJSONSchema(..., { io: "input" })` has `additionalProperties: false`), loose outputs; paid tools refuse without `maxUsd`; resume by `fetchId`/`gridId` makes no paid call. *Verify:* `node --test src/lib/local/tools.test.ts` → pass (F17-AC-17).
+- [x] **P5.T1.S1** *Files:* `src/server/local/tools.ts`, `tools.test.ts`. *Do:* §6.2.10; eight names exactly as OpenSEO; strict inputs (`z.toJSONSchema(..., { io: "input" })` has `additionalProperties: false`), loose outputs; paid tools refuse without `maxUsd`; resume by `fetchId`/`gridId` makes no paid call. *Verify:* `node --test src/server/local/tools.test.ts` → pass (F17-AC-17).
 
 **Checkpoint:** full suite passes. Completes F17-AC-17.
 
@@ -701,14 +701,14 @@ Form: "Search term", "Near" (default the business coordinates; Maps link or coor
 
 | File | Cases | ACs |
 |---|---|---|
-| `src/lib/providers/dataforseo/business.test.ts` | five ported cases, every entry priced | 02, 04 |
-| `src/lib/local/shared.test.ts`, `rowFields.test.ts` | identifiers, radius units, zoom, trimming | 03 |
+| `src/shared/providers/dataforseo/business.test.ts` | five ported cases, every entry priced | 02, 04 |
+| `src/server/local/shared.test.ts`, `rowFields.test.ts` | identifiers, radius units, zoom, trimming | 03 |
 | `src/shared/local-coordinates.test.ts` | Maps link parsing, no network | 14 |
-| `src/lib/local/grid.test.ts`, `grid.service.test.ts` | zoom, points, matching, summary, reuse, failures, limit | 07 |
-| `src/lib/pricing/actions/local.test.ts` | seven actions, labels, totals, approval | 11 |
-| `src/lib/local/{businesses,profile,listings,fetches,localSerp,research,retention}.test.ts` | services | 05, 06, 08, 09, 10, 12, 16 |
-| `src/lib/local/local.route.test.mjs` | auth, flags, approvals, 202/200, foreign ids | 05, 11, 15 |
-| `src/lib/local/tools.test.ts` | tool shapes | 17 |
+| `src/server/local/grid.test.ts`, `grid.service.test.ts` | zoom, points, matching, summary, reuse, failures, limit | 07 |
+| `src/shared/pricing/actions/local.test.ts` | seven actions, labels, totals, approval | 11 |
+| `src/server/local/{businesses,profile,listings,fetches,localSerp,research,retention}.test.ts` | services | 05, 06, 08, 09, 10, 12, 16 |
+| `src/server/local/local.route.test.mjs` | auth, flags, approvals, 202/200, foreign ids | 05, 11, 15 |
+| `src/server/local/tools.test.ts` | tool shapes | 17 |
 | `src/components/portal/local/telemetry.test.mjs` | no personal data | 16 |
 | `scripts/qa/check-f17-db.mjs` | schema, rls, caps, reuse, poll, retention | 01, 10, 16 |
 | `scripts/qa/check-f17-browser.mjs` | B1–B8 | 13 |
@@ -733,7 +733,7 @@ Fixtures are synthetic (§6.4). The live check runs only on the owner's instruct
 | 3 | A 5×5 grid is 25 paid searches; repeated grids add up. | Dialog approval always, 60-minute reuse, 20 grids per workspace per day, spend caps. |
 | 4 | Reviews contain personal names and opinions. | Trimmed, workspace-only, never logged, 13-month retention; no export in v1. |
 | 5 | Saving local competitors could be expected to feed F07 project competitors or AI-visibility competitors (deferred Mixed row). | Not linked; local competitors live in `local_businesses` only. |
-| 6 | Conventions §5.6 names `src/lib/keywords/keyword-locations.ts`; F13 ships `src/shared/keyword-locations.ts`. | F17 imports F13's actual path. |
+| 6 | Conventions §5.6 names `src/server/keywords/keyword-locations.ts`; F13 ships `src/shared/keyword-locations.ts`. | F17 imports F13's actual path. |
 | 7 | `ON DELETE SET NULL (column)` needs Postgres 15+. | Supabase and CI run 15/16/17; documented in §6.1. |
 | 8 | Inline polling holds a function for up to 20 s. | `maxDuration = 60`; collection continues through free `GET` polls. |
 | 9 | Business-data endpoints accept `location_name` too, but OpenSEO only uses coordinates or codes. | Use coordinates or codes only (verified paths). |

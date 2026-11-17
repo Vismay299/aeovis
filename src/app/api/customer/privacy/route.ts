@@ -1,11 +1,11 @@
-import { requireUser, type RequireUserDeps } from "../../../../lib/auth/requireUser.ts";
-import { AppError } from "../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../lib/features/flags.ts";
-import { POLICY_VERSION } from "../../../../lib/telemetry/events.ts";
-import { privacyPutRequest } from "../../../../lib/telemetry/privacy.contract.ts";
-import { readPrivacyChoice, savePrivacyChoice } from "../../../../lib/telemetry/privacy.ts";
-import { serverTelemetryEnabled } from "../../../../lib/telemetry/server.ts";
+import { requireUser, type RequireUserDeps } from "../../../../server/auth/requireUser.ts";
+import { AppError } from "../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../server/features/flags.ts";
+import { POLICY_VERSION } from "../../../../shared/telemetry/events.ts";
+import { privacyPutRequest } from "../../../../shared/telemetry/privacy.contract.ts";
+import { readPrivacyChoice, savePrivacyChoice } from "../../../../shared/telemetry/privacy.ts";
+import { serverTelemetryEnabled } from "../../../../shared/telemetry/server.ts";
 
 export const dynamic = "force-dynamic";
 

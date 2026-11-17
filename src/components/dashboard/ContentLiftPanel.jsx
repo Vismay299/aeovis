@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getContentEvents, addContentEvent } from "@/services/api";
+import { getContentEvents, addContentEvent } from "@/shared/api";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Calendar, Link as LinkIcon, TrendingUp, TrendingDown, BookOpen, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";

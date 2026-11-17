@@ -1,10 +1,10 @@
-import { AppError, jsonOk, toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { cancelJob } from "../../../../../../lib/jobs/cancel.ts";
-import type { CancelOutcome } from "../../../../../../lib/jobs/cancel.ts";
-import { jobCancelBody, jobIdParams } from "../../../../../../lib/jobs/jobs.contract.ts";
-import { jobStore } from "../../../../../../lib/jobs/store.ts";
-import type { JobStore } from "../../../../../../lib/jobs/store.ts";
-import { requireWorkspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
+import { AppError, jsonOk, toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { cancelJob } from "../../../../../../server/jobs/cancel.ts";
+import type { CancelOutcome } from "../../../../../../server/jobs/cancel.ts";
+import { jobCancelBody, jobIdParams } from "../../../../../../server/jobs/jobs.contract.ts";
+import { jobStore } from "../../../../../../server/jobs/store.ts";
+import type { JobStore } from "../../../../../../server/jobs/store.ts";
+import { requireWorkspace } from "../../../../../../server/workspace/requireWorkspace.ts";
 
 export const dynamic = "force-dynamic";
 

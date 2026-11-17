@@ -7,14 +7,14 @@
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, jsonOk, AppError } from "../../../../../lib/http/errors.ts";
+} from "../../../../../server/workspace/requireWorkspace.ts";
+import { toErrorResponse, jsonOk, AppError } from "../../../../../shared/http/errors.ts";
 import {
   isUndefinedColumnError,
   listScanHistory,
   listScanHistoryFallback,
   scanHistoryQuerySchema,
-} from "../../../../../lib/scans/scanHistory.ts";
+} from "../../../../../server/scans/scanHistory.ts";
 
 export const dynamic = "force-dynamic";
 

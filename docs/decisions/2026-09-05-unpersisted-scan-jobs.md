@@ -8,14 +8,14 @@
 **Task:** R0.1.21 (`needs-decision`), which the R2.8.6 implementer identified as
 the actual mechanism behind R0.1.4.
 **Status:** accepted, shipped in the same commit as the code and the test.
-**Scope:** `POST /api/scan` only. `src/lib/db.js` is deliberately unchanged — see
+**Scope:** `POST /api/scan` only. `src/server/db.js` is deliberately unchanged — see
 *What this decision does NOT do*.
 
 ---
 
 ## Context
 
-`createScanJob` in `src/lib/db.js` fail-softs: with no Supabase client it writes
+`createScanJob` in `src/server/db.js` fail-softs: with no Supabase client it writes
 the job into `global.memoryJobs` and returns it, indistinguishable in shape from
 a persisted row. `src/app/api/scan/route.js` then answered **201 Created** off
 that object and fired `runScanChunk(job.id)`.
@@ -45,7 +45,7 @@ deletion. `global.memoryJobs` is load-bearing for:
 - **the test suite** — `npm run test:scoring` runs with the Supabase vars unset,
   and dozens of suites drive `createScanJob` / `getScanJob` / `updateScanJob`
   against the map directly. Removing it would break the tree.
-- **local development against `src/lib/db.js` directly**, where a scratch job
+- **local development against `src/server/db.js` directly**, where a scratch job
   never has to outlive the process it was created in.
 
 Both of those are *in-process* uses. Neither one requires the map to be visible
@@ -103,7 +103,7 @@ without a database is job creation, so the guard sits exactly there.
 
 ## What this decision does NOT do
 
-- It does not touch `src/lib/db.js`. The memory fallback still exists and still
+- It does not touch `src/server/db.js`. The memory fallback still exists and still
   behaves identically for in-process callers; only the HTTP route refuses to
   build a response on top of it. `db.js` was owned by another task in the same
   round, and a route-side refusal is sufficient for the criterion.
@@ -135,10 +135,10 @@ Revisit this if any of these becomes true:
 
 - `src/app/api/scan/route.js` — the guard, the 503 helper, and the ordering
   comment that explains why 400 and 429 still come first.
-- `src/lib/scanRoute.unpersisted.route.test.mjs` — drives the real `POST`
+- `src/server/scanRoute.unpersisted.route.test.mjs` — drives the real `POST`
   handler with the Supabase vars unset and fails if it returns 201. Its teeth
   were checked by disabling both guards and observing the failure message *"the
   route issued 201 Created for a scan job that was never persisted"*, then
   restoring them.
-- `src/lib/db.js` (`createScanJob`, `resolveClient`) — read, not modified; the
+- `src/server/db.js` (`createScanJob`, `resolveClient`) — read, not modified; the
   source of the `!client` condition the route mirrors.

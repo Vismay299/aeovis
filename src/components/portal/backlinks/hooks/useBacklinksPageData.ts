@@ -6,8 +6,8 @@ import { defaultScopeForInput } from "@/shared/researchScope";
 import { useMemo } from "react";
 import { useQuery, type QueryKey } from "@tanstack/react-query";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
-import { fetchJson, isApiError, withBrand } from "@/lib/query/fetchJson";
-import { keys, stableStringify } from "@/lib/query/keys";
+import { fetchJson, isApiError, withBrand } from "@/shared/query/fetchJson";
+import { keys, stableStringify } from "@/shared/query/keys";
 import {
   BACKLINKS_DEFAULT_SORT,
   backlinksFilterBudgetError,

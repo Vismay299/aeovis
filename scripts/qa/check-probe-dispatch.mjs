@@ -8,8 +8,8 @@ import pg from "pg";
 import {
   createProbeDispatchStore,
   resultDecision,
-} from "../../src/lib/db/probeDispatch.js";
-import { runDurableProbing } from "../../src/lib/workers/durableProbing.js";
+} from "../../src/server/db/probeDispatch.js";
+import { runDurableProbing } from "../../src/server/workers/durableProbing.js";
 const host = process.env.PGHOST || "";
 const database = process.env.PGDATABASE || "";
 if (

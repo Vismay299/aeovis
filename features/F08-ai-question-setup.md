@@ -58,36 +58,36 @@ AI drafts and the customer curates; the set is then fixed. Setup reads the websi
 
 ## 3. What Perceev has today
 
-- **R14 reviewed panels** (`supabase/migrations/029_repair_workflow.sql:1-42`): immutable `repair_artifacts` versions (`kind 'panel'`, key `default`) with `append_repair_artifact` (optimistic version, reviewer required for `approved`). `validatePanel` (`src/lib/repairs/workflow.js:124-231`): 1–200 prompts; NFKC text; duplicate detection; branded (alias match) → purpose `diagnostic`; purpose otherwise recommendation/information; equal weights only; origin in `generated, gsc_search, customer_research, licensed_panel, manual`; prompt id = given `id` or a hash of `{text, market, purpose}`; near-duplicate pairs (word overlap > 0.8) unless `duplicate_reason`.
+- **R14 reviewed panels** (`supabase/migrations/029_repair_workflow.sql:1-42`): immutable `repair_artifacts` versions (`kind 'panel'`, key `default`) with `append_repair_artifact` (optimistic version, reviewer required for `approved`). `validatePanel` (`src/server/repairs/workflow.js:124-231`): 1–200 prompts; NFKC text; duplicate detection; branded (alias match) → purpose `diagnostic`; purpose otherwise recommendation/information; equal weights only; origin in `generated, gsc_search, customer_research, licensed_panel, manual`; prompt id = given `id` or a hash of `{text, market, purpose}`; near-duplicate pairs (word overlap > 0.8) unless `duplicate_reason`.
 - **Customer panel route** `src/app/api/customer/repairs/[kind]/route.js:46-91`: `state` draft/approved/retired; approval needs persona and no near duplicates; aliases from `getBrandAliases(display_name, website)`.
 - **Measurement page** `src/app/portal/measurement/page.jsx` (main `:110-213`): a textarea "Questions, one per line" with persona, country, language, "Save for review" and "Approve this panel"; every prompt posted as `origin: "manual"`. The run-scan fix (`fix/run-scan-unapproved-panel`) adds `panel_not_approved` handling in `useScanTracker.js` / `ScanProgressCard.jsx` and a Getting started step; the page itself is restyled by F04 phase 5.
-- **Scans** need an approved panel (`src/app/api/customer/scan/route.js:37-39`) and freeze it into `scan_jobs.panel_snapshot` (`:40-41`; scheduled windows `supabase/migrations/032_durable_schedule_windows.sql:36-46`). The worker spreads each prompt object, so extra keys survive (`src/lib/workers/scanWorker.js:1477-1478`).
-- **Generators:** `generateUnbrandedPrompts(brand, website, industry, stats, count, deps)` (`src/lib/scoring/promptGen.js:218-775`): website scrape, LLM generation, People-also-ask (Bright Data, paid) and Google autocomplete (free) realism blend, industry-pack top-up, branded queries dropped, eliciting queries ranked first (`src/lib/scoring/promptQuality.js:91-123`). `CONTROL_PROMPTS` are scanner quality controls, excluded from scores (`src/lib/scoring/controlPrompts.js:1-18`). `generatePromptsForBrand` (`src/lib/prompts.js:38`) is the older generator. Only the free scan uses them.
-- **Firecrawl** `scrapeSite(url)` (`src/lib/firecrawl.js:144`) returns `source: "firecrawl" | "fallback_fetch"`; it is not metered today. `safeFetch` exists in `src/lib/ssrfGuard.js:612`; F01 ships the pinned `src/lib/http/safeFetch.ts`.
+- **Scans** need an approved panel (`src/app/api/customer/scan/route.js:37-39`) and freeze it into `scan_jobs.panel_snapshot` (`:40-41`; scheduled windows `supabase/migrations/032_durable_schedule_windows.sql:36-46`). The worker spreads each prompt object, so extra keys survive (`src/server/workers/scanWorker.js:1477-1478`).
+- **Generators:** `generateUnbrandedPrompts(brand, website, industry, stats, count, deps)` (`src/shared/scoring/promptGen.js:218-775`): website scrape, LLM generation, People-also-ask (Bright Data, paid) and Google autocomplete (free) realism blend, industry-pack top-up, branded queries dropped, eliciting queries ranked first (`src/shared/scoring/promptQuality.js:91-123`). `CONTROL_PROMPTS` are scanner quality controls, excluded from scores (`src/shared/scoring/controlPrompts.js:1-18`). `generatePromptsForBrand` (`src/server/prompts.js:38`) is the older generator. Only the free scan uses them.
+- **Firecrawl** `scrapeSite(url)` (`src/server/firecrawl.js:144`) returns `source: "firecrawl" | "fallback_fetch"`; it is not metered today. `safeFetch` exists in `src/server/ssrfGuard.js:612`; F01 ships the pinned `src/shared/http/safeFetch.ts`.
 - **Legacy prompt store** `brand_prompts` (`supabase/migrations/001_initial_schema.sql:29`, `005_analytics_platform.sql:104-106`) serves the free scan; F08 does not touch it.
 - **Missing:** question identity across panel versions, AI drafting in the portal, competitor discovery, question research, a curation UI.
-- **Must not break:** the legacy panel route and the owner's demo setup script that posts a panel to it (handoff 2026-10-20 step 2); `panel_not_approved` refusals; `enqueue_measurement_window`; R14 tests (`src/lib/repairs/r14-workflow-contract.test.mjs`, `scripts/qa/check-repair-workflows.mjs`); fix-branch page tests (panel renders first, same panel POST).
+- **Must not break:** the legacy panel route and the owner's demo setup script that posts a panel to it (handoff 2026-10-20 step 2); `panel_not_approved` refusals; `enqueue_measurement_window`; R14 tests (`src/server/repairs/r14-workflow-contract.test.mjs`, `scripts/qa/check-repair-workflows.mjs`); fix-branch page tests (panel renders first, same panel POST).
 
 ## 4. Target behaviour and acceptance criteria
 
 | ID | Statement | Verified by |
 |---|---|---|
-| F08-AC-01 | `public.normalize_question_text(text)` is IMMUTABLE and returns the same value as `normalizeQuestionText()` (TS) for every string in `tests/fixtures/f08/normalize-cases.json` (case, tabs, newlines, NBSP after NFKC, emoji, Hindi). | unit `src/lib/questions/workspaceQuestions.test.ts`; DB `scripts/qa/check-f08-db.mjs` group `normalize` |
+| F08-AC-01 | `public.normalize_question_text(text)` is IMMUTABLE and returns the same value as `normalizeQuestionText()` (TS) for every string in `tests/fixtures/f08/normalize-cases.json` (case, tabs, newlines, NBSP after NFKC, emoji, Hindi). | unit `src/server/questions/workspaceQuestions.test.ts`; DB `scripts/qa/check-f08-db.mjs` group `normalize` |
 | F08-AC-02 | `workspace_questions` enforces one row per `(brand_key, text_normalized)`, immutable `text` (an UPDATE of `text` raises `question_text_immutable`), the origin/status/cohort vocabularies, and member-only reads; tenant B sees 0 of A's rows. | DB groups `schema`, `rls`; `tests/customer-uat.sql` |
 | F08-AC-03 | `addWorkspaceQuestion` creates (`created: true`), returns the existing row for the same text in another case (`created: false`, same id), revives an archived row (`revived: true`, event `revived`), accepts `origin 'import'` with `status 'archived'`, and refuses past 100 unarchived (`409 question_limit`) or 30 topics (`409 topic_limit`). | unit; DB group `add` |
-| F08-AC-04 | `projectQuestionPatch` reproduces OpenSEO's rules: new wording archives the old question, adds or revives the new one and sets `replaced_by`; same text moves/pauses in place; re-adding archived text revives the same id; a new duplicate is skipped; an edit into another active text → `question_duplicate`; the same id twice → `duplicate_edit`; unknown id → `question_unknown`; a case/space-only edit changes nothing; 100/30 caps and reuse of archived capacity. | unit `src/lib/questions/applyQuestionPatch.test.ts` (port of `aiVisibilityConfiguration.test.ts:45-145`) |
+| F08-AC-04 | `projectQuestionPatch` reproduces OpenSEO's rules: new wording archives the old question, adds or revives the new one and sets `replaced_by`; same text moves/pauses in place; re-adding archived text revives the same id; a new duplicate is skipped; an edit into another active text → `question_duplicate`; the same id twice → `duplicate_edit`; unknown id → `question_unknown`; a case/space-only edit changes nothing; 100/30 caps and reuse of archived capacity. | unit `src/server/questions/applyQuestionPatch.test.ts` (port of `aiVisibilityConfiguration.test.ts:45-145`) |
 | F08-AC-05 | A save with a stale `expectedRevision` → `409 revision_conflict` and nothing written; of two concurrent saves with the same revision exactly one succeeds. | DB group `revision`; route test |
-| F08-AC-06 | Approve builds the panel from **active** questions only (topic order, then creation), each prompt carrying `question_id` (= its `id`), `cohort: "core"`, its workspace origin, and `purpose: "diagnostic"` when branded; context from settings; appends `approved` version n+1 of `panel/default`. Refusals: no persona → `400 persona_required`; no active non-branded question → `409 nothing_to_approve`; unexplained near duplicates → `409 near_duplicates` with pairs; stale revision → `409 revision_conflict`. | unit `src/lib/questions/panel.test.ts`; route; DB group `approve` |
-| F08-AC-07 | Scans are unchanged: no approved panel → `409 panel_not_approved`; `scan_jobs.panel_snapshot` is the approved artifact (prompts with `question_id`); editing the working set after approval does not change the next scan's snapshot until approved again. | DB group `scan-snapshot`; existing `src/lib/customerRoutes.test.mjs` |
-| F08-AC-08 | A legacy `POST /api/customer/repairs/panel` with `state: "approved"` syncs the working set (create/revive active, archive the rest) and stores prompts carrying `question_id`; `state: "draft"` never touches `workspace_questions`. | route `src/lib/questions/legacyPanelSync.route.test.mjs`; DB group `legacy-sync` |
+| F08-AC-06 | Approve builds the panel from **active** questions only (topic order, then creation), each prompt carrying `question_id` (= its `id`), `cohort: "core"`, its workspace origin, and `purpose: "diagnostic"` when branded; context from settings; appends `approved` version n+1 of `panel/default`. Refusals: no persona → `400 persona_required`; no active non-branded question → `409 nothing_to_approve`; unexplained near duplicates → `409 near_duplicates` with pairs; stale revision → `409 revision_conflict`. | unit `src/server/questions/panel.test.ts`; route; DB group `approve` |
+| F08-AC-07 | Scans are unchanged: no approved panel → `409 panel_not_approved`; `scan_jobs.panel_snapshot` is the approved artifact (prompts with `question_id`); editing the working set after approval does not change the next scan's snapshot until approved again. | DB group `scan-snapshot`; existing `src/server/customerRoutes.test.mjs` |
+| F08-AC-08 | A legacy `POST /api/customer/repairs/panel` with `state: "approved"` syncs the working set (create/revive active, archive the rest) and stores prompts carrying `question_id`; `state: "draft"` never touches `workspace_questions`. | route `src/server/questions/legacyPanelSync.route.test.mjs`; DB group `legacy-sync` |
 | F08-AC-09 | Backfill: every distinct prompt text across all `panel/default` versions becomes one question (`origin 'import'`); texts of the head version (draft or approved) are `active`, the rest `archived`; persona, country and language are copied; a second call changes nothing; the first `GET /api/customer/questions` runs it once. | DB group `backfill`; route |
-| F08-AC-10 | `GET /api/customer/questions` returns working set, settings, revision, approved version, diff (`added`, `removed`, `contextChanged`, `dirty`), near-duplicate pairs, limits and setup status. | route `src/lib/questions/questions.route.test.mjs` |
-| F08-AC-11 | Priced action `questions.setup.run` requires approval; its quote has site-read lines only when the overview is missing and competitor lines only when F07 has no competitors; blocked `setup_running` and `question_limit`. | unit `src/lib/pricing/actions/questions.test.ts` |
-| F08-AC-12 | Setup is missing-fields-only: with overview and competitors saved it makes no site read, SERP, competitor read or verify call; with neither it reads the site, makes 1–2 SERP calls, reads ≤ 5 competitor sites (≤ 2 pages each) and verifies. | unit `src/lib/questions/setup/research.test.ts` (fixtures) |
+| F08-AC-10 | `GET /api/customer/questions` returns working set, settings, revision, approved version, diff (`added`, `removed`, `contextChanged`, `dirty`), near-duplicate pairs, limits and setup status. | route `src/server/questions/questions.route.test.mjs` |
+| F08-AC-11 | Priced action `questions.setup.run` requires approval; its quote has site-read lines only when the overview is missing and competitor lines only when F07 has no competitors; blocked `setup_running` and `question_limit`. | unit `src/shared/pricing/actions/questions.test.ts` |
+| F08-AC-12 | Setup is missing-fields-only: with overview and competitors saved it makes no site read, SERP, competitor read or verify call; with neither it reads the site, makes 1–2 SERP calls, reads ≤ 5 competitor sites (≤ 2 pages each) and verifies. | unit `src/server/questions/setup/research.test.ts` (fixtures) |
 | F08-AC-13 | Every proposed competitor's `sourceUrl` is a page read in this run, on the competitor's own domain, never the workspace's domain; unverifiable ones are dropped with warning `competitor_unverified`; an outage on every SERP query yields no competitors and warning `search_unavailable`. | unit `research.test.ts` |
-| F08-AC-14 | Every paid setup step is `billed: true` with `retries: 0`; every SERP, Firecrawl, PAA and LLM call goes through `metered()` (feature `questions.setup`, `jobId`); before each paid step the summed estimates are checked against the approved maximum and the step is skipped with warning `budget_reached` when it would exceed it. | unit `research.test.ts`; static test `src/lib/questions/setup/billedSteps.test.ts` |
+| F08-AC-14 | Every paid setup step is `billed: true` with `retries: 0`; every SERP, Firecrawl, PAA and LLM call goes through `metered()` (feature `questions.setup`, `jobId`); before each paid step the summed estimates are checked against the approved maximum and the step is skipped with warning `budget_reached` when it would exceed it. | unit `research.test.ts`; static test `src/server/questions/setup/billedSteps.test.ts` |
 | F08-AC-15 | No overview and no readable page → job fails `website_unreadable`; the UI shows "What you sell, who buys it, and where"; saving it writes F07 `business_overview` and a restarted setup skips the site read. | unit; browser B3 |
-| F08-AC-16 | Candidates: 5 × 5 research questions (`ai_setup`) + ≤ 20 promptGen questions (`promptgen`, industry-pack fallbacks excluded) are merged, de-duplicated by normalised text and near-duplicate key, control prompts removed, branded flagged; default selection is the first 3 topics (15) plus eliciting promptGen questions up to 30, bounded by the room left; existing questions are marked. | unit `src/lib/questions/setup/candidates.test.ts` |
+| F08-AC-16 | Candidates: 5 × 5 research questions (`ai_setup`) + ≤ 20 promptGen questions (`promptgen`, industry-pack fallbacks excluded) are merged, de-duplicated by normalised text and near-duplicate key, control prompts removed, branded flagged; default selection is the first 3 topics (15) plus eliciting promptGen questions up to 30, bounded by the room left; existing questions are marked. | unit `src/server/questions/setup/candidates.test.ts` |
 | F08-AC-17 | Setup save writes the overview (insert-only) and competitors (only when F07 has none; own domain refused; `source 'setup_research'`, `source_url`) as `user`, adds the selected questions, saves persona, market and research keywords, and with `approve: true` approves the panel; a second save of the same job → `409 setup_already_saved`. | route; DB group `setup-save` |
 | F08-AC-18 | Setup and question research append F07 research-log entries (`questions.setup` keyed by website host; `questions.research` keyed by keyword); a research response includes `recent` when the same keyword was researched within 90 days. | unit `promptResearch.test.ts`, `research.test.ts` |
 | F08-AC-19 | Generate ports OpenSEO's rules (topic and question limits, exclusions case-insensitive, re-read after generation, slice to room, `no_new_questions`), is metered under `questions.generate`, and a repeated `requestId` → `409 duplicate_paid_call`. | unit `generate.test.ts`; route |
@@ -105,7 +105,7 @@ AI drafts and the customer curates; the set is then fixed. Setup reads the websi
 
 **Out of scope:**
 - **Stable question set (Mixed, deferred):** scans keep running only approved, whole-panel versions with approval before any scan. F08 adds per-question identity under that model; it does not let scans use unapproved questions.
-- **Trend comparability (Mixed, deferred):** no change to `src/lib/analytics/**`, `scanHeadline.js`, `metricContract.js` or any delta rule. Each approval stays a panel-version boundary as today (F08-AC-25).
+- **Trend comparability (Mixed, deferred):** no change to `src/shared/analytics/**`, `scanHeadline.js`, `metricContract.js` or any delta rule. Each approval stays a panel-version boundary as today (F08-AC-25).
 - **Competitors (tracking side, Mixed, deferred):** reviewed competitors go to F07 only; scans still extract competitors from answers (F07 §5).
 - **Locked core + rolling questions** (`docs/ideas/2026-10-20-locked-core-rolling-questions.md`): not implemented. The model is ready for it (§6.1 "Forward compatibility").
 - Running scans, schedules and prices (F09, F10); per-question history pages (F12); Prompt Explorer (F11); `brand_prompts` and the free scan.
@@ -122,7 +122,7 @@ CREATE OR REPLACE FUNCTION public.normalize_question_text(p text) RETURNS text
 LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT SET search_path = pg_catalog AS $$
   SELECT lower(btrim(regexp_replace(p, '\s+', ' ', 'g')))
 $$;
-COMMENT ON FUNCTION public.normalize_question_text(text) IS 'Case-insensitive question identity. Mirrors normalizeQuestionText() in src/lib/questions/workspaceQuestions.ts.';
+COMMENT ON FUNCTION public.normalize_question_text(text) IS 'Case-insensitive question identity. Mirrors normalizeQuestionText() in src/server/questions/workspaceQuestions.ts.';
 
 CREATE TABLE IF NOT EXISTS public.workspace_question_settings (
   brand_key text PRIMARY KEY REFERENCES public.customer_brands(brand_key) ON DELETE CASCADE,
@@ -506,9 +506,9 @@ NOTIFY pgrst, 'reload schema';
 
 ### 6.2 Server modules
 
-All `src/lib/**` modules use relative imports with explicit extensions; PORT/COPY files carry the licence header.
+All `src/server/**` and `src/shared/**` modules use relative imports with explicit extensions; PORT/COPY files carry the licence header.
 
-#### 6.2.1 `src/lib/questions/workspaceQuestions.ts` (shared helpers, conventions §5.3)
+#### 6.2.1 `src/server/questions/workspaceQuestions.ts` (shared helpers, conventions §5.3)
 
 ```ts
 export const QUESTION_ORIGINS = ["ai_setup","ai_generate","prompt_research","promptgen","manual","import"] as const;
@@ -541,7 +541,7 @@ export async function ensureBackfilled(admin: SupabaseClient, brandKey: string):
 - F11 calls `addWorkspaceQuestion(admin, { brandKey, text: run.prompt, origin: "manual", createdBy: userId, sourceRef: { kind: "explore_run", id: run.id } })`. **Decision:** no `explore` origin; the customer typed the question, so it is `manual` and `source_ref` records where it came from.
 - F12's archived import inserts directly with `origin 'import'`, `status 'archived'`, `topic 'General'`; the table accepts it (no NOT NULL without default besides text/origin/brand).
 
-#### 6.2.2 `src/lib/questions/applyQuestionPatch.ts` (PORT of `aiVisibilityConfiguration.ts:99-231`)
+#### 6.2.2 `src/server/questions/applyQuestionPatch.ts` (PORT of `aiVisibilityConfiguration.ts:99-231`)
 
 ```ts
 export const questionPatchSchema = z.strictObject({
@@ -572,7 +572,7 @@ Rules (OpenSEO `applyPrompts`, `:148-231`, on normalised text), applied to an in
 7. `archiveIds` → status `archived` (`archived` event); unknown id → `question_unknown`. `reviveIds` → status `active` (`revived`). `setTopic` → topic change. `duplicateReasons` → set or clear `duplicate_reason`.
 8. After all ops: unarchived > 100 and grew → `AppError(409,"question_limit",…)`; distinct topics (case-insensitive) > 30 and grew → `AppError(409,"topic_limit",…)` (SQL re-checks).
 
-#### 6.2.3 `src/lib/questions/panel.ts` — panel build, diff and approval
+#### 6.2.3 `src/server/questions/panel.ts` — panel build, diff and approval
 
 ```ts
 export const PANEL_ORIGIN_BY_QUESTION_ORIGIN: Record<QuestionOrigin, string> = { ai_setup: "generated", ai_generate: "generated",
@@ -593,20 +593,20 @@ export async function approveQuestionPanel(admin: SupabaseClient, ws: Workspace,
 - Order: active questions sorted by `topic` (locale compare, `General` last) then `created_at`, then `id`.
 - `nearDuplicatePairs` runs `validatePanel(buildPanelInput(...), { brandAliases })` in a try/catch and maps `near_duplicates` (left/right are question ids because `id` is set) excluding pairs whose right question has `duplicate_reason` (validatePanel's own rule).
 - `approveQuestionPanel`: (1) settings revision ≠ `expectedRevision` → `revision_conflict`; (2) read active questions and settings; (3) `persona` empty → `AppError(400,"persona_required","Describe who asks these questions before approving.")`; (4) no active non-branded → `AppError(409,"nothing_to_approve","Add at least one question that does not name your brand.")`; (5) `validatePanel(input, { brandAliases })` (throws → `AppError(400,"panel_invalid", err.message)`); (6) unexplained `near_duplicates` → `AppError(409,"near_duplicates","Some questions look alike. Archive one of each pair or say why both are needed.", { details: { pairs } })`; (7) re-read the revision; changed → `revision_conflict`; (8) `repairWorkflowStore(admin).append({ brand, kind: "panel", key: "default", expectedVersion: head?.version ?? 0, state: "approved", payload: { ...validated, reviewer: user.id, reviewed_at: now, reason: null }, actor: user.id })`; an `artifact revision conflict` → `AppError(409,"panel_conflict","The question panel changed. Reload and approve again.")`; (9) one `approved` event per included question via `save_workspace_questions` with no rows (bumps revision).
-- `src/lib/repairs/workflow.js` changes (additive): export `matchesBrandAlias(text, aliases)` (extracted from `:151-156`, used by `validatePanel` itself) and accept origin `"search_questions"` (conventional search data, no `evidence_ref`). No other R14 change.
+- `src/server/repairs/workflow.js` changes (additive): export `matchesBrandAlias(text, aliases)` (extracted from `:151-156`, used by `validatePanel` itself) and accept origin `"search_questions"` (conventional search data, no `evidence_ref`). No other R14 change.
 
 #### 6.2.4 Legacy route sync — `src/app/api/customer/repairs/[kind]/route.js`
 
 In the `kind === "panel"` branch, after `validatePanel` and the persona/near-duplicate checks and only when `state === "approved"`, the route calls `append_approved_panel_with_questions` once with `canonicalJson(payload)` and the existing brand, key, `expectedVersion`, and actor. It does not call the backfill, sync, and append RPCs separately. The service-only function in 076 runs the lazy `backfill_workspace_questions`, then `sync_panel_questions`, rewrites each prompt's `id` and `question_id` from the returned IDs in prompt order, calculates the canonical artifact hash, and calls the existing `append_repair_artifact` in the same PostgreSQL transaction. An `artifact revision conflict` propagates from append; the failed RPC rolls back imports, question status/settings changes, events, the backfill marker, and revision bumps. The append function's locked expected-version check is authoritative under concurrent approvals; there is no application-side pre-check race. Drafts and retirements continue through the existing append path. Request and response shapes remain unchanged.
 
-#### 6.2.5 `src/lib/questions/state.ts` — `GET` payload
+#### 6.2.5 `src/server/questions/state.ts` — `GET` payload
 
 ```ts
 export async function getQuestionsState(admin: SupabaseClient, ws: Workspace): Promise<QuestionsState>; // §6.5 shape
 ```
 Calls `ensureBackfilled`, then reads questions, settings, the panel head (`repairWorkflowStore.list(brandKey,"panel")` → `default`, latest `approved` by version via `repair_artifacts`), setup status (`settings.setup_job_id` → F01 `getJobStatus`; `saved` when `setup_saved_job_id = setup_job_id`), `diffAgainstApproved`, `nearDuplicatePairs`.
 
-#### 6.2.6 Setup research — `src/lib/questions/setup/`
+#### 6.2.6 Setup research — `src/server/questions/setup/`
 
 | File | Mode | Exports |
 |---|---|---|
@@ -622,7 +622,7 @@ Calls `ensureBackfilled`, then reads questions, settings, the panel head (`repai
 
 Input: research topics (5 × 5), promptGen items, existing questions, aliases, `CONTROL_PROMPTS`. Steps: canonicalise; drop texts whose normalised form equals a control prompt; drop duplicates by normalised text (research first); drop near-duplicates by `mergeKey` (§6.2.9) keeping the earlier; mark `branded`; mark `eliciting = isEliciting(text)`; mark `existing = { questionId, status }` for texts already in the workspace; ids `c1…cN`. Topic for promptGen items: a research topic with the same normalised name, else the item's own topic, else "General"; total distinct topics capped at 30 by folding extras into "General". Default `selected`: every question of the first three research topics, then eliciting promptGen questions in order, until 30 selected or `100 − unarchived` reached; existing active/paused ones are never selected (shown as "Already tracked"); existing archived ones may be selected (they will be revived).
 
-#### 6.2.8 Generate — `src/lib/questions/generate.ts` (PORT `aiPromptSuggestions.ts:26-146`)
+#### 6.2.8 Generate — `src/server/questions/generate.ts` (PORT `aiPromptSuggestions.ts:26-146`)
 
 ```ts
 export const generateBody = z.strictObject({ brand_key: z.string().min(1).max(200).optional(), requestId: z.uuid(),
@@ -633,7 +633,7 @@ export async function generateQuestions(admin, ws, input, deps?): Promise<{ topi
 
 Topic matching, limits and copy as OpenSEO with "questions" for "prompts": topic limit → `409 topic_limit` "Archive the questions of an unused topic before generating a new one."; question limit → `409 question_limit` "Archive unused questions before generating more."; nothing new → `422 no_new_questions` "No new questions were generated. Try a different topic." The LLM input JSON: `{ workspace: { name, website }, market: { country, language }, sections (F07, each ≤ 3,500 chars), competitors (F07 name/domain), requestedTopic, existingTopics, existingQuestions, excludedQuestions }`. Call: `llmObject({ brandKey, feature: "questions.generate", schema: topic ? suggestedTopicSchema.extend({ name: z.string().trim().min(1).max(120) }) : suggestedTopicSchema, system: GENERATE_SYSTEM, prompt, maxUsd: approvedMaxUsd, idempotencyKey: "questions.generate:" + requestId, maxOutputTokens: 2000, timeoutMs: 60000 })`.
 
-#### 6.2.9 Question research — `src/lib/questions/promptResearch.ts` (PORT `aiPromptResearch.ts:38-335`)
+#### 6.2.9 Question research — `src/server/questions/promptResearch.ts` (PORT `aiPromptResearch.ts:38-335`)
 
 ```ts
 export const researchBody = z.strictObject({ brand_key: z.string().min(1).max(200).optional(), requestId: z.uuid(),
@@ -650,7 +650,7 @@ export async function listResearchKeywords(admin, brandKey): Promise<{ keywords:
 - Output rows (`AiResearchedPrompt` port): `{ text, variants, sources: [{ domain, url, title, own }], ownDomainCited, brandMentioned, tracked }`, `brandMentioned = group.some(i => matchesBrandAlias(i.answer, aliases))`, `own = domain === host || domain.endsWith("." + host)` with `host = website_host` without `www.`; `tracked` = an unarchived question has that normalised text. Results capped at 100 groups.
 - When either cache missed, `appendResearch(admin, { kind: "questions.research", researchKey: keyword, summary: \`Question research for "${keyword}": ${n} relevant questions.\`, author: "user", actorUserId })`. The response adds `recent` = `findRecentResearch(...)` from **before** this append (null when none).
 
-#### 6.2.10 Priced actions — `src/lib/pricing/actions/questions.ts` (registered in `src/lib/pricing/actions/index.ts`)
+#### 6.2.10 Priced actions — `src/shared/pricing/actions/questions.ts` (registered in `src/shared/pricing/actions/index.ts`)
 
 | Key | Feature | Input | `requireApproval` | Estimate |
 |---|---|---|---|---|
@@ -658,9 +658,9 @@ export async function listResearchKeywords(admin, brandKey): Promise<{ keywords:
 | `questions.generate.run` | `questions.generate` | `z.strictObject({ topic: z.string().max(100).optional() })` | false | one line "AI drafting" = `estimateLlmUsd(model, 12000, 2000)` |
 | `questions.research.run` | `questions.research` | `z.strictObject({ keyword: z.string().min(1).max(100) })` | false | "Question dataset search" = `dataforseoPricing.aiSearch.mentionsSearch({ limit: 100 })` (0.1 + 100 × 0.001); "Relevance check" = `estimateLlmUsd(model, 40000, 4000)`. Warning `cache_note` "Searching the same keyword again within 24 hours is free." |
 
-`model` = F01's resolved helper model. `src/lib/pricing/firecrawl.ts` (new provider estimator file): `export const FIRECRAWL_SCRAPE_USD_DEFAULT = 0.005; export function firecrawlScrapeUsd(env = process.env): number` (env `FIRECRAWL_SCRAPE_USD` when a finite number > 0, else the default).
+`model` = F01's resolved helper model. `src/shared/pricing/firecrawl.ts` (new provider estimator file): `export const FIRECRAWL_SCRAPE_USD_DEFAULT = 0.005; export function firecrawlScrapeUsd(env = process.env): number` (env `FIRECRAWL_SCRAPE_USD` when a finite number > 0, else the default).
 
-#### 6.2.11 Tools for F22 — `src/lib/questions/tools.ts`
+#### 6.2.11 Tools for F22 — `src/server/questions/tools.ts`
 
 `list_questions` (input `z.strictObject({ status: z.enum(["active","paused","archived","all"]).default("active") })`; output `z.looseObject({ questions: [...], approvedVersion, dirty })`) and `add_questions` (input `z.strictObject({ questions: z.array(z.strictObject({ text: z.string().min(8).max(1500), topic: z.string().max(120).optional() })).min(1).max(20) })`; adds through `addWorkspaceQuestion` with `origin "ai_generate"`, never approves; output `{ added, revived, skipped }`). Same definition shape as F07 §6.2.8; F22 registers them.
 
@@ -692,7 +692,7 @@ export async function listResearchKeywords(admin, brandKey): Promise<{ keywords:
 
 **`questions.retention`**: periodic every 86,400 s → `enqueueSystemJob("questions.retention", {}, { dedupeKey: "questions.retention:" + YYYY-MM-DD })`; step `prune` (`DB_STEP`) `prune_workspace_question_events(now − 395 days, 5000)`.
 
-Both registered in `src/lib/questions/jobs.ts`, imported from `src/lib/jobs/kinds.ts`.
+Both registered in `src/server/questions/jobs.ts`, imported from `src/server/jobs/kinds.ts`.
 
 ### 6.4 Provider calls and cost
 
@@ -717,7 +717,7 @@ No call in F08 asks an answer engine a question for a workspace: LLM mentions is
 
 ### 6.5 API routes
 
-All routes: `requireWorkspace(request, { brandKey })`; `isFeatureEnabled("question_curation", brandKey)` false → `AppError(404,"feature_unavailable","This page is not available for your workspace yet.")`; setup and generate also need `question_setup`, research needs `prompt_research` (same 404); `toErrorResponse`; `Cache-Control: no-store`; members and owners. Contracts: `src/lib/questions/questions.contract.ts`.
+All routes: `requireWorkspace(request, { brandKey })`; `isFeatureEnabled("question_curation", brandKey)` false → `AppError(404,"feature_unavailable","This page is not available for your workspace yet.")`; setup and generate also need `question_setup`, research needs `prompt_research` (same 404); `toErrorResponse`; `Cache-Control: no-store`; members and owners. Contracts: `src/server/questions/questions.contract.ts`.
 
 **`GET /api/customer/questions?brand_key=`** (`src/app/api/customer/questions/route.ts`) → 200:
 
@@ -813,7 +813,7 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 **Where:** `/portal/measurement` (sidebar "Questions", conventions §12). `src/app/portal/measurement/page.jsx` (fix-branch version) renders `<QuestionsWorkspace />` **in place of the "Question panel" card** when `features.question_curation === true` (from F04 `/api/customer/features` via `useWorkspace()`); otherwise the card is unchanged. All other cards on the page are unchanged. `QuestionsWorkspace` is added to the render-harness module maps as `autoStub` (F04 rule 2) so existing page tests keep passing.
 
 **Components** (`src/components/portal/questions/`, TSX, F04 primitives `Card`, `Button`, `Badge`, `Alert`, `Dialog` (`fullScreenOnMobile`), `Field`, `Input`, `Textarea`, `Select`, `Checkbox`, `Tabs`, `Skeleton`, `EmptyState`, `QueryState`, `InlineConfirm`, `SafeExternalLink`; F06 `DataTable`, `makeSelectionColumn`; F09 `CostReviewDialog`, `usePriceQuote`, `MonthlyProjection` not used):
-`QuestionsWorkspace.tsx`, `setup/QuestionSetupGate.tsx` (PORT `AiResearchSetupGate.tsx`), `setup/SetupProgress.tsx` (PATTERN `WebsiteResearchProgress.tsx`, server progress instead of a timer), `setup/SetupReview.tsx` (PORT `WebsiteSetupReview.tsx` + candidate list), `setup/CompetitorRow.tsx` (PORT `WebsiteCompetitorRow.tsx`), `QuestionsToolbar.tsx`, `ApprovalBanner.tsx`, `QuestionsTable.tsx`, `QuestionRow.tsx` (actions cell), `AddQuestionsDialog.tsx` (PORT `TrackerEditor.tsx` prompts mode), `QuestionFields.tsx` (PORT `TrackerPromptFields.tsx`), `TopicField.tsx` (PORT `TopicField.tsx`), `EditQuestionDialog.tsx`, `NearDuplicates.tsx`, `PanelContextCard.tsx`, `ApproveDialog.tsx`, `research/QuestionResearch.tsx`, `research/QuestionResearchTable.tsx` (PORT `PromptResearchTable.tsx`), `history/QuestionHistoryLink.tsx` (F12 §6.6 spec: ghost small button, icon `History`, text "History", `aria-label="Question history"`, href `/portal/questions/{id}` plus `?from_scan=` when given), `history/historyAvailability.ts` (`export const QUESTION_HISTORY_AVAILABLE = false;` F12 flips it to `true` in its page PR), `hooks/useQuestions.ts`, `hooks/useQuestionMutations.ts`, `hooks/useSetupJob.ts` (F05 `useJobStatus`). Keys added to `src/lib/query/keys.ts`: `questions: (b) => ["questions", b]`, `questionResearchKeywords: (b) => ["questionResearchKeywords", b]`.
+`QuestionsWorkspace.tsx`, `setup/QuestionSetupGate.tsx` (PORT `AiResearchSetupGate.tsx`), `setup/SetupProgress.tsx` (PATTERN `WebsiteResearchProgress.tsx`, server progress instead of a timer), `setup/SetupReview.tsx` (PORT `WebsiteSetupReview.tsx` + candidate list), `setup/CompetitorRow.tsx` (PORT `WebsiteCompetitorRow.tsx`), `QuestionsToolbar.tsx`, `ApprovalBanner.tsx`, `QuestionsTable.tsx`, `QuestionRow.tsx` (actions cell), `AddQuestionsDialog.tsx` (PORT `TrackerEditor.tsx` prompts mode), `QuestionFields.tsx` (PORT `TrackerPromptFields.tsx`), `TopicField.tsx` (PORT `TopicField.tsx`), `EditQuestionDialog.tsx`, `NearDuplicates.tsx`, `PanelContextCard.tsx`, `ApproveDialog.tsx`, `research/QuestionResearch.tsx`, `research/QuestionResearchTable.tsx` (PORT `PromptResearchTable.tsx`), `history/QuestionHistoryLink.tsx` (F12 §6.6 spec: ghost small button, icon `History`, text "History", `aria-label="Question history"`, href `/portal/questions/{id}` plus `?from_scan=` when given), `history/historyAvailability.ts` (`export const QUESTION_HISTORY_AVAILABLE = false;` F12 flips it to `true` in its page PR), `hooks/useQuestions.ts`, `hooks/useQuestionMutations.ts`, `hooks/useSetupJob.ts` (F05 `useJobStatus`). Keys added to `src/shared/query/keys.ts`: `questions: (b) => ["questions", b]`, `questionResearchKeywords: (b) => ["questionResearchKeywords", b]`.
 
 **State machine of `QuestionsWorkspace`:**
 1. Loading → `Skeleton` card (title "Questions", 3 rows).
@@ -861,29 +861,29 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 
 **Phone (< 640 px):** dialogs full-screen; the table becomes stacked rows (question, then topic/badges, then actions); the toolbar wraps; no horizontal page scroll.
 
-**Navigation and flags:** the "Questions" item already exists (F04). `src/lib/features/clientFeatures.ts` appends `"question_curation"`, `"question_setup"`, `"prompt_research"`. The Getting started step from the fix branch ("Review and approve your question panel") keeps its copy and link.
+**Navigation and flags:** the "Questions" item already exists (F04). `src/server/features/clientFeatures.ts` appends `"question_curation"`, `"question_setup"`, `"prompt_research"`. The Getting started step from the fix branch ("Review and approve your question panel") keeps its copy and link.
 
 ### 6.7 Permissions, privacy, observability
 
 - Members and owners can curate, run setup and approve (today both can approve panels and run scans). Every write records the actor; approvals keep R14's reviewer.
 - Logs: `[questions] setup step skipped {jobId, step, reason}`, `[questions] competitor dropped {jobId, reason}` (no text), `[questions] legacy panel sync {brandKey, created, archived}`. Never log question text, overview, page text, SERP items or LLM output.
-- PostHog (F26 names, registered when `src/lib/telemetry/events.ts` exists): `questions:setup_started {}`, `questions:setup_saved { questions, competitors, approved }`, `questions:approved { version, count }`, `questions:added { origin, count }`, `questions:generated { count }`, `questions:researched { results, cached }`.
+- PostHog (F26 names, registered when `src/shared/telemetry/events.ts` exists): `questions:setup_started {}`, `questions:setup_saved { questions, competitors, approved }`, `questions:approved { version, count }`, `questions:added { origin, count }`, `questions:generated { count }`, `questions:researched { results, cached }`.
 - Page text and SERP results live only in job step outputs (F01 retention 30 days) and the provider cache; nothing is stored in Storage.
 
 ## 7. Code reuse map
 
 | OpenSEO source | Perceev target | Mode | Adaptation notes |
 |---|---|---|---|
-| `openseo:src/server/features/projects/services/websiteResearch.ts:66-405` | `src/lib/questions/setup/research.ts`, `prompts.ts` | PORT | Tool-calling agent → durable job steps (draft, SERP, pick, read, verify) because billed steps must be memoised and single-attempt; no SERP retries; unverifiable competitors dropped with a warning instead of failing the paid run; duplicate drafts dropped. |
+| `openseo:src/server/features/projects/services/websiteResearch.ts:66-405` | `src/server/questions/setup/research.ts`, `prompts.ts` | PORT | Tool-calling agent → durable job steps (draft, SERP, pick, read, verify) because billed steps must be memoised and single-attempt; no SERP retries; unverifiable competitors dropped with a warning instead of failing the paid run; duplicate drafts dropped. |
 | `openseo:src/server/features/ai-visibility/services/aiResearchKeywords.ts:28-191` | `research.ts`, `state.ts` (`setup.status`) | PORT | Workflow instance per project → F01 job with `singleActiveKey`; statuses kept. |
 | `openseo:src/server/features/ai-visibility/services/websiteTrackingSetup.ts:11-74` | `candidates.ts`, `save.ts` | PORT | First three topics selected by default (plus promptGen up to 30); baseline via F09 dialog instead of an automatic run. |
-| `openseo:src/server/features/projects/services/ProjectWebsiteService.ts:56-97`, `repositories/ProjectWebsiteRepository.ts:17-86` | `src/lib/questions/setup/save.ts` + F07 insert-only ops | PORT | Competitors authoritative once saved; own domain refused; writes to F07. |
-| `openseo:src/types/schemas/projectWebsite.ts:1-58`, `aiPromptSuggestions.ts:1-34` | `src/lib/questions/setup/schemas.ts`, `generate.ts` | PORT | zod v4; persona and topic/candidate fields added. |
-| `openseo:src/server/lib/scrape.ts:13-261` | `src/lib/questions/setup/readSite.ts` | PORT | `fetch` → F01 `safeFetch`; Cloudflare "Context" renderer → Firecrawl `scrapeSite` under `metered`. |
-| `openseo:src/server/features/ai-visibility/services/aiPromptSuggestions.ts:26-146` | `src/lib/questions/generate.ts` | PORT | Credits check → F09 price + F01 spend; F07 sections and competitors as context. |
-| `openseo:src/server/features/ai-visibility/services/aiPromptResearch.ts:38-335` (+ `aiPromptResearch.test.ts:74-200`) | `src/lib/questions/promptResearch.ts` (+ `.test.ts`) | PORT | R2 cache → F01 `cached` (global dataset, workspace relevance); paid-plan gate → flag + spend control; brand match via our aliases. |
+| `openseo:src/server/features/projects/services/ProjectWebsiteService.ts:56-97`, `repositories/ProjectWebsiteRepository.ts:17-86` | `src/server/questions/setup/save.ts` + F07 insert-only ops | PORT | Competitors authoritative once saved; own domain refused; writes to F07. |
+| `openseo:src/types/schemas/projectWebsite.ts:1-58`, `aiPromptSuggestions.ts:1-34` | `src/server/questions/setup/schemas.ts`, `generate.ts` | PORT | zod v4; persona and topic/candidate fields added. |
+| `openseo:src/server/lib/scrape.ts:13-261` | `src/server/questions/setup/readSite.ts` | PORT | `fetch` → F01 `safeFetch`; Cloudflare "Context" renderer → Firecrawl `scrapeSite` under `metered`. |
+| `openseo:src/server/features/ai-visibility/services/aiPromptSuggestions.ts:26-146` | `src/server/questions/generate.ts` | PORT | Credits check → F09 price + F01 spend; F07 sections and competitors as context. |
+| `openseo:src/server/features/ai-visibility/services/aiPromptResearch.ts:38-335` (+ `aiPromptResearch.test.ts:74-200`) | `src/server/questions/promptResearch.ts` (+ `.test.ts`) | PORT | R2 cache → F01 `cached` (global dataset, workspace relevance); paid-plan gate → flag + spend control; brand match via our aliases. |
 | `openseo:src/shared/ai-prompt-suggestions.ts:1-3` | `canonicalQuestionText`/`normalizeQuestionText` | PORT | Also mirrored in SQL. |
-| `openseo:src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts:17-18, 40-42, 99-231` (+ `.test.ts:26-145`) | `src/lib/questions/applyQuestionPatch.ts` (+ `.test.ts`) | PORT | Normalised (case-insensitive) identity; `replaced_by`; events; topic and pause moves; caps re-checked in SQL. |
+| `openseo:src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts:17-18, 40-42, 99-231` (+ `.test.ts:26-145`) | `src/server/questions/applyQuestionPatch.ts` (+ `.test.ts`) | PORT | Normalised (case-insensitive) identity; `replaced_by`; events; topic and pause moves; caps re-checked in SQL. |
 | `openseo:src/client/features/ai-visibility/AiResearchSetupGate.tsx:29-231` | `setup/QuestionSetupGate.tsx` | PORT | Credits UI → `CostReviewDialog` and `SpendRefusedError`; copy adapted. |
 | `openseo:src/client/features/projects/WebsiteResearchProgress.tsx` | `setup/SetupProgress.tsx` | PATTERN | Real job progress instead of a timer. |
 | `openseo:src/client/features/projects/WebsiteSetupReview.tsx`, `WebsiteCompetitorRow.tsx` | `setup/SetupReview.tsx`, `setup/CompetitorRow.tsx` | PORT | Adds overview, audience, market and question selection on the same screen. |
@@ -897,14 +897,14 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 
 - [x] **P1.T1 Migrations and paperwork**
   - [x] **P1.T1.S1** *Files:* `supabase/migrations/075_f08_workspace_questions.sql`, `supabase/migrations/076_f08_question_backfill.sql`. *Do:* §6.1. *Verify:* CI `customer-database` → green.
-  - [x] **P1.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`, `.github/workflows/ci.yml` (add `node scripts/qa/check-f08-db.mjs` after `check-repair-workflows.mjs`), `src/lib/migrationsRunner.test.mjs` (expected-object fixture), `src/lib/migrationsLedger.test.mjs` (inline generated columns), `src/lib/liveWriteGuard.js` and `src/lib/liveWriteGuard.test.mjs` (classify F08 tables). *Verify:* `node --test src/lib/migrationsRunner.test.mjs` → pass.
-  - [x] **P1.T1.S3** *Files:* `README.md` (rows `075_f08_workspace_questions` "Stable question identity under reviewed panels: questions, settings, events, normaliser." and `076_f08_question_backfill` "One-time import of existing panel versions into workspace questions; atomic approved legacy panel sync and append."), `docs/OPERATOR_LEDGER.md` § C (both names, "apply before deploying F08; run the backfill only through the app (lazy)"), `docs/PROD_MIGRATIONS.md` (one bullet each). *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+  - [x] **P1.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`, `.github/workflows/ci.yml` (add `node scripts/qa/check-f08-db.mjs` after `check-repair-workflows.mjs`), `src/server/migrationsRunner.test.mjs` (expected-object fixture), `src/server/migrationsLedger.test.mjs` (inline generated columns), `src/server/liveWriteGuard.js` and `src/server/liveWriteGuard.test.mjs` (classify F08 tables). *Verify:* `node --test src/server/migrationsRunner.test.mjs` → pass.
+  - [x] **P1.T1.S3** *Files:* `README.md` (rows `075_f08_workspace_questions` "Stable question identity under reviewed panels: questions, settings, events, normaliser." and `076_f08_question_backfill` "One-time import of existing panel versions into workspace questions; atomic approved legacy panel sync and append."), `docs/OPERATOR_LEDGER.md` § C (both names, "apply before deploying F08; run the backfill only through the app (lazy)"), `docs/PROD_MIGRATIONS.md` (one bullet each). *Verify:* `node --test src/server/docStatus.test.mjs src/server/migrationsRunner.test.mjs` → pass.
 - [x] **P1.T2 Helpers**
-  - [x] **P1.T2.S1** *Files:* `src/lib/questions/workspaceQuestions.ts`, `workspaceQuestions.test.ts`, `tests/fixtures/f08/normalize-cases.json`. *Do:* §6.2.1; tests: normaliser cases; branded detection with `getBrandAliases("Offcult","https://offcult.in")`; error mapping table with a fake rpc. *Verify:* `node --test src/lib/questions/workspaceQuestions.test.ts` → pass (F08-AC-01 unit).
-  - [x] **P1.T2.S2** *Files:* `src/lib/repairs/workflow.js` (export `matchesBrandAlias`, origin `search_questions`), `src/lib/repairs/r14-workflow-contract.test.mjs` (two new cases: `search_questions` accepted without evidence; `matchesBrandAlias` equals the branded result). *Verify:* `node --test src/lib/repairs/r14-workflow-contract.test.mjs` → pass.
-  - [x] **P1.T2.S3** *Files:* `src/lib/questions/applyQuestionPatch.ts`, `applyQuestionPatch.test.ts`. *Do:* §6.2.2; port `aiVisibilityConfiguration.test.ts:45-145` cases plus case-only edit, `replaced_by`, events, `question_invalid` length. *Verify:* `node --test src/lib/questions/applyQuestionPatch.test.ts` → pass (F08-AC-04).
+  - [x] **P1.T2.S1** *Files:* `src/server/questions/workspaceQuestions.ts`, `workspaceQuestions.test.ts`, `tests/fixtures/f08/normalize-cases.json`. *Do:* §6.2.1; tests: normaliser cases; branded detection with `getBrandAliases("Offcult","https://offcult.in")`; error mapping table with a fake rpc. *Verify:* `node --test src/server/questions/workspaceQuestions.test.ts` → pass (F08-AC-01 unit).
+  - [x] **P1.T2.S2** *Files:* `src/server/repairs/workflow.js` (export `matchesBrandAlias`, origin `search_questions`), `src/server/repairs/r14-workflow-contract.test.mjs` (two new cases: `search_questions` accepted without evidence; `matchesBrandAlias` equals the branded result). *Verify:* `node --test src/server/repairs/r14-workflow-contract.test.mjs` → pass.
+  - [x] **P1.T2.S3** *Files:* `src/server/questions/applyQuestionPatch.ts`, `applyQuestionPatch.test.ts`. *Do:* §6.2.2; port `aiVisibilityConfiguration.test.ts:45-145` cases plus case-only edit, `replaced_by`, events, `question_invalid` length. *Verify:* `node --test src/server/questions/applyQuestionPatch.test.ts` → pass (F08-AC-04).
 - [x] **P1.T3 Legacy sync**
-  - [x] **P1.T3.S1** *Files:* `src/app/api/customer/repairs/[kind]/route.js`, `src/lib/questions/legacyPanelSync.route.test.mjs`, `scripts/qa/check-f08-db.mjs` group `legacy-sync`. *Do:* §6.2.4. Cases: approved post → artifact prompts carry `question_id`; draft post → atomic sync RPC not called; response JSON unchanged; stale expected version → 409 with no backfill/sync/revision changes (route and DB regression). *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/questions/legacyPanelSync.route.test.mjs src/lib/customerRoutes.test.mjs` and DB harness group `legacy-sync` → pass (F08-AC-08 route/DB).
+  - [x] **P1.T3.S1** *Files:* `src/app/api/customer/repairs/[kind]/route.js`, `src/server/questions/legacyPanelSync.route.test.mjs`, `scripts/qa/check-f08-db.mjs` group `legacy-sync`. *Do:* §6.2.4. Cases: approved post → artifact prompts carry `question_id`; draft post → atomic sync RPC not called; response JSON unchanged; stale expected version → 409 with no backfill/sync/revision changes (route and DB regression). *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/server/questions/legacyPanelSync.route.test.mjs src/server/customerRoutes.test.mjs` and DB harness group `legacy-sync` → pass (F08-AC-08 route/DB).
 - [x] **P1.T4 Database harness**
   - [x] **P1.T4.S1** *Files:* `scripts/qa/check-f08-db.mjs` (loopback `_qa` guard). *Do:* groups `normalize` (SQL vs fixture), `schema` (unique, immutable text, enums), `rls`, `add` (create/existing/revive/import archived/caps), `revision` (stale and concurrent saves on two pool clients), `legacy-sync` (atomic approved append/sync and stale expected-version rollback of backfill/sync/revision), `backfill` (3 versions, head draft, persona/context, second call `skipped`), `scan-snapshot` (approved artifact with `question_id` → `enqueue_measurement_window` copies it into `scan_jobs.panel_snapshot`; later working-set edit leaves it unchanged). *Verify:* `node scripts/qa/check-f08-db.mjs` → "ok 8 groups" (F08-AC-01, 02, 03, 05, 07, 08, 09).
 
@@ -914,17 +914,17 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 **Goal:** the working set can be read, edited and approved through APIs.
 
 - [x] **P2.T1 Flags**
-  - [x] **P2.T1.S1** *Files:* `src/lib/features/names.ts` (`question_curation: { spend: [] }`), `.env.example` (`FEATURE_QUESTION_CURATION=`, `FEATURE_QUESTION_CURATION_BRANDS=`). *Verify:* `node --test src/lib/features/*.test.ts` → pass.
+  - [x] **P2.T1.S1** *Files:* `src/server/features/names.ts` (`question_curation: { spend: [] }`), `.env.example` (`FEATURE_QUESTION_CURATION=`, `FEATURE_QUESTION_CURATION_BRANDS=`). *Verify:* `node --test src/server/features/*.test.ts` → pass.
 - [x] **P2.T2 Panel and state**
-  - [x] **P2.T2.S1** *Files:* `src/lib/questions/panel.ts`, `panel.test.ts`. *Do:* §6.2.3; tests: active-only, order, `question_id`/`cohort`/origin mapping, branded → diagnostic, persona/nothing/near-duplicate refusals, `duplicate_reason` clears a pair, diff counts. *Verify:* `node --test src/lib/questions/panel.test.ts` → pass (F08-AC-06 unit).
-  - [x] **P2.T2.S2** *Files:* `src/lib/questions/state.ts`, `state.test.ts`. *Verify:* `node --test src/lib/questions/state.test.ts` → pass.
+  - [x] **P2.T2.S1** *Files:* `src/server/questions/panel.ts`, `panel.test.ts`. *Do:* §6.2.3; tests: active-only, order, `question_id`/`cohort`/origin mapping, branded → diagnostic, persona/nothing/near-duplicate refusals, `duplicate_reason` clears a pair, diff counts. *Verify:* `node --test src/server/questions/panel.test.ts` → pass (F08-AC-06 unit).
+  - [x] **P2.T2.S2** *Files:* `src/server/questions/state.ts`, `state.test.ts`. *Verify:* `node --test src/server/questions/state.test.ts` → pass.
 - [x] **P2.T3 Routes**
-  - [x] **P2.T3.S1** *Files:* `src/app/api/customer/questions/route.ts` (GET, PATCH), `src/app/api/customer/questions/approve/route.ts`, `src/lib/questions/questions.contract.ts`. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [x] **P2.T3.S2** *Files:* `src/lib/questions/questions.route.test.mjs`. *Do:* GET shape (lazy backfill once); PATCH create/edit/archive/revive; `revision_conflict`; approve success and each refusal; flag off → 404. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/questions/questions.route.test.mjs` → pass (F08-AC-06, 10, 21 partial).
+  - [x] **P2.T3.S1** *Files:* `src/app/api/customer/questions/route.ts` (GET, PATCH), `src/app/api/customer/questions/approve/route.ts`, `src/server/questions/questions.contract.ts`. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass.
+  - [x] **P2.T3.S2** *Files:* `src/server/questions/questions.route.test.mjs`. *Do:* GET shape (lazy backfill once); PATCH create/edit/archive/revive; `revision_conflict`; approve success and each refusal; flag off → 404. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/server/questions/questions.route.test.mjs` → pass (F08-AC-06, 10, 21 partial).
   - [x] **P2.T3.S3** *Files:* `scripts/qa/check-f08-db.mjs` group `approve` (F08 approval produces version n+1 of `panel/default` with the same kind/key/state as a legacy approval; artifact `sha256` = `artifactHash(payload)`). *Verify:* `node scripts/qa/check-f08-db.mjs --group approve` → ok (F08-AC-06 DB, F08-AC-25).
 - [x] **P2.T4 Retention and tools**
-  - [x] **P2.T4.S1** *Files:* `src/lib/questions/jobs.ts` (`questions.retention`), `src/lib/jobs/kinds.ts`. *Verify:* `node --test src/lib/jobs/*.test.ts` → pass.
-  - [x] **P2.T4.S2** *Files:* `src/lib/questions/tools.ts`, `tools.test.ts`. *Verify:* `node --test src/lib/questions/tools.test.ts` → pass.
+  - [x] **P2.T4.S1** *Files:* `src/server/questions/jobs.ts` (`questions.retention`), `src/server/jobs/kinds.ts`. *Verify:* `node --test src/server/jobs/*.test.ts` → pass.
+  - [x] **P2.T4.S2** *Files:* `src/server/questions/tools.ts`, `tools.test.ts`. *Verify:* `node --test src/server/questions/tools.test.ts` → pass.
 
 - [x] **Checkpoint:** suite, typecheck, build, DB harness. ACs 06, 10, 25.
 
@@ -932,19 +932,19 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 **Goal:** paid drafting works end to end behind flags and price approval.
 
 - [ ] **P3.T1 Spend features, flags, pricing**
-  - [x] **P3.T1.S1** *Files:* `src/shared/spend-features.ts` (labels `"questions.setup": "Question setup research"`, `"questions.generate": "Question drafting"`, `"questions.research": "Question research"` and the three values in `SPEND_FEATURES`), `src/lib/features/names.ts` (`question_setup: { spend: ["questions.setup","questions.generate"] }`, `prompt_research: { spend: ["questions.research"] }`), `.env.example` (`FEATURE_QUESTION_SETUP=`, `FEATURE_QUESTION_SETUP_BRANDS=`, `FEATURE_PROMPT_RESEARCH=`, `FEATURE_PROMPT_RESEARCH_BRANDS=`, `QUESTION_SETUP_PROMPTGEN=`, `FIRECRAWL_SCRAPE_USD=`). *Verify:* `node --test src/shared/*.test.ts src/lib/features/*.test.ts` → pass.
-  - [x] **P3.T1.S2** *Files:* `src/lib/pricing/firecrawl.ts`, `firecrawl.test.ts`, `src/lib/pricing/actions/questions.ts`, `questions.test.ts`, `src/lib/pricing/actions/index.ts` (one import). *Do:* §6.2.10; tests: quote lines by missing fields; blocked `setup_running`/`question_limit`; env override. *Verify:* `node --test src/lib/pricing/firecrawl.test.ts src/lib/pricing/actions/questions.test.ts` → pass (F08-AC-11).
+  - [x] **P3.T1.S1** *Files:* `src/shared/spend-features.ts` (labels `"questions.setup": "Question setup research"`, `"questions.generate": "Question drafting"`, `"questions.research": "Question research"` and the three values in `SPEND_FEATURES`), `src/server/features/names.ts` (`question_setup: { spend: ["questions.setup","questions.generate"] }`, `prompt_research: { spend: ["questions.research"] }`), `.env.example` (`FEATURE_QUESTION_SETUP=`, `FEATURE_QUESTION_SETUP_BRANDS=`, `FEATURE_PROMPT_RESEARCH=`, `FEATURE_PROMPT_RESEARCH_BRANDS=`, `QUESTION_SETUP_PROMPTGEN=`, `FIRECRAWL_SCRAPE_USD=`). *Verify:* `node --test src/shared/*.test.ts src/server/features/*.test.ts` → pass.
+  - [x] **P3.T1.S2** *Files:* `src/shared/pricing/firecrawl.ts`, `firecrawl.test.ts`, `src/shared/pricing/actions/questions.ts`, `questions.test.ts`, `src/shared/pricing/actions/index.ts` (one import). *Do:* §6.2.10; tests: quote lines by missing fields; blocked `setup_running`/`question_limit`; env override. *Verify:* `node --test src/shared/pricing/firecrawl.test.ts src/shared/pricing/actions/questions.test.ts` → pass (F08-AC-11).
 - [ ] **P3.T2 Site reading and promptGen source**
-  - [x] **P3.T2.S1** *Files:* `src/lib/questions/setup/readSite.ts`, `readSite.test.ts`, `tests/fixtures/f08/site/` (home.html, about.html, sitemap.xml, blocked 403). *Do:* injected `safeFetch`/`scrapeSite`; cases: sitemap discovery, 4,000-char cap, non-HTML skipped, Firecrawl only for failed pages, `fallback_fetch` source → `billed:false` (hold released). *Verify:* `node --test src/lib/questions/setup/readSite.test.ts` → pass.
-  - [x] **P3.T2.S2** *Files:* `src/lib/questions/setup/promptgenSource.ts`, `promptgenSource.test.ts`. *Do:* no second scrape (spy), metered PAA per term, `llmJson` adapter makes one call per invocation, industry fallbacks dropped. *Verify:* `node --test src/lib/questions/setup/promptgenSource.test.ts` → pass.
+  - [x] **P3.T2.S1** *Files:* `src/server/questions/setup/readSite.ts`, `readSite.test.ts`, `tests/fixtures/f08/site/` (home.html, about.html, sitemap.xml, blocked 403). *Do:* injected `safeFetch`/`scrapeSite`; cases: sitemap discovery, 4,000-char cap, non-HTML skipped, Firecrawl only for failed pages, `fallback_fetch` source → `billed:false` (hold released). *Verify:* `node --test src/server/questions/setup/readSite.test.ts` → pass.
+  - [x] **P3.T2.S2** *Files:* `src/server/questions/setup/promptgenSource.ts`, `promptgenSource.test.ts`. *Do:* no second scrape (spy), metered PAA per term, `llmJson` adapter makes one call per invocation, industry fallbacks dropped. *Verify:* `node --test src/server/questions/setup/promptgenSource.test.ts` → pass.
 - [ ] **P3.T3 Setup job**
-  - [x] **P3.T3.S1** *Files:* `src/lib/questions/setup/{schemas,prompts,candidates,research}.ts`, `candidates.test.ts`, `research.test.ts`, fixtures `llm-draft.json`, `llm-pick.json`, `llm-verify.json`, `serp-live.json`, `firecrawl-scrape.json`, `paa.json`, `promptgen-llm.json`. *Do:* §6.2.6–6.2.7, §6.3 with F01's in-memory job store and spend memory store. Cases: missing-fields-only (zero calls when complete); competitor kept/dropped rules; all-SERP-outage; unreadable site; budget guard; duplicates dropped; progress labels; result < 60 KB; research-log entry. *Verify:* `node --test src/lib/questions/setup/candidates.test.ts src/lib/questions/setup/research.test.ts` → pass (F08-AC-12, 13, 15 unit, 16, 18).
-  - [x] **P3.T3.S2** *Files:* `src/lib/questions/setup/billedSteps.test.ts`. *Do:* import `research.ts` with a recording `step.do`; assert every step that calls a metered fake is declared `billed: true, retries: 0`, and no fetcher is called outside `metered`. *Verify:* pass (F08-AC-14).
+  - [x] **P3.T3.S1** *Files:* `src/server/questions/setup/{schemas,prompts,candidates,research}.ts`, `candidates.test.ts`, `research.test.ts`, fixtures `llm-draft.json`, `llm-pick.json`, `llm-verify.json`, `serp-live.json`, `firecrawl-scrape.json`, `paa.json`, `promptgen-llm.json`. *Do:* §6.2.6–6.2.7, §6.3 with F01's in-memory job store and spend memory store. Cases: missing-fields-only (zero calls when complete); competitor kept/dropped rules; all-SERP-outage; unreadable site; budget guard; duplicates dropped; progress labels; result < 60 KB; research-log entry. *Verify:* `node --test src/server/questions/setup/candidates.test.ts src/server/questions/setup/research.test.ts` → pass (F08-AC-12, 13, 15 unit, 16, 18).
+  - [x] **P3.T3.S2** *Files:* `src/server/questions/setup/billedSteps.test.ts`. *Do:* import `research.ts` with a recording `step.do`; assert every step that calls a metered fake is declared `billed: true, retries: 0`, and no fetcher is called outside `metered`. *Verify:* pass (F08-AC-14).
 - [ ] **P3.T4 Routes**
-  - [x] **P3.T4.S1** *Files:* `src/app/api/customer/questions/setup/route.ts`, `setup/save/route.ts`, `src/lib/questions/setup/save.ts`, `save.test.ts`. *Verify:* `node --test src/lib/questions/setup/save.test.ts` → pass; `node scripts/qa/check-f08-db.mjs --group setup-save` → ok (F08-AC-17).
-  - [x] **P3.T4.S2** *Files:* `src/lib/questions/generate.ts`, `generate.test.ts`, `src/app/api/customer/questions/generate/route.ts`, fixture `llm-generate.json`. *Verify:* `node --test src/lib/questions/generate.test.ts` → pass (F08-AC-19).
-  - [x] **P3.T4.S3** *Files:* `src/lib/questions/promptResearch.ts`, `promptResearch.test.ts`, `src/app/api/customer/questions/research/route.ts`, `research/keywords/route.ts`, fixtures `llm-mentions-search.json`, `llm-relevance.json`. *Do:* port `aiPromptResearch.test.ts:116-185` (on-topic filter, merge, flags, no double purchase in cache window). *Verify:* `node --test src/lib/questions/promptResearch.test.ts` → pass (F08-AC-20).
-  - [x] **P3.T4.S4** *Files:* `src/lib/questions/aiSources.route.test.mjs`, `questions.contract.ts`. *Do:* flags off → 404; `approval_required`, `price_changed`, `setup_running`, `setup_already_saved`, `duplicate_paid_call`, spend refusals. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/questions/aiSources.route.test.mjs src/lib/http/routeContract.test.ts` → pass (F08-AC-21).
+  - [x] **P3.T4.S1** *Files:* `src/app/api/customer/questions/setup/route.ts`, `setup/save/route.ts`, `src/server/questions/setup/save.ts`, `save.test.ts`. *Verify:* `node --test src/server/questions/setup/save.test.ts` → pass; `node scripts/qa/check-f08-db.mjs --group setup-save` → ok (F08-AC-17).
+  - [x] **P3.T4.S2** *Files:* `src/server/questions/generate.ts`, `generate.test.ts`, `src/app/api/customer/questions/generate/route.ts`, fixture `llm-generate.json`. *Verify:* `node --test src/server/questions/generate.test.ts` → pass (F08-AC-19).
+  - [x] **P3.T4.S3** *Files:* `src/server/questions/promptResearch.ts`, `promptResearch.test.ts`, `src/app/api/customer/questions/research/route.ts`, `research/keywords/route.ts`, fixtures `llm-mentions-search.json`, `llm-relevance.json`. *Do:* port `aiPromptResearch.test.ts:116-185` (on-topic filter, merge, flags, no double purchase in cache window). *Verify:* `node --test src/server/questions/promptResearch.test.ts` → pass (F08-AC-20).
+  - [x] **P3.T4.S4** *Files:* `src/server/questions/aiSources.route.test.mjs`, `questions.contract.ts`. *Do:* flags off → 404; `approval_required`, `price_changed`, `setup_running`, `setup_already_saved`, `duplicate_paid_call`, spend refusals. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/server/questions/aiSources.route.test.mjs src/shared/http/routeContract.test.ts` → pass (F08-AC-21).
 - [ ] **P3.T5 Owner live check (not CI)**
   - [x] **P3.T5.S1** *Files:* `scripts/qa/check-f08-live.mjs`. *Do:* §6.4 rules. *Verify:* `node scripts/qa/check-f08-live.mjs --help` prints usage and exits 0 without network.
 
@@ -954,7 +954,7 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 **Goal:** customers set up, curate and approve in `/portal/measurement`.
 
 - [x] **P4.T1 Hooks and keys**
-  - [x] **P4.T1.S1** *Files:* `src/lib/query/keys.ts` (+ test), `src/components/portal/questions/hooks/{useQuestions,useQuestionMutations,useSetupJob}.ts`, `src/lib/features/clientFeatures.ts` (three names). *Verify:* `node --test src/lib/query/keys.test.ts` → pass.
+  - [x] **P4.T1.S1** *Files:* `src/shared/query/keys.ts` (+ test), `src/components/portal/questions/hooks/{useQuestions,useQuestionMutations,useSetupJob}.ts`, `src/server/features/clientFeatures.ts` (three names). *Verify:* `node --test src/shared/query/keys.test.ts` → pass.
 - [x] **P4.T2 Components**
   - [x] **P4.T2.S1** *Files:* setup components (§6.6). *Verify:* `npm run build` → exit 0.
   - [x] **P4.T2.S2** *Files:* editor components, `QuestionRow.tsx`, `history/QuestionHistoryLink.tsx`, `history/historyAvailability.ts`, `src/components/portal/questions/questionRow.test.ts` (render harness: link shown only when the constant is true). *Verify:* `node --test src/components/portal/questions/questionRow.test.ts` → pass (F08-AC-24).
@@ -969,18 +969,18 @@ Errors: 409 `price_changed`/`duplicate_paid_call`; 502 `research_unavailable` "Q
 
 | Test file | Cases | ACs |
 |---|---|---|
-| `src/lib/questions/workspaceQuestions.test.ts` | normaliser, branded, error mapping, add | 01, 03 |
-| `src/lib/questions/applyQuestionPatch.test.ts` | OpenSEO patch rules + ours | 04 |
-| `src/lib/questions/panel.test.ts` | build, refusals, diff, near duplicates | 06 |
-| `src/lib/questions/state.test.ts` | GET assembly, setup status | 10 |
-| `src/lib/repairs/r14-workflow-contract.test.mjs` (2 new cases) | `search_questions`, `matchesBrandAlias` | 06 |
-| `src/lib/questions/legacyPanelSync.route.test.mjs` | approved vs draft | 08 |
-| `src/lib/questions/questions.route.test.mjs` | GET/PATCH/approve | 05, 06, 10, 21 |
-| `src/lib/pricing/actions/questions.test.ts`, `src/lib/pricing/firecrawl.test.ts` | quotes | 11 |
-| `src/lib/questions/setup/{readSite,promptgenSource,candidates,research,billedSteps,save}.test.ts` | setup | 12–18 |
-| `src/lib/questions/generate.test.ts` | Generate | 19 |
-| `src/lib/questions/promptResearch.test.ts` | research | 18, 20 |
-| `src/lib/questions/aiSources.route.test.mjs` | flags, prices, refusals | 21 |
+| `src/server/questions/workspaceQuestions.test.ts` | normaliser, branded, error mapping, add | 01, 03 |
+| `src/server/questions/applyQuestionPatch.test.ts` | OpenSEO patch rules + ours | 04 |
+| `src/server/questions/panel.test.ts` | build, refusals, diff, near duplicates | 06 |
+| `src/server/questions/state.test.ts` | GET assembly, setup status | 10 |
+| `src/server/repairs/r14-workflow-contract.test.mjs` (2 new cases) | `search_questions`, `matchesBrandAlias` | 06 |
+| `src/server/questions/legacyPanelSync.route.test.mjs` | approved vs draft | 08 |
+| `src/server/questions/questions.route.test.mjs` | GET/PATCH/approve | 05, 06, 10, 21 |
+| `src/shared/pricing/actions/questions.test.ts`, `src/shared/pricing/firecrawl.test.ts` | quotes | 11 |
+| `src/server/questions/setup/{readSite,promptgenSource,candidates,research,billedSteps,save}.test.ts` | setup | 12–18 |
+| `src/server/questions/generate.test.ts` | Generate | 19 |
+| `src/server/questions/promptResearch.test.ts` | research | 18, 20 |
+| `src/server/questions/aiSources.route.test.mjs` | flags, prices, refusals | 21 |
 | `src/components/portal/questions/questionRow.test.ts` | history link | 24 |
 | `src/components/portal/portalRegressions.test.mjs` (extended) | flagged swap, legacy unchanged | 07, 23 |
 | `scripts/qa/check-f08-db.mjs` | normalize, schema, rls, add, revision, legacy-sync, backfill, scan-snapshot, approve, setup-save | 01–03, 05, 07–09, 17, 25 |
@@ -1012,7 +1012,7 @@ Fixtures (`tests/fixtures/f08/`, all synthetic, written by hand in the providers
 | 9 | Members can approve panels. | Unchanged from today's R14 route; revisit with the Teams Mixed row. |
 | 10 | `promptGen`'s own LLM model (`LLM_MODEL`) may be unpriced in `llmPricing.js`. | The adapter uses F01 `llmText` (fails loudly on unpriced ids, F01 rule); if it fails, the step returns `promptgen_unavailable` and setup continues with research questions only. |
 
-**Deviations from conventions:** (a) `POST /questions/generate` and `/questions/research` are synchronous (≤ 2 paid calls, ≤ 120 s), not 202 jobs, matching OpenSEO's server functions; (b) `src/lib/pricing/firecrawl.ts` is a new estimator file outside F03, because F03 has no Firecrawl price; (c) `src/lib/repairs/workflow.js` gains the origin `search_questions` and the `matchesBrandAlias` export (additive R14 change).
+**Deviations from conventions:** (a) `POST /questions/generate` and `/questions/research` are synchronous (≤ 2 paid calls, ≤ 120 s), not 202 jobs, matching OpenSEO's server functions; (b) `src/shared/pricing/firecrawl.ts` is a new estimator file outside F03, because F03 has no Firecrawl price; (c) `src/server/repairs/workflow.js` gains the origin `search_questions` and the `matchesBrandAlias` export (additive R14 change).
 
 ## 12. Definition of done
 

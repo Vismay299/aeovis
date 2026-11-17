@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { Progress as ProgressPrimitive } from "@base-ui/react/progress";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 function Progress({
   className,

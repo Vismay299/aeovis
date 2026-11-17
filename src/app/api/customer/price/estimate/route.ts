@@ -1,10 +1,10 @@
 import { ZodError } from "zod";
-import { requireWorkspace } from "../../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, readJsonBody, jsonOk, AppError } from "../../../../../lib/http/errors.ts";
-import { quote } from "../../../../../lib/pricing/pricedActions.ts";
-import "../../../../../lib/pricing/actions/index.ts";
-import { priceEstimateBody } from "../../../../../lib/pricing/pricing.contract.ts";
+import { requireWorkspace } from "../../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { toErrorResponse, readJsonBody, jsonOk, AppError } from "../../../../../shared/http/errors.ts";
+import { quote } from "../../../../../shared/pricing/pricedActions.ts";
+import "../../../../../shared/pricing/actions/index.ts";
+import { priceEstimateBody } from "../../../../../shared/pricing/pricing.contract.ts";
 
 export type EstimateRouteDeps = RequireWorkspaceDeps & {
   requireWorkspace?: typeof requireWorkspace;

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Lock, X, Plus, ArrowRight } from "lucide-react";
-import { validatePipeline } from "@/lib/content/agents/blocks";
+import { validatePipeline } from "@/shared/content/agents/blocks";
 
 const mono = {
   fontFamily: "var(--font-mono)",

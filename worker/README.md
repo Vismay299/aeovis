@@ -24,7 +24,7 @@ not ship `src/`, and an import that escapes this directory fails at runtime on
 the host, after a deploy — the worst place to find out.
 
 Shared logic is **copied**, not imported. That duplication is the deliberate
-price of the fleet being independently deployable. `src/lib/workerIsolation.test.mjs`
+price of the fleet being independently deployable. `src/server/workerIsolation.test.mjs`
 runs in the main CI suite and fails the build if a crossing import appears.
 
 ## Running it
@@ -221,7 +221,7 @@ on.
 The race is settled by `FOR UPDATE SKIP LOCKED` **in the database**, not by two
 JS processes agreeing to be careful.
 
-It is SQL and not `src/lib/jobLease.js` because this workspace may not import
+It is SQL and not `src/server/jobLease.js` because this workspace may not import
 from `src/`. The alternatives were to copy the lease in here (a second copy that
 drifts) or to extract a shared package (heavier than the task warrants). A
 database function is one implementation with two callers and nothing to
@@ -247,7 +247,7 @@ Every pass logs `describeClaim(...)`, including the empty ones — a measured ze
 has to look different from never having run.
 
 The race itself is proven against a real Postgres in
-`src/lib/probeTasksRace.test.mjs`, which skips **loudly** when no database is
+`src/server/probeTasksRace.test.mjs`, which skips **loudly** when no database is
 configured.
 
 ## Typed outcomes

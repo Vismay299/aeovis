@@ -1,6 +1,6 @@
-import { businessNotFound } from "../../../../../../../lib/local/businesses.ts";
-import { businessIdParams, refreshProfileBody } from "../../../../../../../lib/local/local.contract.ts";
-import { refreshBusinessProfile } from "../../../../../../../lib/local/profile.ts";
+import { businessNotFound } from "../../../../../../../server/local/businesses.ts";
+import { businessIdParams, refreshProfileBody } from "../../../../../../../server/local/local.contract.ts";
+import { refreshBusinessProfile } from "../../../../../../../server/local/profile.ts";
 import {
   approve,
   gate,
@@ -10,8 +10,8 @@ import {
   respond,
   type LocalRouteDeps,
   type RouteContext,
-} from "../../../../../../../lib/local/routeKit.ts";
-import { localStoreFor } from "../../../../../../../lib/local/store.ts";
+} from "../../../../../../../server/local/routeKit.ts";
+import { localStoreFor } from "../../../../../../../server/local/store.ts";
 
 export const dynamic = "force-dynamic";
 

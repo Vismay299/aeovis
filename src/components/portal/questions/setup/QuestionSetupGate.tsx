@@ -15,9 +15,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
 import { SpendRefusedError } from "@/components/app/SpendRefusedError";
-import { isSpendRefused } from "@/lib/query/errors";
-import { ApiError } from "@/lib/query/fetchJson";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { isSpendRefused } from "@/shared/query/errors";
+import { ApiError } from "@/shared/query/fetchJson";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import type { QuestionsState } from "../hooks/useQuestions";
 import { useQuestionMutations } from "../hooks/useQuestionMutations";
 

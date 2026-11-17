@@ -25,7 +25,7 @@ if (maxSpend !== "0.01" || !brand) {
   process.exit(2);
 }
 
-const [{ llmText }] = [await import("../../src/lib/llm/index.ts")];
+const [{ llmText }] = [await import("../../src/server/llm/index.ts")];
 const idempotencyKey = `live:selftest:${Date.now()}`;
 
 const { text } = await llmText(
@@ -41,7 +41,7 @@ const { text } = await llmText(
 );
 
 // Only the cost columns leave this script: the prompt and answer stay out of logs.
-const { getSupabaseAdmin } = await import("../../src/lib/supabase/admin.js");
+const { getSupabaseAdmin } = await import("../../src/shared/supabase/admin.js");
 const admin = getSupabaseAdmin();
 const { data, error } = await admin
   .from("spend_ledger")

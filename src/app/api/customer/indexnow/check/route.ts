@@ -1,10 +1,10 @@
-import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, readOptionalJsonBody, AppError } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { checkKeyFiles } from "../../../../../lib/indexnow/keyFile.ts";
-import { checkIndexNowRequest } from "../../../../../lib/indexnow/indexnow.contract.ts";
-import type { safeFetch } from "../../../../../lib/http/safeFetch.ts";
-import type { IndexNowLimits } from "../../../../../lib/indexnow/limits.ts";
+import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { toErrorResponse, readOptionalJsonBody, AppError } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { checkKeyFiles } from "../../../../../server/indexnow/keyFile.ts";
+import { checkIndexNowRequest } from "../../../../../server/indexnow/indexnow.contract.ts";
+import type { safeFetch } from "../../../../../shared/http/safeFetch.ts";
+import type { IndexNowLimits } from "../../../../../server/indexnow/limits.ts";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";

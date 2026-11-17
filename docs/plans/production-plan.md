@@ -200,7 +200,7 @@ A ──► B ──► C ──► D ──► E
   - In development, downgrade throws to a single loud warning block so local work without keys still runs.
 - **A4.3** Call `assertEnv()` from `src/app/layout.js` (server component, runs once per cold start) **and** at the top of `runScanChunk`.
 - **A4.4** Replace `openrouter.js`'s silent `{text:""}` return with a thrown error when the key is missing — silence here corrupts prompt generation invisibly.
-- **A4.5** Delete the dead second engine registry `src/lib/engines/types.js` (`getEnabledEngines`, `ENGINES_ENABLED`, `PROBE_MODE`) — it is a divergent, unused gating implementation. *(Full deletion happens in E1; if E1 has not run yet, at minimum add a header comment marking it dead.)*
+- **A4.5** Delete the dead second engine registry `src/shared/engines/types.js` (`getEnabledEngines`, `ENGINES_ENABLED`, `PROBE_MODE`) — it is a divergent, unused gating implementation. *(Full deletion happens in E1; if E1 has not run yet, at minimum add a header comment marking it dead.)*
 - **A4.6** Update `.env.example` with the variables it is currently missing: `PROMPT_TARGET`, `PROBE_RUNS`, `NEXT_PUBLIC_APP_URL`, `BRIGHTDATA_SERP_ZONE`, `CRON_SECRET`, `OPERATOR_TOKEN`, `SENTRY_DSN`, `RESEND_API_KEY`, `ALERT_EMAIL_TO`. Group by required/optional with a comment marking which are needed in production.
 - **A4.7** Write `src/lib/env.test.mjs`: missing required var throws in prod mode; warns in dev mode; conditional rules fire per `ENGINES` value.
 - **Acceptance:** deploying with `OPENROUTER_API_KEY` unset fails the boot with a named error instead of producing empty scans.
@@ -269,10 +269,10 @@ A ──► B ──► C ──► D ──► E
 - **B2.1** In `worker/route.js`, delete the `x-vercel-cron` branch (line 41). Vercel Cron sends `Authorization: Bearer $CRON_SECRET`, which the existing bearer branch already accepts.
 - **B2.2** Delete the `searchParams.get("secret")` branch (line 45). Header-only.
 - **B2.3** Change `isAuthorized` to fail **closed** when the secret is unset and `VERCEL_ENV === "production"`; keep the permissive dev path behind an explicit `NODE_ENV !== "production"` check.
-- **B2.4** Extract this into `src/lib/cronAuth.js` so it is written once, then apply it to `src/app/api/content/worker/route.js` (currently ungated — the single worst gap: `?batch=1` enqueues paid content jobs).
+- **B2.4** Extract this into `src/server/cronAuth.js` so it is written once, then apply it to `src/app/api/content/worker/route.js` (currently ungated — the single worst gap: `?batch=1` enqueues paid content jobs).
 - **B2.5** Add `/api/content/worker` to `vercel.json` crons (see C2) so content jobs get the same rescue as scans — today they have **none**, so a frozen content kick is stuck forever.
 - **B2.6** Update `scanWorker.js`'s self-continue fetch (`:319`) to send the bearer header (it currently constructs a URL — verify it does not rely on `?secret=`).
-- **B2.7** Tests in `src/lib/cronAuth.test.mjs`: spoofed `x-vercel-cron` → 401; `?secret=` → 401; correct bearer → pass; unset secret in prod → 401; unset in dev → pass with warning.
+- **B2.7** Tests in `src/server/cronAuth.test.mjs`: spoofed `x-vercel-cron` → 401; `?secret=` → 401; correct bearer → pass; unset secret in prod → 401; unset in dev → pass with warning.
 - **Acceptance:** `curl -H 'x-vercel-cron: 1' https://<deploy>/api/scan/worker` returns 401.
 
 ## B3 — Rate limiting
@@ -290,7 +290,7 @@ A ──► B ──► C ──► D ──► E
     window_start timestamptz NOT NULL DEFAULT now()
   );
   ```
-- **B3.3** Create `src/lib/rateLimit.js` with `checkLimit(bucket, max, windowMs)` implemented as a single atomic upsert-and-increment (a Postgres function, so two concurrent calls cannot both pass).
+- **B3.3** Create `src/server/rateLimit.js` with `checkLimit(bucket, max, windowMs)` implemented as a single atomic upsert-and-increment (a Postgres function, so two concurrent calls cannot both pass).
 - **B3.4** Apply: `/api/unlock` (5 attempts / 15 min / IP), `POST /api/scan` (10 / hour / IP), `POST /api/content` (20 / hour / IP).
 - **B3.5** Return `429` with a `Retry-After` header.
 - **B3.6** Tests: limit reached → 429; window expiry resets; concurrent calls do not double-pass.
@@ -300,7 +300,7 @@ A ──► B ──► C ──► D ──► E
 
 | | |
 |---|---|
-| **Why** | Two live holes. (1) `crawlability/route.js:142-151`'s `isSafeDomain` blocks `10.`/`192.168.`/`172.16-31.` and exact `127.0.0.1`, but **not** `169.254.169.254` (cloud metadata), `127.0.0.2`/`127.1`, `100.64/10` (CGNAT), or `[::1]`; it is a *string* check so DNS rebinding defeats it; and the fetch uses `redirect: "follow"` (`:201`, `:222`) so an attacker's `robots.txt` can 302 to an internal host. (2) `src/lib/firecrawl.js:66` has **no guard at all** and falls back to a direct server-side `fetch(normalizedUrl)` — reachable via `POST /api/knowledge` (type `url`), the scan `url` field, and the content research step. |
+| **Why** | Two live holes. (1) `crawlability/route.js:142-151`'s `isSafeDomain` blocks `10.`/`192.168.`/`172.16-31.` and exact `127.0.0.1`, but **not** `169.254.169.254` (cloud metadata), `127.0.0.2`/`127.1`, `100.64/10` (CGNAT), or `[::1]`; it is a *string* check so DNS rebinding defeats it; and the fetch uses `redirect: "follow"` (`:201`, `:222`) so an attacker's `robots.txt` can 302 to an internal host. (2) `src/server/firecrawl.js:66` has **no guard at all** and falls back to a direct server-side `fetch(normalizedUrl)` — reachable via `POST /api/knowledge` (type `url`), the scan `url` field, and the content research step. |
 
 - **B4.1** Create `src/lib/safeFetch.js` exporting `assertSafeUrl(url)` and `safeFetch(url, opts)`:
   1. Parse; require protocol `http:`/`https:`; reject credentials in the URL; reject non-standard ports (allow 80/443 only).
@@ -309,8 +309,8 @@ A ──► B ──► C ──► D ──► E
   4. Fetch with `redirect: "manual"`; on a 3xx, re-run steps 1–3 against the `Location` and follow manually, capped at 3 hops.
   5. Enforce a timeout (`AbortSignal.timeout`) and a response-size cap (stream and abort past ~2 MB) so a hostile endpoint cannot hang or exhaust memory.
 - **B4.2** Replace the ad-hoc guard in `crawlability/route.js` with `safeFetch` for both the primary domain and every `?compare=` rival.
-- **B4.3** Apply `assertSafeUrl` in `src/lib/firecrawl.js` before the Firecrawl call **and** before the direct-fetch fallback.
-- **B4.4** Apply at the entry points that accept user URLs: `POST /api/knowledge` (url type), `POST /api/scan` (`url` field), `src/lib/content/steps/research.js`.
+- **B4.3** Apply `assertSafeUrl` in `src/server/firecrawl.js` before the Firecrawl call **and** before the direct-fetch fallback.
+- **B4.4** Apply at the entry points that accept user URLs: `POST /api/knowledge` (url type), `POST /api/scan` (`url` field), `src/shared/content/steps/research.js`.
 - **B4.5** Tests in `src/lib/safeFetch.test.mjs` — each must be rejected: `http://169.254.169.254/latest/meta-data/`, `http://127.1/`, `http://[::1]/`, `http://100.64.0.1/`, `http://localhost:22/`, a host resolving to `10.0.0.5`, and a public URL that 302s to `http://169.254.169.254/`. Public URLs must pass.
 - **Acceptance:** `GET /api/brands/169.254.169.254/crawlability` (with operator token) returns a validation error, not a metadata document.
 
@@ -365,7 +365,7 @@ A ──► B ──► C ──► D ──► E
 ## B8 — Remaining input/output hygiene
 
 - **B8.1** **Prompt injection surface** — `opportunities/route.js:12-27` interpolates attacker-controlled `brand` and `gaps[]` straight into a Gemini prompt. Bound the input lengths, strip control characters, and wrap user values in clearly delimited blocks with an instruction that content inside is data, not instructions. (This route is superseded by P7 typed opportunities in Phase H; if the decision is to retire it, do that instead.)
-- **B8.2** **Stored injection** — `knowledge`/`brand-briefs` content flows verbatim into content-pipeline prompts. Apply the same delimiting at the prompt-assembly site (`src/lib/content/steps/*`), not at the storage site.
+- **B8.2** **Stored injection** — `knowledge`/`brand-briefs` content flows verbatim into content-pipeline prompts. Apply the same delimiting at the prompt-assembly site (`src/shared/content/steps/*`), not at the storage site.
 - **B8.3** **`javascript:` URIs** — `src/components/studio/Markdown.jsx:24-33` renders `href={m[2]}` from LLM/scraped markdown with no scheme check. Allowlist `http:`, `https:`, `mailto:`; render anything else as plain text.
 - **B8.4** **Wildcard over-fetch** — `db.js:178,350` use `.ilike("brand", brand)`, so `brand=%` returns every brand's scans. Switch to `.eq()` on the normalized key (this lands properly in D3) or escape `%`/`_` now as an interim.
 - **B8.5** **Internal errors leaking to clients** — `scanWorker.js:1031` stores `err.message` in `job.error_message`, which `status/route.js:57` returns to the browser (raw Bright Data/DB text). Map to a small set of user-safe messages (`source_unavailable`, `cost_exceeded`, `internal`); log the raw text server-side with the job id.
@@ -387,9 +387,9 @@ A ──► B ──► C ──► D ──► E
 |---|---|
 | **Why** | Every migration ships `FOR ALL TO anon USING (true) WITH CHECK (true)` on all 18 tables (`001:118`, `004:36`, `005:133-163`). The anon key is a `NEXT_PUBLIC_` value. Today it happens to be referenced only server-side, so the practical exposure is via the open API routes (closed by B1) — but the policy is a landmine the instant the key reaches the browser. **This can be substantially fixed without introducing users.** |
 
-- **B10.1** Confirm no client component imports `@/lib/db` or creates a Supabase client (the security audit found none — re-verify with a grep before proceeding, since the fix depends on it).
+- **B10.1** Confirm no client component imports `@/server/db` or creates a Supabase client (the security audit found none — re-verify with a grep before proceeding, since the fix depends on it).
 - **B10.2** Add `SUPABASE_SERVICE_ROLE_KEY` (server-only, **not** `NEXT_PUBLIC_`) to env and Vercel.
-- **B10.3** In `src/lib/db.js`, create the client with the service-role key when present, falling back to anon for local dev. Add a guard that throws if this module is ever evaluated in a browser bundle (`typeof window !== "undefined"`).
+- **B10.3** In `src/server/db.js`, create the client with the service-role key when present, falling back to anon for local dev. Add a guard that throws if this module is ever evaluated in a browser bundle (`typeof window !== "undefined"`).
 - **B10.4** Once all traffic uses the service-role key, replace the anon policies in a new migration: drop `FOR ALL TO anon` and grant nothing to `anon` (service-role bypasses RLS by design). Do this **after** B10.3 is deployed and verified, in a separate migration, so a rollback is one file.
 - **B10.5** Rotate the anon key.
 - **B10.6** Document in the migration header that per-tenant policies replace this in Phase Z — the ownership column, not the anon grant, becomes the boundary.
@@ -414,7 +414,7 @@ A ──► B ──► C ──► D ──► E
 
 | | |
 |---|---|
-| **Why** | **This is the single highest-impact fix in the plan.** Every job advancement is a bare fire-and-forget promise after the HTTP response: `scan/route.js:34`, `scan/worker/route.js:100`, `content/route.js:99`, `scanWorker.js:1091` (scheduler kick) and `:322` (self-continue). Vercel may freeze or recycle the instance the moment the response returns — the promise then never runs. ~~There is no `waitUntil` anywhere in `src/`.~~ **False since 2026-09-18:** `@vercel/functions` is a dependency (`package.json:52`, `^3.9.7`) and `waitUntil` is used through one helper, `src/lib/keepAlive.js:36`, at nine post-response sites. |
+| **Why** | **This is the single highest-impact fix in the plan.** Every job advancement is a bare fire-and-forget promise after the HTTP response: `scan/route.js:34`, `scan/worker/route.js:100`, `content/route.js:99`, `scanWorker.js:1091` (scheduler kick) and `:322` (self-continue). Vercel may freeze or recycle the instance the moment the response returns — the promise then never runs. ~~There is no `waitUntil` anywhere in `src/`.~~ **False since 2026-09-18:** `@vercel/functions` is a dependency (`package.json:52`, `^3.9.7`) and `waitUntil` is used through one helper, `src/server/keepAlive.js:36`, at nine post-response sites. |
 | **Consequence today** | The kick silently dies; the job sits until something else advances it. With the tab closed and a daily cron, that is **up to 24 hours**, and the cron only resumes 3 jobs per invocation. |
 
 - **C1.1** `npm install @vercel/functions`.
@@ -437,7 +437,7 @@ Written here because this section is a named anchor on that task and a reader
 who stops at the prescription above would get four things wrong.
 
 - **Not `npm install` + a bare `waitUntil` at each site (C1.1–C1.4).** Exactly
-  one helper, `src/lib/keepAlive.js:36`, owns the import. No route calls
+  one helper, `src/server/keepAlive.js:36`, owns the import. No route calls
   `waitUntil` directly. `keepAlive` attaches the rejection handler under a label
   *before* the cap, so C1.2's "keep the `.catch`" is satisfied inside the helper
   and each call site drops its own.
@@ -446,17 +446,17 @@ who stops at the prescription above would get four things wrong.
   `src/app/api/scan/worker/_lib/sweepExecution.js:69` ·
   `src/app/api/content/worker/route.js:71` · `src/app/api/content/route.js:100` ·
   `src/app/api/content-items/[id]/decision/route.js:119` and `:138` ·
-  `src/lib/workers/scanWorker.js:3200` and `:1224`.
+  `src/server/workers/scanWorker.js:3200` and `:1224`.
 - **C1.5 was right to worry and is capped, not uncapped.** The self-continue
   fetch is wrapped with `maxMs: SELF_CONTINUE_HOLD_MS` = 5000
-  (`src/lib/workers/scanWorker.js:1173`), so the current chunk is not billed for
+  (`src/server/workers/scanWorker.js:1173`), so the current chunk is not billed for
   the whole of the next one. The cap releases the platform hold; it does not
   cancel the fetch.
-- **C1.8 is enforced, not just documented.** `src/lib/keepAlive.test.mjs:69` is a
+- **C1.8 is enforced, not just documented.** `src/server/keepAlive.test.mjs:69` is a
   git-grep GUARD that fails if any route or the scan worker kicks background
   work with a bare `.catch`. Its allowlist of function names is fixed and scoped
   to `src/app` plus `scanWorker.js`, so a new fire-and-forget under a new name,
-  or anywhere in `src/lib/content/`, still slips past it.
+  or anywhere in `src/shared/content/`, still slips past it.
 
 **Still open from this section:**
 
@@ -753,7 +753,7 @@ who stops at the prescription above would get four things wrong.
 |---|---|
 | **Why** | 601 exported symbols with no compiler. The concrete bug classes already visible: manual snake/camel duality handled per-field across `services/api.js` (e.g. `getBrandMentionedInText` reads three spellings at `:95-97`) where one missed spelling silently zeroes a metric; Postgres `numeric` values arriving as strings and needing explicit `Number()` (`scanRow.js:51`, `db.js:222`) where a miss yields string concatenation in charts; deep nullable chains as the norm (`db.js:210-213`). A full TypeScript migration is **not** justified at ~130 non-test files / 34 k LOC. |
 
-- **E5.1** Add `@ts-check` to the highest-traffic cross-boundary modules first: `src/lib/db.js`, `src/lib/db/analytics.js`, `src/services/api.js`, `src/app/api/scans/_lib/scanRow.js`.
+- **E5.1** Add `@ts-check` to the highest-traffic cross-boundary modules first: `src/server/db.js`, `src/server/db/analytics.js`, `src/shared/api.js`, `src/app/api/scans/_lib/scanRow.js`.
 - **E5.2** Author three `@typedef`s in a `src/lib/types.js` JSDoc file: `ScanRecord` (the client-facing scan shape), `PromptResultRow` (the DB row), `EngineSummary`. These are the three shapes that cross the most boundaries.
 - **E5.3** Fix whatever the checker surfaces — expect real nullable and coercion bugs. Treat each as its own small commit if non-trivial.
 - **E5.4** Turn on `checkJs` in `jsconfig.json` scoped to the annotated files (via `include`), not repo-wide, so the gate stays green.
@@ -913,7 +913,7 @@ who stops at the prescription above would get four things wrong.
 |---|---|
 | **Why** | The product **sells crawlability audits** and would fail its own. There is no `public/` directory at all: no `robots.txt`, no `sitemap.xml`, no `llms.txt`, no manifest, no OG image. `layout.js:4-7` is two static lines — no `metadataBase`, `openGraph`, `twitter`, `robots`, or canonical — so every route shares one generic title and **no link ever produces a social card**. Because the dashboard and scan pages are client components, they cannot export `metadata` at all. |
 
-- **F9.1** Add `src/app/robots.js` (Next metadata route) explicitly allowing the AI crawlers the product itself tracks (GPTBot, ClaudeBot, PerplexityBot, Google-Extended, …) — sourced from the existing `src/lib/crawlers/bots.js` registry so the two never drift.
+- **F9.1** Add `src/app/robots.js` (Next metadata route) explicitly allowing the AI crawlers the product itself tracks (GPTBot, ClaudeBot, PerplexityBot, Google-Extended, …) — sourced from the existing `src/server/crawlers/bots.js` registry so the two never drift.
 - **F9.2** Add `src/app/sitemap.js` covering the public routes.
 - **F9.3** Add `public/llms.txt` describing the product for LLM consumers — the feature Perceev audits for others.
 - **F9.4** Expand `layout.js` metadata: `metadataBase`, `openGraph`, `twitter`, `robots`, canonical, and a proper title template.

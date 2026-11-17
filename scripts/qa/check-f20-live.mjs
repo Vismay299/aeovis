@@ -27,10 +27,10 @@ if (!args.brand) {
   process.exit(1);
 }
 
-const { getSupabaseAdmin } = await import("../../src/lib/supabase/admin.js");
-const { getGa4ConnectionState } = await import("../../src/lib/ga4/connection.ts");
-const { getOrganicOverview } = await import("../../src/lib/ga4/overview.ts");
-const { getOpportunities } = await import("../../src/lib/ga4/opportunities.ts");
+const { getSupabaseAdmin } = await import("../../src/shared/supabase/admin.js");
+const { getGa4ConnectionState } = await import("../../src/server/ga4/connection.ts");
+const { getOrganicOverview } = await import("../../src/server/ga4/overview.ts");
+const { getOpportunities } = await import("../../src/server/ga4/opportunities.ts");
 
 const admin = getSupabaseAdmin();
 const ws = { brandKey: args.brand, role: "owner" };

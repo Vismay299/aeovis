@@ -14,7 +14,7 @@ import {
   getGscServiceAccount,
   listGscSites,
   fetchSearchQueriesForUrl,
-} from "../src/lib/engines/gsc.js";
+} from "../src/shared/engines/gsc.js";
 
 const target = process.argv[2];
 

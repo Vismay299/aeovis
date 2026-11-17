@@ -2,7 +2,7 @@
 
 > <!-- doc-status -->
 > **Status: LIVE**, on exactly one route. Client:
-> [`src/lib/gemini.js`](../../src/lib/gemini.js), via the
+> [`src/shared/gemini.js`](../../src/shared/gemini.js), via the
 > `@google/generative-ai` SDK (`^0.24.1`, `package.json:20`; the installed
 > build identifies itself on the wire as `x-goog-api-client: genai-js/0.24.1`).
 
@@ -15,15 +15,15 @@ previous revision
 > files, and the most recently touched of them was last changed by `ee5504e`:
 >
 > ```
-> git log --oneline ee5504e..HEAD -- src/lib/gemini.js src/lib/geminiAbort.test.mjs \
->   src/app/api/opportunities/route.js src/lib/health.js src/lib/prompts.js \
->   src/lib/scoring/judge.js src/lib/openrouter.test.mjs package.json \
+> git log --oneline ee5504e..HEAD -- src/shared/gemini.js src/shared/geminiAbort.test.mjs \
+>   src/app/api/opportunities/route.js src/server/health.js src/server/prompts.js \
+>   src/shared/scoring/judge.js src/server/openrouter.test.mjs package.json \
 >   scripts/test-dynamic-prompts.mjs src/components/studio/StudioView.jsx \
 >   src/components/dashboard/OpportunitiesPanel.jsx
 > ```
 >
 > That command names **eleven** paths for ten cited files on purpose: it also
-> covers `src/lib/geminiAbort.test.mjs`, which this file makes claims about
+> covers `src/shared/geminiAbort.test.mjs`, which this file makes claims about
 > (its test count, and what it pins) without citing a line in it.
 >
 > Empty output means every line number below is still the one that was read.
@@ -46,7 +46,7 @@ previous revision
 > text was 44; both numbers here were produced by a script rather than by hand,
 > and occurrences and targets are stated separately because they are two
 > different numbers and the earlier revision named neither. Every executed
-> measurement below was produced against `src/lib/gemini.js` as of `ee5504e`,
+> measurement below was produced against `src/shared/gemini.js` as of `ee5504e`,
 > which is byte-identical at every commit since.
 
 > **What changed in this revision.** R6.3.1's quirk 3 said the SDK never
@@ -68,21 +68,21 @@ previous revision
 ## Where it actually runs — and where it does not
 
 Gemini is **not a probed engine**. It appears in neither
-[`deployedEngines.js`](../../src/lib/engines/deployedEngines.js) nor
+[`deployedEngines.js`](../../src/shared/engines/deployedEngines.js) nor
 `enginePipeline.js`, and no scan result is attributed to it. It is a utility
 LLM on one operator surface.
 
 **The one live path**, traced hop by hop at HEAD:
 
 `POST /api/opportunities` → [`src/app/api/opportunities/route.js:2,27`](../../src/app/api/opportunities/route.js)
-→ `generateContent` → [`src/lib/gemini.js:3`](../../src/lib/gemini.js) →
+→ `generateContent` → [`src/shared/gemini.js:3`](../../src/shared/gemini.js) →
 `@google/generative-ai` → `generativelanguage.googleapis.com`.
 
 That is a route file under `src/app/api`, so Next.js serves it whether or not
 anything in this repo calls it. It sits behind the operator perimeter:
 `src/middleware.js` matches every API path (grep `matcher: ["/api/:path*"]`),
 `/api/opportunities` appears in neither `PUBLIC_EXACT` nor `PUBLIC_PATTERNS` in
-`src/lib/operatorPerimeter.js`, and `src/lib/operatorPerimeter.test.mjs` lists
+`src/server/operatorPerimeter.js`, and `src/server/operatorPerimeter.test.mjs` lists
 it in the `closed` table of the test *"every operator surface is closed to an
 anonymous caller"* (grep that test name, then the row `["GET",
 "/api/opportunities"]`), whose assertion runs a few lines below the table.
@@ -105,17 +105,17 @@ anonymous caller"* (grep that test name, then the row `["GET",
   `src/components/studio/OpportunitiesPanel.jsx`, which does not call this
   route.) The route is live; its only shipped UI caller is currently orphaned.
 
-The other three importers of `src/lib/gemini.js` are **not** live, verified by
+The other three importers of `src/shared/gemini.js` are **not** live, verified by
 grepping for importers rather than by reading the files:
 
 | Module | Reachability |
 |---|---|
-| `src/lib/engines/gemini.js` (`probeGemini`) | **no importers at all** |
-| `src/lib/prompts.js:1,30,86` | only `scripts/test-dynamic-prompts.mjs:10` (`npm run test:prompts`) |
-| `judgeWithLLM`, `src/lib/scoring/judge.js:1,360,388` | **no callers**, in or out of the file. The live judge path is `judgeBrandsSymmetric`/`judgeDeterministic`, which make no vendor call |
+| `src/shared/engines/gemini.js` (`probeGemini`) | **no importers at all** |
+| `src/server/prompts.js:1,30,86` | only `scripts/test-dynamic-prompts.mjs:10` (`npm run test:prompts`) |
+| `judgeWithLLM`, `src/shared/scoring/judge.js:1,360,388` | **no callers**, in or out of the file. The live judge path is `judgeBrandsSymmetric`/`judgeDeterministic`, which make no vendor call |
 
 Do not confuse this client with the utility LLM used by the scan path — that is
-`src/lib/openrouter.js`, documented in [`mimo.md`](./mimo.md) and
+`src/server/openrouter.js`, documented in [`mimo.md`](./mimo.md) and
 [`gateway-catalog.md`](./gateway-catalog.md).
 
 ## Contract
@@ -128,7 +128,7 @@ Do not confuse this client with the utility LLM used by the scan path — that i
 | Auth | header `x-goog-api-key`, **not** a `key=` query parameter — captured off the SDK's own fetch init, whose header names are exactly `content-type`, `x-goog-api-client`, `x-goog-api-key`. The liveness probe does the opposite: `?key=` on `GET /v1beta/models` — the `gemini` entry of `scripts/check-secrets.mjs`, grep `generativelanguage` |
 | Timeout | `options.timeout` or `20000` (`gemini.js:34`), enforced **twice over**: an `AbortController` deadline that cancels the HTTP request (`gemini.js:35-36`) **and** a `Promise.race` that settles the promise (`gemini.js:58-63`). Both timers are cleared in a `finally` block (`gemini.js:92-93`) |
 | Retries | `retries = 2` by default, *outside* the model ladder (`gemini.js:32,99-103`) |
-| Required? | **No.** `required: false` on the `gemini` entry of `scripts/check-secrets.mjs`, and `src/lib/health.js:30` |
+| Required? | **No.** `required: false` on the `gemini` entry of `scripts/check-secrets.mjs`, and `src/server/health.js:30` |
 
 Request body, captured from the shipped client against a stubbed transport with
 `{ jsonMode: true, temperature: 0.2 }`:
@@ -278,7 +278,7 @@ how you keep working after one disappears. The costs are:
 ### 2. A missing key fails soft, and is indistinguishable from a real empty answer
 
 ```js
-// src/lib/gemini.js:4-8
+// src/shared/gemini.js:4-8
 const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
   console.error("GEMINI_API_KEY is not configured.");
@@ -317,10 +317,10 @@ indistinguishable value. This is the exact class of silent degradation the
 rebuild exists to close.
 
 The contrast with the utility LLM client is deliberate and instructive:
-`src/lib/openrouter.js` throws `LlmUnavailableError` for a missing key and for
+`src/server/openrouter.js` throws `LlmUnavailableError` for a missing key and for
 exhausted retries, and reserves a resolved `text: ""` for a genuinely empty
-model answer — pinned by three tests in `src/lib/openrouter.test.mjs:90,101,122`.
-`src/lib/gemini.js` has had no equivalent change. **R6.5.6 did not touch this**;
+model answer — pinned by three tests in `src/server/openrouter.test.mjs:90,101,122`.
+`src/shared/gemini.js` has had no equivalent change. **R6.5.6 did not touch this**;
 it fixed the abort path only.
 
 On the one live route the degradation is at least *loud at the HTTP boundary*,
@@ -343,7 +343,7 @@ recognisable if it ever comes back.**
 #### What ships now
 
 ```js
-// src/lib/gemini.js:55-56
+// src/shared/gemini.js:55-56
 const requestOptions = { signal: controller.signal };
 const resultPromise = model.generateContent(prompt, requestOptions);
 ```
@@ -377,7 +377,7 @@ Re-derived at `18fa380` by executing the shipped module against a stubbed
 `init.signal === controller.signal` will find `false` and wrongly conclude the
 signal was dropped again — measured as `false` here. **Linkage, not identity, is
 the test**: abort the caller's controller and assert `init.signal.aborted`
-becomes `true`. That is what `src/lib/geminiAbort.test.mjs` asserts.
+becomes `true`. That is what `src/shared/geminiAbort.test.mjs` asserts.
 
 #### Why the SDK's own `timeout` option is deliberately not passed
 
@@ -396,7 +396,7 @@ resource that nothing retires for the full 30 s. Across the five-model ladder ×
 three attempts that is the same fifteen-timer leak the fix removed, relocated
 into the SDK where `gemini.js` cannot reach it. So the deadline stays in
 `gemini.js` (`:35-36`), where the `finally` block owns it. The rationale is in
-the source at `gemini.js:51-54`, and `src/lib/geminiAbort.test.mjs` asserts
+the source at `gemini.js:51-54`, and `src/shared/geminiAbort.test.mjs` asserts
 `arg.timeout === undefined`, so a well-meaning "let the SDK handle it" change
 fails loudly.
 
@@ -415,7 +415,7 @@ caller saw `Error: Gemini timeout` from the race; and the stubbed request was
 **still hanging, never settled**, after the controller was aborted. That is
 *abandoned*, not *cancelled*.
 
-Pinned so it cannot return: `src/lib/geminiAbort.test.mjs` (8 tests) asserts the
+Pinned so it cannot return: `src/shared/geminiAbort.test.mjs` (8 tests) asserts the
 old shape is inert, the new shape is not, and that the ladder ends with zero
 live requests and zero stranded timers. `gemini.js:45-49` carries a
 "do not re-wrap this" comment naming the same finding.
@@ -447,7 +447,7 @@ blob** — `git show HEAD:<file>`, not the working tree, which concurrent tasks
 had dirty throughout — at `18fa380`, `ef9909b` and `86c1f07` in the previous
 revision and again at `b35e387` in this one. Zero failed at any of the four.
 Thirteen
-`src/lib/gemini.js` citations in R6.3.1 had drifted when the R6.5.6 fix added
+`src/shared/gemini.js` citations in R6.3.1 had drifted when the R6.5.6 fix added
 30 lines, and each was re-derived rather than nudged: `:40`, `:44`, `:44-46`,
 `:46`, `:48-51`, `:53`, `:54-70`, `:62`, `:64-67`, `:70`, `:71-74`, `:78-82`,
 `:85-86`. **That is the list, not a rule.** An earlier revision generalised it
@@ -459,7 +459,7 @@ Drift follows the edit, not the section.*
 *Four files are cited by greppable anchor rather than by line, for the reason
 given in [the note in `README.md`](./README.md#a-note-on-citing-check-secretsmjs):
 `scripts/check-secrets.mjs`, `src/middleware.js`,
-`src/lib/operatorPerimeter.js` and `src/lib/operatorPerimeter.test.mjs` are all
+`src/server/operatorPerimeter.js` and `src/server/operatorPerimeter.test.mjs` are all
 under concurrent edit as this is written. Each anchor string was grepped in the
 HEAD blob before being written down.*
 

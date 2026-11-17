@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { optimisticHandlers } from "@/lib/query/optimistic";
+import { optimisticHandlers } from "@/shared/query/optimistic";
 
 export type UseOptimisticMutationOptions<TVars, TData = unknown, TCache = unknown> = {
   mutationFn: (vars: TVars) => Promise<TData>;

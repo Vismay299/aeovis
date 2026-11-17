@@ -7,7 +7,7 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 import { safeHttpUrl } from "@/shared/safe-url";
 
 type Props = {

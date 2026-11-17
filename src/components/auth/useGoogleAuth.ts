@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useState } from "react";
-import { getSupabaseBrowserClient } from "../../lib/supabase/browser.js";
+import { getSupabaseBrowserClient } from "../../shared/supabase/browser.js";
 import { authCallbackUrl } from "../../shared/auth-redirect.ts";
 import { trackAuthEvent } from "./telemetry.ts";
 

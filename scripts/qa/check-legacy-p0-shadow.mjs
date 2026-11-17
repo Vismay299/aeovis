@@ -11,13 +11,13 @@ try{
   assert.equal(root,'/tmp/aeovis-p0-legacy-shadow');
   for(const key of Object.keys(process.env))if(/SUPABASE|DATABASE|BRIGHTDATA|OPENAI|OPENROUTER|PERPLEXITY|GEMINI|^LLM_/.test(key))delete process.env[key];
   globalThis.fetch=async()=>{networkAttempts++;throw Error('Legacy shadow network is prohibited');};
-  const sourcePath=`${root}/src/lib/workers/scanWorker.js`,source=await fs.readFile(sourcePath);
-  const expected=execFileSync('git',['show',`${baseline}:src/lib/workers/scanWorker.js`]);
+  const sourcePath=`${root}/src/server/workers/scanWorker.js`,source=await fs.readFile(sourcePath);
+  const expected=execFileSync('git',['show',`${baseline}:src/server/workers/scanWorker.js`]);
   assert.equal(crypto.createHash('sha256').update(source).digest('hex'),crypto.createHash('sha256').update(expected).digest('hex'));
   const data=JSON.parse(await fs.readFile(input,'utf8'));
   console.log=console.warn=console.error=()=>{};
   const {runFinalizePhase}=await import(pathToFileURL(sourcePath));
-  const {makeMemoryScanBackend}=await import('../../src/lib/demo/memoryScanBackend.js');
+  const {makeMemoryScanBackend}=await import('../../src/server/demo/memoryScanBackend.js');
   const backend=makeMemoryScanBackend(),jobId=crypto.randomUUID();
   await backend.deps.upsertPromptResults(data.rows.map(row=>({...structuredClone(row),job_id:jobId,scan_id:null})));
   const old=await runFinalizePhase(jobId,structuredClone(data.checkpoint),{...backend.deps,resolveEnabledEngines:()=>data.checkpoint.engines.map(name=>({name})),extractCompetitors:async()=>[],getScansByDomain:async()=>[],getResultBrandsForScan:async()=>[]});

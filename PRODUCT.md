@@ -69,13 +69,13 @@ on the homepage with existing case history.
 
 ## Evidence on Hand
 
-- Sample report with real product data shapes (`src/data/mockData.js`).
+- Sample report with real product data shapes (`src/shared/mockData.js`).
 - Live demo answer fragments use fictional brands (Brightwave, NorthPeak, Lumen IQ) —
   synthetic, and must stay recognizably synthetic.
 - No real customer testimonials, logos, or case studies exist. Do not fabricate.
 - The landing page makes no aggregate claim about the product's lifetime work — no
   probe total, no run count, no visitor tally. Two guards in
-  `src/lib/landingProbeCounter.test.mjs` hold that line, and neither is a proof of
+  `src/server/landingProbeCounter.test.mjs` hold that line, and neither is a proof of
   honesty. Find them by name, not line number — both moved within a day of being
   cited.
   - `GUARD — the landing surface manufactures no number` scans `src/app/page.js`
@@ -90,7 +90,7 @@ on the homepage with existing case history.
     `ProbeCounter.jsx` must not exist, the page must name no
     `*Counter`/`*Ticker`/`*Tally`/`*Odometer`, and `Probes run` must not survive
     comment-stripping. It is a name check, and a rename evades it.
-  `src/lib/landingHonesty.test.mjs` ties the figures that do remain to the sample
+  `src/shared/landingHonesty.test.mjs` ties the figures that do remain to the sample
   report rather than letting the page type its own.
   - **Correction, 2026-09-09 (R6.3.5).** From `e70d21e` (2026-07-23) until this
     edit, this bullet read *"Probe counter on the landing page is simulated.
@@ -118,7 +118,7 @@ on the homepage with existing case history.
     out of scope to edit here: the R2.10.2 note in `src/app/page.js` (`git grep -n
     "THE PROBE COUNTER, AND WHY THERE ISN'T ONE" src/app/page.js`) says "that module
     and the strip around it were deleted on 2026-08-16 in `5111219`", and the header
-    of `src/lib/landingProbeCounter.test.mjs` says the module went "along with the
+    of `src/server/landingProbeCounter.test.mjs` says the module went "along with the
     whole stats strip". Only the module did. A first draft of this correction
     repeated that claim because it was copied forward from those comments on trust
     instead of re-derived from `git show` — which is precisely the failure this

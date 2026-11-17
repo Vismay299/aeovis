@@ -12,15 +12,15 @@ const output = value("--output", "/tmp/aeo-local-acceptance.json");
 // Clear before dynamic imports evaluate db.js. Credentials must never make a
 // local acceptance run accidentally use a remote persistence backend.
 for (const key of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY", "DATABASE_URL"]) delete process.env[key];
-const { runMockScan } = await import("../src/lib/demo/mockScan.js");
+const { runMockScan } = await import("../src/server/demo/mockScan.js");
 let result;
 const acceptanceErrors = [];
 if (!live) {
   result = await runMockScan();
 } else {
-  const { makeMemoryScanBackend } = await import("../src/lib/demo/memoryScanBackend.js");
-  const { runScanChunk } = await import("../src/lib/workers/scanWorker.js");
-  const { resolveEnabledEngines } = await import("../src/lib/scoring/enginePipeline.js");
+  const { makeMemoryScanBackend } = await import("../src/server/demo/memoryScanBackend.js");
+  const { runScanChunk } = await import("../src/server/workers/scanWorker.js");
+  const { resolveEnabledEngines } = await import("../src/shared/scoring/enginePipeline.js");
   const engines = resolveEnabledEngines({ engines: "aio,chatgpt,gemini,perplexity" });
   if (engines.length !== 4) throw new Error("Configure all four providers before running live acceptance");
   const backend = makeMemoryScanBackend();
@@ -44,9 +44,9 @@ if (!live) {
     if (!slice || slice.coverage_pct < 90 && engine.name !== "aio" || slice.error_rate_pct > 0) acceptanceErrors.push(`Live ${engine.name} has incomplete coverage/errors: ${JSON.stringify(slice)}`);
   }
   if (content) {
-    const { createContentJob } = await import("../src/lib/db/content.js");
-    const { startContentJob } = await import("../src/lib/content/contentWorker.js");
-    const { normalizeAgent } = await import("../src/lib/content/agents/model.js");
+    const { createContentJob } = await import("../src/server/db/content.js");
+    const { startContentJob } = await import("../src/shared/content/contentWorker.js");
+    const { normalizeAgent } = await import("../src/shared/content/agents/model.js");
     const agent = normalizeAgent({ name: "Tiles comparison writer", format: "comparison", channel: "website", length_hint: "600-800 words", pipeline: ["coordinate", "research", "benchmark", "draft", "review"] }, "local-acceptance").agent;
     const contentJob = await createContentJob({ brand: "local-acceptance", playbook: "geo_article", agent_snapshot: agent, input: { query: "best tile brands in India", brand_name: brand, url, brief: "Italica is a tile manufacturer in India. Use only sourced product facts. Do not invent prices, warranties or certifications." } });
     let item;

@@ -8,13 +8,13 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "sucrase";
 
-import * as apiClient from "../../services/api.js";
-import * as formatModule from "../../utils/format.js";
-import * as aliasesModule from "../../lib/scoring/aliases.js";
-import * as brandKeyModule from "../../lib/scoring/brandKey.js";
-import * as aioConstantsModule from "../../lib/scoring/aioConstants.js";
-import * as enginePipelineModule from "../../lib/scoring/enginePipeline.js";
-import * as rosterContinuityModule from "../../lib/scoring/rosterContinuity.js";
+import * as apiClient from "../../shared/api.js";
+import * as formatModule from "../../shared/format.js";
+import * as aliasesModule from "../../shared/scoring/aliases.js";
+import * as brandKeyModule from "../../shared/scoring/brandKey.js";
+import * as aioConstantsModule from "../../shared/scoring/aioConstants.js";
+import * as enginePipelineModule from "../../shared/scoring/enginePipeline.js";
+import * as rosterContinuityModule from "../../shared/scoring/rosterContinuity.js";
 import * as interlockingModule from "./interlocking.js";
 
 /**
@@ -102,12 +102,12 @@ async function renderDashboardShell(props) {
         useSearchParams: () => new URLSearchParams(),
       },
     ],
-    ["@/services/api", apiStub],
-    ["@/utils/format", formatModule],
-    ["@/lib/scoring/aliases", aliasesModule],
-    ["@/lib/scoring/brandKey", brandKeyModule],
-    ["@/lib/scoring/aioConstants", aioConstantsModule],
-    ["@/lib/scoring/enginePipeline", enginePipelineModule],
+    ["@/shared/api", apiStub],
+    ["@/shared/format", formatModule],
+    ["@/shared/scoring/aliases", aliasesModule],
+    ["@/shared/scoring/brandKey", brandKeyModule],
+    ["@/shared/scoring/aioConstants", aioConstantsModule],
+    ["@/shared/scoring/enginePipeline", enginePipelineModule],
   ]);
 
   const scoreBandSource = await readFile(SCORE_BAND_PATH, "utf8");
@@ -125,7 +125,7 @@ async function renderDashboardShell(props) {
 
   const requireShim = (specifier) => {
     if (modules.has(specifier)) return modules.get(specifier);
-    if (specifier.startsWith("@/components/") || specifier.startsWith("@/lib/")) {
+    if (specifier.startsWith("@/components/") || specifier.startsWith("@/server/") || specifier.startsWith("@/shared/")) {
       return anyNamedExport;
     }
     throw new Error(
@@ -454,10 +454,10 @@ test("R2.7.13 ACCEPT — HomeDashboard safely renders unmeasured scores with em-
         useRouter: () => ({ push() {}, replace() {} }),
       },
     ],
-    ["@/services/api", { __esModule: true, fetchScanHistory: () => Promise.resolve({ data: [] }), saveScan: () => {} }],
-    ["@/utils/format", formatModule],
-    ["@/lib/historyStoreState", { historyLoadState: () => ({ status: "ready", scans: [] }) }],
-    ["@/lib/scoring/enginePipeline", {
+    ["@/shared/api", { __esModule: true, fetchScanHistory: () => Promise.resolve({ data: [] }), saveScan: () => {} }],
+    ["@/shared/format", formatModule],
+    ["@/shared/historyStoreState", { historyLoadState: () => ({ status: "ready", scans: [] }) }],
+    ["@/shared/scoring/enginePipeline", {
       __esModule: true,
       describeScanMeasurement: (row) => {
         const pct = row?.score != null ? Number(row.score) : null;
@@ -530,7 +530,7 @@ test("R2.7.13 ACCEPT — OverviewView unmeasured KPIs render em-dash without per
     ["react", React],
     ["lucide-react", anyNamedExport],
     ["./interlocking", interlockingModule],
-    ["@/lib/scoring/rosterContinuity", rosterContinuityModule],
+    ["@/shared/scoring/rosterContinuity", rosterContinuityModule],
     ["./OverviewAnalytics", { __esModule: true, OverviewAnalytics: nullComponent }],
   ]);
 

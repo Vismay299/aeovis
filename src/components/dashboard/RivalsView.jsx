@@ -9,7 +9,7 @@
  */
 
 import { RIVAL_RAMP } from '@/components/charts/FlowDiagram';
-import { describeRosterState } from '@/lib/scoring/rosterContinuity';
+import { describeRosterState } from '@/shared/scoring/rosterContinuity';
 
 export const RivalsView = ({
   competitors = [],

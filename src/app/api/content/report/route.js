@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateWeeklyReport } from "@/lib/content/weeklyReport";
+import { generateWeeklyReport } from "@/shared/content/weeklyReport";
 
 export const dynamic = "force-dynamic";
 

@@ -1,12 +1,12 @@
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../lib/workspace/requireWorkspace.ts";
-import { requireApprovedPrice } from "../../../../../lib/pricing/pricedActions.ts";
-import { parseResearchTargetOrThrow } from "../../../../../lib/research/target.ts";
+} from "../../../../../server/workspace/requireWorkspace.ts";
+import { requireApprovedPrice } from "../../../../../shared/pricing/pricedActions.ts";
+import { parseResearchTargetOrThrow } from "../../../../../server/research/target.ts";
 import {
   isLabsLocationCode,
   resolveLabsMarket,
@@ -15,13 +15,13 @@ import {
 import {
   domainBrandQuery,
   domainPagesRequestBody,
-} from "../../../../../lib/domain/domain.contract.ts";
+} from "../../../../../server/domain/domain.contract.ts";
 import {
   getPagesPage,
   type DomainServiceDeps,
-} from "../../../../../lib/domain/domainService.ts";
-import { createLabsClient } from "../../../../../lib/providers/dataforseo/labs.ts";
-import { toResearchError } from "../../../../../lib/research/providerErrors.ts";
+} from "../../../../../server/domain/domainService.ts";
+import { createLabsClient } from "../../../../../shared/providers/dataforseo/labs.ts";
+import { toResearchError } from "../../../../../server/research/providerErrors.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

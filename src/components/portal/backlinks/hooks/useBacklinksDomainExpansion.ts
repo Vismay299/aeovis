@@ -4,8 +4,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { keys, stableStringify } from "@/lib/query/keys";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { keys, stableStringify } from "@/shared/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
 import { paidQueryOptions } from "./useBacklinksPageData";
 import type { BacklinksRow, BacklinksTargetScope } from "@/shared/backlinks";

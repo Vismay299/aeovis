@@ -44,7 +44,7 @@ import {
   withBrowserTimeZone,
   type LocalScheduleTime,
 } from "@/shared/schedule";
-import { isApiError } from "@/lib/query/fetchJson";
+import { isApiError } from "@/shared/query/fetchJson";
 import { CostEstimateBox } from "./CostEstimateBox";
 import { FirstCheckStep } from "./FirstCheckStep";
 import { KeywordSuggestionStep } from "./KeywordSuggestionStep";

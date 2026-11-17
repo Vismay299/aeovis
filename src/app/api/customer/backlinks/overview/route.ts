@@ -1,36 +1,36 @@
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../lib/workspace/requireWorkspace.ts";
-import { requireApprovedPrice } from "../../../../../lib/pricing/pricedActions.ts";
+} from "../../../../../server/workspace/requireWorkspace.ts";
+import { requireApprovedPrice } from "../../../../../shared/pricing/pricedActions.ts";
 import {
   backlinksBrandQuery,
   backlinksOverviewRequestBody,
-} from "../../../../../lib/backlinks/backlinks.contract.ts";
+} from "../../../../../server/backlinks/backlinks.contract.ts";
 import {
   profileOverview,
   type BacklinksServiceDeps,
-} from "../../../../../lib/backlinks/backlinksService.ts";
-import { createBacklinksClient } from "../../../../../lib/providers/dataforseo/backlinks.ts";
-import { normalizeBacklinksTarget } from "../../../../../lib/providers/dataforseo/backlinksTarget.ts";
+} from "../../../../../server/backlinks/backlinksService.ts";
+import { createBacklinksClient } from "../../../../../shared/providers/dataforseo/backlinks.ts";
+import { normalizeBacklinksTarget } from "../../../../../shared/providers/dataforseo/backlinksTarget.ts";
 import {
   appendResearch,
   declaredCompetitors,
-} from "../../../../../lib/projectContext/service.ts";
+} from "../../../../../server/projectContext/service.ts";
 import {
   backlinksResearchKey,
   formatBacklinksResearchSummary,
-} from "../../../../../lib/backlinks/researchLog.ts";
-import { toResearchError } from "../../../../../lib/research/providerErrors.ts";
-import { keepAlive } from "../../../../../lib/keepAlive.js";
+} from "../../../../../server/backlinks/researchLog.ts";
+import { toResearchError } from "../../../../../server/research/providerErrors.ts";
+import { keepAlive } from "../../../../../server/keepAlive.js";
 import {
   listSnapshotTargets,
   recordLookupSnapshot,
   type SnapshotTarget,
-} from "../../../../../lib/backlinks/snapshots.ts";
+} from "../../../../../server/backlinks/snapshots.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

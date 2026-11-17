@@ -40,7 +40,7 @@ import {
 import {
   applyShiftRangeSelection,
   type SelectionAnchor,
-} from "@/lib/table/tableSelection";
+} from "@/shared/table/tableSelection";
 
 type AppColumnMeta<TData> = {
   headerClassName?: string;

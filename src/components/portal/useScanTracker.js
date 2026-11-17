@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { pollIntervalMs } from "@/lib/query/polling";
-import { keys } from "@/lib/query/keys";
-import { trackEvent } from "@/lib/telemetry/client";
+import { pollIntervalMs } from "@/shared/query/polling";
+import { keys } from "@/shared/query/keys";
+import { trackEvent } from "@/shared/telemetry/client";
 import {
   ACTIVE_SCAN_STATUSES,
   PANEL_NOT_APPROVED,

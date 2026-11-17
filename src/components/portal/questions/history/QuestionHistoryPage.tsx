@@ -27,8 +27,8 @@ import {
   type HistoryPeriod,
   type HistoryRange,
 } from "@/shared/question-history";
-import { trackEvent } from "@/lib/telemetry/client";
-import { isApiError } from "@/lib/query/fetchJson";
+import { trackEvent } from "@/shared/telemetry/client";
+import { isApiError } from "@/shared/query/fetchJson";
 import { HistoryDateRange } from "./HistoryDateRange";
 import { BrandComparison } from "./BrandComparison";
 import { AnswerPanel } from "./AnswerPanel";

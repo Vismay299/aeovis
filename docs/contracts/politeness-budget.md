@@ -65,8 +65,8 @@ commit.
 ```
 git log --oneline 9e85cfe..HEAD -- worker/src/config.js worker/src/index.js \
   worker/src/lib/queue.js worker/src/lib/probe.js worker/README.md \
-  src/lib/scoring/aioConstants.js src/lib/scoring/enginePipeline.js \
-  src/lib/workers/scanWorker.js src/lib/engines/ src/lib/rateLimit.js \
+  src/shared/scoring/aioConstants.js src/shared/scoring/enginePipeline.js \
+  src/server/workers/scanWorker.js src/shared/engines/ src/server/rateLimit.js \
   supabase/migrations/010_probe_tasks.sql supabase/migrations/011_scan_runs.sql \
   vercel.json .env.example
 ```
@@ -80,10 +80,10 @@ uncommitted while this was written:
 
 | File | Why it matters here |
 |---|---|
-| `src/lib/engines/perplexity.js` | §2.3's per-request retry shape is read from `9e85cfe`; the file is under edit and its cost/state vocabulary is moving. Cited by symbol only. |
-| `src/lib/engines/gemini.js`, `src/lib/gemini.js` | Under edit. No claim here depends on either — `gemini` is dead code (`engine-surface-matrix.md` §3.4). |
+| `src/shared/engines/perplexity.js` | §2.3's per-request retry shape is read from `9e85cfe`; the file is under edit and its cost/state vocabulary is moving. Cited by symbol only. |
+| `src/shared/engines/gemini.js`, `src/shared/gemini.js` | Under edit. No claim here depends on either — `gemini` is dead code (`engine-surface-matrix.md` §3.4). |
 | `src/app/api/scan/[job_id]/status/route.js` | Under edit; named here only as one of the three routes that reach `runScanChunk`. |
-| `src/lib/scoring/enginePipeline.js` | **Clean when §2.1 was read at `9e85cfe`; modified by another agent before this file was submitted.** `CHATGPT_CONCURRENCY`, `PERPLEXITY_CONCURRENCY`, `ENGINE_REGISTRY`, `runWithConcurrency` and `runMultiEngineScan` are cited **by symbol only**, which is exactly the case this policy exists for. Re-grep the names before trusting §2.1 or §6 V3. |
+| `src/shared/scoring/enginePipeline.js` | **Clean when §2.1 was read at `9e85cfe`; modified by another agent before this file was submitted.** `CHATGPT_CONCURRENCY`, `PERPLEXITY_CONCURRENCY`, `ENGINE_REGISTRY`, `runWithConcurrency` and `runMultiEngineScan` are cited **by symbol only**, which is exactly the case this policy exists for. Re-grep the names before trusting §2.1 or §6 V3. |
 
 Every other file cited was clean at `9e85cfe`. A drift table is worth writing
 only if it is true when read: if you are reading this after those commits
@@ -130,12 +130,12 @@ in it was executed, not reasoned.
 
 | Engine | Constant | Value | Where |
 |---|---|---|---|
-| `aio` | `AIO_CONCURRENCY` | **6** | `src/lib/scoring/aioConstants.js` |
-| `chatgpt` | `CHATGPT_CONCURRENCY` | **4** | `src/lib/scoring/enginePipeline.js` (module-private `const`, not exported) |
-| `perplexity` | `PERPLEXITY_CONCURRENCY` | **4** | `src/lib/scoring/enginePipeline.js` (module-private `const`, not exported) |
+| `aio` | `AIO_CONCURRENCY` | **6** | `src/shared/scoring/aioConstants.js` |
+| `chatgpt` | `CHATGPT_CONCURRENCY` | **4** | `src/shared/scoring/enginePipeline.js` (module-private `const`, not exported) |
+| `perplexity` | `PERPLEXITY_CONCURRENCY` | **4** | `src/shared/scoring/enginePipeline.js` (module-private `const`, not exported) |
 
 They reach the probe loop as the `concurrency` property of each `ENGINE_REGISTRY`
-entry in `src/lib/scoring/enginePipeline.js`. **None of the three is readable
+entry in `src/shared/scoring/enginePipeline.js`. **None of the three is readable
 from the environment**, none is validated, and none is printed at start-up.
 
 `AIO_CONCURRENCY`'s own comment states its reasoning: 34 queries at ~45–60s each
@@ -144,16 +144,16 @@ timeout", and 6 halves it. That is a reason about **our** page, not about
 Google's or Bright Data's tolerance. The comment's second clause — that Bright
 Data retries 429s internally — is a claim about the vendor and **is not verified
 in this repository**; what *is* verifiable here is that `brightDataSearch`
-(`src/lib/engines/brightdata.js`) retries a 429 itself.
+(`src/shared/engines/brightdata.js`) retries a 429 itself.
 
 **Two loops read `concurrency`, and only one of them runs in production.**
-`runProbingPhase` in `src/lib/workers/scanWorker.js` slices the pending queries
+`runProbingPhase` in `src/server/workers/scanWorker.js` slices the pending queries
 into windows of `engine.concurrency` and `Promise.all`s each window. That is the
 live path (`engine-surface-matrix.md` §2.1 traces it to the `vercel.json` cron).
 `runMultiEngineScan` in `enginePipeline.js` has its own `runWithConcurrency`
 helper and is **test-only** — its only importers are
-`src/lib/scoring/citationDenominator.test.mjs` and
-`src/lib/scoring/citationShareEmptyDenominator.test.mjs`.
+`src/shared/scoring/citationDenominator.test.mjs` and
+`src/shared/scoring/citationShareEmptyDenominator.test.mjs`.
 
 ### 2.2 Delay between probes — there is none, anywhere
 
@@ -162,9 +162,9 @@ helper and is **test-only** — its only importers are
 - The fleet loop `start` in `worker/src/index.js` sleeps **only when it claimed
   nothing**: `if (handled === 0) await sleep(config.idlePollMs)`. A pass that
   handled work loops immediately into the next claim.
-- **There is no jitter in the tree.** `git grep "Math.random" -- src/lib/ worker/`
-  returns matches in exactly two files: `src/lib/landingProbeCounter.test.mjs`
-  (a guard *against* fabricated randomness) and `src/lib/workers/scanChunk.test.mjs`
+- **There is no jitter in the tree.** `git grep "Math.random" -- src/server/ src/shared/ worker/`
+  returns matches in exactly two files: `src/server/landingProbeCounter.test.mjs`
+  (a guard *against* fabricated randomness) and `src/server/workers/scanChunk.test.mjs`
   (a test fixture id). No engine adapter and no worker file uses randomness for
   anything.
 
@@ -172,9 +172,9 @@ helper and is **test-only** — its only importers are
 
 | Adapter | Attempts | Delay between attempts | Jitter |
 |---|---|---|---|
-| `brightDataSearch` (`src/lib/engines/brightdata.js`) | `options.attempts ?? 2` | `backoffMs * attempt`, tripled for a 429; `backoffMs` defaults to 3000, so one 429 retry waits 9s | none |
-| `probeChatGpt` (`src/lib/engines/openai.js`) | `MAX_RETRIES = 2` plus the first try | `delay(1000 * Math.pow(2, attempt))` on 429/5xx | none |
-| `probePerplexity` (`src/lib/engines/perplexity.js`) | `MAX_RETRIES = 2` plus the first try | `RETRY_BASE_DELAY_MS * Math.pow(2, attempt)` | none |
+| `brightDataSearch` (`src/shared/engines/brightdata.js`) | `options.attempts ?? 2` | `backoffMs * attempt`, tripled for a 429; `backoffMs` defaults to 3000, so one 429 retry waits 9s | none |
+| `probeChatGpt` (`src/shared/engines/openai.js`) | `MAX_RETRIES = 2` plus the first try | `delay(1000 * Math.pow(2, attempt))` on 429/5xx | none |
+| `probePerplexity` (`src/shared/engines/perplexity.js`) | `MAX_RETRIES = 2` plus the first try | `RETRY_BASE_DELAY_MS * Math.pow(2, attempt)` | none |
 
 Every one of these is **per request and deterministic**. Concurrency is 4 or 6.
 So when a surface starts refusing, all four (or six) in-flight probes take the
@@ -190,11 +190,11 @@ matches `rate limit` / `quota` is thrown rather than retried
 
 ### 2.4 Volume — no cap of any kind on outbound probes
 
-`git grep -i "daily_cap|dailyCap|probe_cap|per_day"` over `src/lib`, `worker/`
+`git grep -i "daily_cap|dailyCap|probe_cap|per_day"` over `src/server`, `src/shared`, `worker/`
 and `supabase/migrations` returns nothing.
 
 The only volume bound in the tree is **inbound**, and it protects our spend
-rather than the surface: `src/lib/rateLimit.js`'s `DEFAULTS` are 5 scans per
+rather than the surface: `src/server/rateLimit.js`'s `DEFAULTS` are 5 scans per
 client per 3,600,000 ms window, overridable by `SCAN_RATE_LIMIT` and
 `SCAN_RATE_LIMIT_WINDOW_MS` (both present in `.env.example`). Its own header
 says what it is for: "one anonymous caller can start unlimited scans, each
@@ -204,8 +204,8 @@ That is not a politeness budget and must never be read as one:
 
 - it is **per client**, so N callers are N × the limit;
 - it bounds *scans*, not probes. One scan is up to `DEFAULT_UNBRANDED_TARGET`
-  (30, `src/lib/scoring/promptSetSize.js`) plus `MAX_BRANDED` (4,
-  `src/lib/scoring/aioQueryClassify.js`) = **34 queries per engine**, so a single
+  (30, `src/shared/scoring/promptSetSize.js`) plus `MAX_BRANDED` (4,
+  `src/shared/scoring/aioQueryClassify.js`) = **34 queries per engine**, so a single
   allowed scan is up to 68 outbound requests with `ENGINES=aio,perplexity`;
 - it does not apply to the cron path at all. `vercel.json` schedules
   `/api/scan/worker` at `0 0 * * *`, and that route reaches `runScanChunk`
@@ -369,7 +369,7 @@ distinguishable from a human, and it also synchronises every container that
 started at the same time. The randomness is not decoration; it is the property
 that makes the pacing worth paying for. Note that the tree contains a guard that
 exists to *forbid* `Math.random` on the landing surface
-(`src/lib/landingProbeCounter.test.mjs`) — that rule is about fabricating a
+(`src/server/landingProbeCounter.test.mjs`) — that rule is about fabricating a
 displayed number and has nothing to do with this one. A jittered delay is not a
 measurement of anything and is never rendered.
 
@@ -664,16 +664,16 @@ concurrency constants are exactly where §2.1 and §6 V3 found them:
 
 | Constant | Value | Where |
 |---|---|---|
-| `AIO_CONCURRENCY` | 6 | `src/lib/scoring/aioConstants.js`, line 9 |
-| `CHATGPT_CONCURRENCY` | 4 | `src/lib/scoring/enginePipeline.js`, line 18 |
-| `PERPLEXITY_CONCURRENCY` | 4 | `src/lib/scoring/enginePipeline.js`, line 19 |
+| `AIO_CONCURRENCY` | 6 | `src/shared/scoring/aioConstants.js`, line 9 |
+| `CHATGPT_CONCURRENCY` | 4 | `src/shared/scoring/enginePipeline.js`, line 18 |
+| `PERPLEXITY_CONCURRENCY` | 4 | `src/shared/scoring/enginePipeline.js`, line 19 |
 
 Line numbers appear here against this document's own no-line-citations policy
 because a remaining gap must be findable by someone who is not looking for it.
 `enginePipeline.js` is under concurrent edit (see the working-tree disclosure in
 the header), so those two are the working tree's at the time of writing and the
 symbols are what to trust: re-derive with
-`git grep -n "_CONCURRENCY" -- src/lib/scoring/`. All three still
+`git grep -n "_CONCURRENCY" -- src/shared/scoring/`. All three still
 fail every one of §5.1's four tests: none is readable from the environment, none
 is validated, none is printed at start-up, and two are module-private. The
 per-surface delay and cap have **no** representation in `src/` at all.
@@ -696,14 +696,14 @@ is said plainly.
 
 | # | Violation | Where | Owning task |
 |---|---|---|---|
-| V1 | No inter-probe delay exists on any path. `runProbingPhase` runs `Promise.all` windows back to back; the fleet loop sleeps only when it claimed nothing. | `src/lib/workers/scanWorker.js` (`runProbingPhase`); `worker/src/index.js` (`start`) | **none — needs one** |
+| V1 | No inter-probe delay exists on any path. `runProbingPhase` runs `Promise.all` windows back to back; the fleet loop sleeps only when it claimed nothing. | `src/server/workers/scanWorker.js` (`runProbingPhase`); `worker/src/index.js` (`start`) | **none — needs one** |
 | V2 | No jitter exists anywhere. All three retry backoffs are deterministic, and N concurrent probes therefore retry in lockstep after a shared 429 (§2.3). | `brightdata.js`, `openai.js`, `perplexity.js` | **none — needs one** |
-| V3 | **Narrowed, not closed.** The **fleet** now reads its concurrency, delays and cap from `CONFIG_FIELDS` + `SURFACE_BUDGETS` in `worker/src/config.js`, validated at boot and printed at start-up, so it passes all four of §5.1's tests. The **scoring path** is untouched: three hard-coded constants, two module-private, none overridable, none validated, none logged — and its 4 for the two API rows is itself above §3.2's 2. See §5.4. | `AIO_CONCURRENCY` in `src/lib/scoring/aioConstants.js`; `CHATGPT_CONCURRENCY` / `PERPLEXITY_CONCURRENCY` in `src/lib/scoring/enginePipeline.js` | **none — needs one** (the fleet half shipped under R1.1.5) |
+| V3 | **Narrowed, not closed.** The **fleet** now reads its concurrency, delays and cap from `CONFIG_FIELDS` + `SURFACE_BUDGETS` in `worker/src/config.js`, validated at boot and printed at start-up, so it passes all four of §5.1's tests. The **scoring path** is untouched: three hard-coded constants, two module-private, none overridable, none validated, none logged — and its 4 for the two API rows is itself above §3.2's 2. See §5.4. | `AIO_CONCURRENCY` in `src/shared/scoring/aioConstants.js`; `CHATGPT_CONCURRENCY` / `PERPLEXITY_CONCURRENCY` in `src/shared/scoring/enginePipeline.js` | **none — needs one** (the fleet half shipped under R1.1.5) |
 | V4 | No daily cap of any kind is **enforced** on outbound probes, and no schema could hold a fleet-wide one per surface (§5.3). `FLEET_DAILY_CAP` now carries the intended number and the boot log prints it as `cap NOT ENFORCED`, which makes the gap visible; it does not close it. | absence; `supabase/migrations/010_probe_tasks.sql`, `011_scan_runs.sql` | **none — needs one** |
 | V5 | No canary, and no definition of "quiet" for the gate that depends on one. R1.7.2 gates a production cutover on a condition nothing computes. | absence (§2.6) | R1.3.4, R1.4.3 (build one); the **definition** is unowned |
 | V6 | **Pacing creates this one; the boot check is the remedy taken.** `renewBatch` is still exported and still never called (§2.7), so a batch's lease is still fixed at claim time. What changed is that the batch can no longer be larger than one lease pays for: §5.2's arithmetic runs at boot, refuses a `FLEET_BATCH_SIZE` the operator set that cannot fit, and narrows the **default** 5 to 2 with an announced `NOTE:`. The underlying defect — no lease renewal — is untouched, and becomes load-bearing again the moment a probe runs longer than its timeout. | `worker/src/lib/queue.js` (`renewBatch`, uncalled); `worker/src/index.js` (import list); the boot check in `resolveConfig`, `worker/src/config.js` | **none — needs one** for the renewal |
 | V7 | Retries are in-process loops underneath a single queued attempt, so `probe_tasks.max_attempts` (3) bounds up to nine real requests per query once an adapter exists (§3.6). | `MAX_RETRIES` in `openai.js` and `perplexity.js`; `options.attempts` in `brightdata.js`; `claim_probe_tasks` in migration 010 | **none — needs one** |
-| V8 | **Partly closed.** §5.2's six budget variables are now in `.env.example`, under a *Probe fleet* block, and a guard test in `src/lib/fleetConfig.test.mjs` fails if one is read at boot and absent there. The other six `FLEET_*` variables (engines, batch, lease, idle poll, heartbeat, worker id) are still absent from it. | `.env.example` | the remainder is still R1.1.3's |
+| V8 | **Partly closed.** §5.2's six budget variables are now in `.env.example`, under a *Probe fleet* block, and a guard test in `src/server/fleetConfig.test.mjs` fails if one is read at boot and absent there. The other six `FLEET_*` variables (engines, batch, lease, idle poll, heartbeat, worker id) are still absent from it. | `.env.example` | the remainder is still R1.1.3's |
 
 **V6 is the one to read twice.** Every other row is a thing the tree does not do.
 V6 is a latent defect that this contract's own §3.4 would *activate*: today

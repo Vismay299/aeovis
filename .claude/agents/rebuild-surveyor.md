@@ -38,7 +38,7 @@ A task id, its anchors, and the finding ids (A1-C12) behind it.
 idiom for every search tool, what is safe to read, and what to do if a secret
 appears anyway — lives in `CLAUDE.md` § "Secrets hygiene", which every session
 and every agent in this project loads. It binds you exactly as if it were
-written here. `src/lib/agentSecretsGuard.test.mjs` fails if this pointer or
+written here. `src/server/agentSecretsGuard.test.mjs` fails if this pointer or
 that section goes missing.
 
 ## How to be useful

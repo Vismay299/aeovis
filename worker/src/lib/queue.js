@@ -6,8 +6,8 @@
  *
  * WHY THE CLAIM IS A DATABASE FUNCTION
  * This workspace may not import from src/ — the container image does not ship
- * it, and src/lib/workerIsolation.test.mjs fails the build on any crossing
- * import. So the fleet cannot call `src/lib/jobLease.js`. The three options
+ * it, and src/server/workerIsolation.test.mjs fails the build on any crossing
+ * import. So the fleet cannot call `src/server/jobLease.js`. The three options
  * were: copy the lease into this workspace (a second copy that drifts), extract
  * a shared package (heavier than this task), or put the claim in SQL. SQL wins
  * outright: one implementation, called by the app and by the fleet over RPC,
@@ -31,8 +31,8 @@ import { createClient } from "@supabase/supabase-js";
 /**
  * Why a claim came back empty-handed.
  *
- * COPIED from src/lib/probeQueue.js, deliberately and unavoidably: this
- * workspace cannot import it. `src/lib/probeQueue.test.mjs` asserts the two
+ * COPIED from src/server/probeQueue.js, deliberately and unavoidably: this
+ * workspace cannot import it. `src/server/probeQueue.test.mjs` asserts the two
  * copies still agree, so the duplication is checked rather than trusted.
  *
  * The distinction is the point. Standing rule 1: "0 claimed because the queue
@@ -113,7 +113,7 @@ export function dbError(fn, error) {
 
 /**
  * Read the RPC's report into the shape the loop uses. PURE — copied from
- * src/lib/probeQueue.js's `normalizeClaim` for the reason above.
+ * src/server/probeQueue.js's `normalizeClaim` for the reason above.
  */
 export function normalizeClaim(raw) {
   if (!raw || typeof raw !== "object") {

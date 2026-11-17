@@ -11,7 +11,7 @@ import { usePortal } from "../PortalShell";
 import { Badge, Banner, Button, Card, PageHeader, SkeletonRows, formatDate, formatRelative } from "../ui";
 import PropertyPicker from "./PropertyPicker";
 import PerformanceCard from "./PerformanceCard";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 
 const CALLBACK_PARAMS = ["gsc_attempt", "gsc_connected", "gsc_error", "brand_key"];
 const JSON_HEADERS = { "Content-Type": "application/json" };

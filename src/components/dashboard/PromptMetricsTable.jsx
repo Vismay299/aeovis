@@ -17,7 +17,7 @@ import { SectionStrap } from "./SectionStrap";
  * brand's latest scan) and renders one sortable/filterable row per tracked
  * prompt. Purely presentational over that one fetch: all grouping/delta/
  * null-handling math already happened server-side in
- * src/lib/analytics/promptMetrics.js's groupPromptRows.
+ * src/shared/analytics/promptMetrics.js's groupPromptRows.
  *
  * `brand` is ALREADY a resolveBrandKey() output by the time it reaches this
  * component — QueriesView (this component's only caller) receives it

@@ -2,22 +2,22 @@
 //   src/server/features/keywords/services/research/refresh-metrics.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../lib/workspace/requireWorkspace.ts";
-import { clusterBody } from "../../../../../lib/keywords/keywords.contract.ts";
+} from "../../../../../server/workspace/requireWorkspace.ts";
+import { clusterBody } from "../../../../../server/keywords/keywords.contract.ts";
 import {
   requireApprovedPrice,
   recordApproval,
   type PricingContext,
-} from "../../../../../lib/pricing/pricedActions.ts";
-import "../../../../../lib/pricing/actions/index.ts";
-import { enqueueJob } from "../../../../../lib/jobs/enqueue.ts";
-import { KEYWORDS_CLUSTER_KIND } from "../../../../../lib/keywords/jobs.ts";
+} from "../../../../../shared/pricing/pricedActions.ts";
+import "../../../../../shared/pricing/actions/index.ts";
+import { enqueueJob } from "../../../../../server/jobs/enqueue.ts";
+import { KEYWORDS_CLUSTER_KIND } from "../../../../../server/keywords/jobs.ts";
 
 export const dynamic = "force-dynamic";
 

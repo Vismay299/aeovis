@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { createCustomerSupabaseClient } from "@/lib/supabase/customer";
+import { createCustomerSupabaseClient } from "@/shared/supabase/customer";
 import { authErrorCodeFrom } from "@/shared/auth-errors";
 import { normalizeAuthRedirect } from "@/shared/auth-redirect";
-import { isFirstSession, trackAuthServerEvent } from "@/lib/auth/telemetry";
-import { isFeatureEnabled } from "@/lib/features/flags";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { enqueueSignupEmails } from "@/lib/email/signup";
+import { isFirstSession, trackAuthServerEvent } from "@/server/auth/telemetry";
+import { isFeatureEnabled } from "@/server/features/flags";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { enqueueSignupEmails } from "@/server/email/signup";
 
 export const dynamic = "force-dynamic";
 

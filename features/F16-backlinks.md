@@ -8,7 +8,7 @@
 | ID | F16 |
 | Wave | 2 |
 | Comparison rows covered | "Backlinks" (OpenSEO: summary, list, referring domains, top pages, new and lost, spam filter, free Ahrefs DR column. Perceev: none) |
-| Depends on | F02 phase 2 (merged): `core.ts`, `envelope.ts`, `billingClassification.ts`, `meter`. F03 phase 1: `dataforseoPricing.backlinks.*`, `BACKLINKS_DEFAULT_LIMIT`. F06 (tables, export). **F13 phase 1** (requested addition to `features/README.md`): `src/shared/researchScope.ts`, `src/lib/providers/dataforseo/{filters,researchScopeFilters}.ts`, `src/lib/research/{cache,providerErrors}.ts`, `ResearchScopeSelect`, `SearchCard`, `PricedActionButton`. F01, F07 phase 1 (`declaredCompetitors`, `appendResearch`, `findRecentResearch`), F09 phase 1. UI phases need F04, F05. Phase 5 also needs F10 phase 1 (`src/shared/schedule.ts`, `src/lib/schedules/runDue.ts`). |
+| Depends on | F02 phase 2 (merged): `core.ts`, `envelope.ts`, `billingClassification.ts`, `meter`. F03 phase 1: `dataforseoPricing.backlinks.*`, `BACKLINKS_DEFAULT_LIMIT`. F06 (tables, export). **F13 phase 1** (requested addition to `features/README.md`): `src/shared/researchScope.ts`, `src/shared/providers/dataforseo/{filters,researchScopeFilters}.ts`, `src/server/research/{cache,providerErrors}.ts`, `ResearchScopeSelect`, `SearchCard`, `PricedActionButton`. F01, F07 phase 1 (`declaredCompetitors`, `appendResearch`, `findRecentResearch`), F09 phase 1. UI phases need F04, F05. Phase 5 also needs F10 phase 1 (`src/shared/schedule.ts`, `src/server/schedules/runDue.ts`). |
 | Blocks | F21 (link-prospecting skill uses these tools), F22 (backlink tools), F23 (reports read stored snapshots) |
 | Reserved migrations | 115–119. **115** `115_f16_backlink_snapshots.sql` (phase 5, optional). 116–119 unused. |
 | Feature flag | `FEATURE_BACKLINKS` (feature name `backlinks`, spend `["backlinks.research"]`): page, routes, sidebar item. `FEATURE_BACKLINKS_AHREFS_DR` (name `backlinks_ahrefs_dr`, spend `[]`): the free Ahrefs DR column, a separately flagged sub-feature pending the terms-of-use check. `FEATURE_BACKLINK_SNAPSHOTS` (name `backlink_snapshots`, spend `["backlinks.snapshots"]`): tracked history. All three in `CLIENT_FEATURES`; all off in production by default. |
@@ -44,7 +44,7 @@ Customers see who links to any domain, folder or page: a summary (backlinks, ref
 
 ## 3. What Perceev has today
 
-- No backlink data, no Ahrefs call, no backlink history. The site checks (`src/lib/crawlers/`, "Check owned website") do not read inbound links.
+- No backlink data, no Ahrefs call, no backlink history. The site checks (`src/server/crawlers/`, "Check owned website") do not read inbound links.
 - F13 phase 1 supplies research scope parsing, DataForSEO filter builders, cache helpers and the priced button; F07 the declared competitor list; F10 the schedule maths and due-runner.
 - **Must not break:** P0 controls (F16 calls only Backlinks endpoints through `metered()` and one free third-party endpoint; no answer engine); scans and their competitor roster; existing tests.
 
@@ -52,19 +52,19 @@ Customers see who links to any domain, folder or page: a summary (backlinks, ref
 
 | ID | Statement | Verified by |
 |---|---|---|
-| F16-AC-01 | The five fetchers send OpenSEO's bodies (common payload, defaults, spam conditions, history range) and `normalizeBacklinksTarget` passes the ported cases (scopes, `http://` kept, query/fragment rejected, domain scope sends `include_subdomains: false`). Provider failures surface as F02's error classes. | unit `src/lib/providers/dataforseo/backlinks.test.ts`, `backlinksTarget.test.ts` |
+| F16-AC-01 | The five fetchers send OpenSEO's bodies (common payload, defaults, spam conditions, history range) and `normalizeBacklinksTarget` passes the ported cases (scopes, `http://` kept, query/fragment rejected, domain scope sends `include_subdomains: false`). Provider failures surface as F02's error classes. | unit `src/shared/providers/dataforseo/backlinks.test.ts`, `backlinksTarget.test.ts` |
 | F16-AC-02 | Every entry of `createBacklinksClient()` is metered with an F03 `dataforseoPricing.backlinks.*` estimate > 0 and default feature `backlinks.research`. | unit `backlinks.test.ts` "every entry is priced" |
-| F16-AC-03 | The overview fetches summary and one year of history (ending yesterday UTC) in parallel for domain and subdomain scopes, summary only for an exact URL, and two sequential filtered counts for a subfolder with the other fields null and no trends; misspelled `reffering` keys are read. | unit `src/lib/backlinks/backlinksService.test.ts` |
+| F16-AC-03 | The overview fetches summary and one year of history (ending yesterday UTC) in parallel for domain and subdomain scopes, summary only for an exact URL, and two sequential filtered counts for a subfolder with the other fields null and no trends; misspelled `reffering` keys are read. | unit `src/server/backlinks/backlinksService.test.ts` |
 | F16-AC-04 | Tab pages use OpenSEO's offsets, sort fields, scope filters and `hasMore`; the spam condition counts 2 toward the 8-condition budget (`400 filters_over_budget` beyond); referring domains refuse subfolder scope with `400 subfolder_not_supported` and OpenSEO's message; backlinks default to `hideSpam: true`, referring domains always send `hideSpam: false`. | unit `backlinksService.test.ts`; `backlinksApiFilters.test.ts` |
-| F16-AC-05 | Filter builders pass OpenSEO's `backlinksApiFilters.test.ts` cases (include OR group, single include plain, budget throw, per-endpoint fields, client count equals server count). | unit `src/lib/backlinks/backlinksApiFilters.test.ts` |
+| F16-AC-05 | Filter builders pass OpenSEO's `backlinksApiFilters.test.ts` cases (include OR group, single include plain, budget throw, per-endpoint fields, client count equals server count). | unit `src/server/backlinks/backlinksApiFilters.test.ts` |
 | F16-AC-06 | Results are cached with `scope: "workspace"` for 6 h under versioned namespaces whose keys include target, scope, path, `includeSubdomains`, page, size, sort, filters, mode and `hideSpam`; OpenSEO's six billing cases hold (overview reuses cache on repeat; rows paged with offset and total; referring domains never fall back to the target spam score; page entries isolated per page, workspace and scope; subfolder totals from two counts; `last_seen` shown). | unit `backlinksService.test.ts` |
-| F16-AC-07 | `cacheOnly: true` never reserves or calls; loading `/portal/backlinks?target=…` never spends (live mode); priced actions quote §6.4's lines; a stale `maxUsd` returns `409 price_changed`. | route `src/lib/backlinks/backlinks.route.test.mjs`; browser B2 |
-| F16-AC-08 | An overview cache miss appends a research-log entry (`kind "backlinks.research"`); the lookup quote warns `recent_research` within 90 days. | unit `backlinksService.test.ts`; `src/lib/pricing/actions/backlinks.test.ts` |
-| F16-AC-09 | Ahrefs DR (flag `backlinks_ahrefs_dr`): ≤ 100 domains per call, normalised and de-duplicated, fetched 20 at a time with a 5 s timeout from `api.ahrefs.com` only; DR 0 → null; ratings and nulls cached 24 h globally; a failed fetch returns null and is not cached; the flag off → `404 feature_unavailable` and no column or menu item. | unit `src/lib/backlinks/ahrefsDomainRating.test.ts`; route test; browser B7 |
+| F16-AC-07 | `cacheOnly: true` never reserves or calls; loading `/portal/backlinks?target=…` never spends (live mode); priced actions quote §6.4's lines; a stale `maxUsd` returns `409 price_changed`. | route `src/server/backlinks/backlinks.route.test.mjs`; browser B2 |
+| F16-AC-08 | An overview cache miss appends a research-log entry (`kind "backlinks.research"`); the lookup quote warns `recent_research` within 90 days. | unit `backlinksService.test.ts`; `src/shared/pricing/actions/backlinks.test.ts` |
+| F16-AC-09 | Ahrefs DR (flag `backlinks_ahrefs_dr`): ≤ 100 domains per call, normalised and de-duplicated, fetched 20 at a time with a 5 s timeout from `api.ahrefs.com` only; DR 0 → null; ratings and nulls cached 24 h globally; a failed fetch returns null and is not cached; the flag off → `404 feature_unavailable` and no column or menu item. | unit `src/server/backlinks/ahrefsDomainRating.test.ts`; route test; browser B7 |
 | F16-AC-10 | `/portal/backlinks` renders every state in §6.6 with exact copy: overview metrics with "—" for unknown, growth and new/lost charts that draw gaps for missing days (never zero), three tabs, filters with the budget message, "Best links" menu, one-per-domain toggle, domain expansion statuses, export with an "Ahrefs DR" column when loaded, and no horizontal scroll at 375 px. | browser `scripts/qa/check-f16-browser.mjs` B1–B8; unit `src/shared/backlinks.test.ts` |
 | F16-AC-11 | With `backlinks` off the sidebar item is hidden, the page shows the unavailable copy, every route returns `404 feature_unavailable`; a disabled spend control returns `403 feature_disabled`. | route test; browser B1 |
 | F16-AC-12 | (P5) Migration 115 creates `backlink_snapshot_targets` and `backlink_snapshots` with RLS; members read only their workspace's rows; at most 20 enabled targets per workspace; one snapshot per target, scope and UTC day. | DB `scripts/qa/check-f16-db.mjs` groups `schema`, `rls`, `caps`; `tests/customer-uat.sql` |
-| F16-AC-13 | (P5) Tracking a target requires price approval (`backlinks.snapshots.track`, monthly projection weekly × 4 or monthly × 1); the due tick advances every target before or instead of capturing, captures with one billed summary call under `backlinks.snapshots` within the approved maximum, records skip reasons, and a paid overview fetch of a tracked target stores a free `lookup` snapshot at most once per UTC day. | unit `src/lib/backlinks/snapshots.test.ts`; DB group `snapshots` |
+| F16-AC-13 | (P5) Tracking a target requires price approval (`backlinks.snapshots.track`, monthly projection weekly × 4 or monthly × 1); the due tick advances every target before or instead of capturing, captures with one billed summary call under `backlinks.snapshots` within the approved maximum, records skip reasons, and a paid overview fetch of a tracked target stores a free `lookup` snapshot at most once per UTC day. | unit `src/server/backlinks/snapshots.test.ts`; DB group `snapshots` |
 | F16-AC-14 | (P5) The tracked-history chart reads stored snapshots only (no provider call), draws gaps for missing periods, and snapshots older than 25 months are pruned by a daily job. | browser B9; DB group `retention` |
 
 ## 5. Scope
@@ -181,7 +181,7 @@ REVOKE ALL ON FUNCTION public.prune_backlink_snapshots(date, integer) FROM PUBLI
 GRANT EXECUTE ON FUNCTION public.prune_backlink_snapshots(date, integer) TO service_role;
 ```
 
-Error mapping (`src/lib/backlinks/snapshots.ts`): `backlink_snapshots_cap:targets` → `AppError(409, "snapshot_target_limit", "A workspace can track history for up to 20 sites. Stop tracking one first.")`; `23505` on `backlink_snapshot_targets_unique` → `AppError(409, "already_tracked", "This site's history is already tracked.")`; other database errors → `AppError(503, "snapshots_unavailable", "Backlink history is unavailable. Please retry.")`.
+Error mapping (`src/server/backlinks/snapshots.ts`): `backlink_snapshots_cap:targets` → `AppError(409, "snapshot_target_limit", "A workspace can track history for up to 20 sites. Stop tracking one first.")`; `23505` on `backlink_snapshot_targets_unique` → `AppError(409, "already_tracked", "This site's history is already tracked.")`; other database errors → `AppError(503, "snapshots_unavailable", "Backlink history is unavailable. Please retry.")`.
 
 **Required objects** (`scripts/setup-supabase.mjs`): `"115_f16_backlink_snapshots.sql": [{kind:"table",name:"backlink_snapshot_targets"},{kind:"table",name:"backlink_snapshots"},{kind:"function",name:"prune_backlink_snapshots"},{kind:"function",name:"f16_snapshot_target_cap"}]`.
 
@@ -191,9 +191,9 @@ Error mapping (`src/lib/backlinks/snapshots.ts`): `backlink_snapshots_cap:target
 
 ### 6.2 Server modules
 
-TypeScript under `src/lib/**`, relative imports with `.ts`; COPY/PORT files carry the licence header.
+TypeScript under `src/server/**` and `src/shared/**`, relative imports with `.ts`; COPY/PORT files carry the licence header.
 
-#### 6.2.1 Provider section (`src/lib/providers/dataforseo/`)
+#### 6.2.1 Provider section (`src/shared/providers/dataforseo/`)
 
 | File | Mode | Exports |
 |---|---|---|
@@ -239,7 +239,7 @@ export type BacklinksOverview, BacklinksRow, ReferringDomainRow, TopPageRow, Bac
 
 `buildSummaryStats` renders unknown values as "—" (OpenSEO "-").
 
-#### 6.2.3 Services (`src/lib/backlinks/`)
+#### 6.2.3 Services (`src/server/backlinks/`)
 
 | File | Mode | Exports and behaviour |
 |---|---|---|
@@ -253,7 +253,7 @@ export type BacklinksOverview, BacklinksRow, ReferringDomainRow, TopPageRow, Bac
 | `backlinks.contract.ts` | new | Route contracts. |
 | `tools.ts` | new | F22 tools `get_backlinks_overview`, `list_backlinks`, `list_referring_domains` (paid; input includes `maxUsd`) and `get_backlink_history` (free; stored snapshots only), same shape as F07 §6.2.8. These are the building blocks F21's link-prospecting skill calls. |
 
-#### 6.2.4 Priced actions (`src/lib/pricing/actions/backlinks.ts`, registered in `src/lib/pricing/actions/index.ts`)
+#### 6.2.4 Priced actions (`src/shared/pricing/actions/backlinks.ts`, registered in `src/shared/pricing/actions/index.ts`)
 
 | Key | Feature | Input (`z.strictObject`) | `requireApproval` | Lines (exact labels) |
 |---|---|---|---|---|
@@ -327,7 +327,7 @@ All under `src/app/api/customer/backlinks/**/route.ts`; `requireWorkspace(reques
 
 **`GET /api/customer/backlinks/snapshots`** (P5) — query `{ brand_key, target, scope: domain|subdomains }` → `{ "snapshots": [ { "capturedOn": "2026-10-14", "source": "scheduled", "rank": 21, "backlinks": 4120, "referringDomains": 312, … } ] }` (oldest first, ≤ 120 rows). Free.
 
-Contracts in `src/lib/backlinks/backlinks.contract.ts`.
+Contracts in `src/server/backlinks/backlinks.contract.ts`.
 
 ### 6.6 UI
 
@@ -377,14 +377,14 @@ Accessibility and phone: as F14 §6.6; charts have `aria-label` "Backlink trend 
 
 | OpenSEO source | Perceev target | Mode | Adaptation notes |
 |---|---|---|---|
-| `openseo:src/server/lib/dataforseo/backlinks.ts` (+ `backlinks.test.ts`) | `src/lib/providers/dataforseo/backlinks.ts` (+ `.test.ts`) | COPY | F02 classifier and error classes; `createBacklinksClient` on F02 `meter` with F03 estimators. |
-| `openseo:src/server/lib/dataforseoBacklinksTarget.ts` | `src/lib/providers/dataforseo/backlinksTarget.ts` (+ `.test.ts`) | COPY | `AppError(400, "invalid_target")`. |
-| `openseo:src/server/features/backlinks/services/backlinksApiFilters.ts` (+ test) | `src/lib/backlinks/backlinksApiFilters.ts` (+ `.test.ts`) | COPY | F13 `filters.ts`. |
-| `openseo:src/server/features/backlinks/services/{backlinksRowMappers,backlinksOverviewSchema}.ts` | `src/lib/backlinks/…` | COPY | zod v4. |
-| `openseo:src/server/features/backlinks/services/backlinksSubfolderOverview.ts` | `src/lib/backlinks/backlinksSubfolderOverview.ts` | PORT | Metered calls with idempotency keys. |
-| `openseo:src/server/features/backlinks/services/{BacklinksService,backlinksServiceData}.ts` (+ `BacklinksService.billing.test.ts`) | `src/lib/backlinks/backlinksService.ts` (+ `.test.ts`) | PORT | R2 → F01 `cached` (workspace) with OpenSEO's version numbers; `cacheOnly`; lookup snapshot hook. |
+| `openseo:src/server/lib/dataforseo/backlinks.ts` (+ `backlinks.test.ts`) | `src/shared/providers/dataforseo/backlinks.ts` (+ `.test.ts`) | COPY | F02 classifier and error classes; `createBacklinksClient` on F02 `meter` with F03 estimators. |
+| `openseo:src/server/lib/dataforseoBacklinksTarget.ts` | `src/shared/providers/dataforseo/backlinksTarget.ts` (+ `.test.ts`) | COPY | `AppError(400, "invalid_target")`. |
+| `openseo:src/server/features/backlinks/services/backlinksApiFilters.ts` (+ test) | `src/server/backlinks/backlinksApiFilters.ts` (+ `.test.ts`) | COPY | F13 `filters.ts`. |
+| `openseo:src/server/features/backlinks/services/{backlinksRowMappers,backlinksOverviewSchema}.ts` | `src/server/backlinks/…` | COPY | zod v4. |
+| `openseo:src/server/features/backlinks/services/backlinksSubfolderOverview.ts` | `src/server/backlinks/backlinksSubfolderOverview.ts` | PORT | Metered calls with idempotency keys. |
+| `openseo:src/server/features/backlinks/services/{BacklinksService,backlinksServiceData}.ts` (+ `BacklinksService.billing.test.ts`) | `src/server/backlinks/backlinksService.ts` (+ `.test.ts`) | PORT | R2 → F01 `cached` (workspace) with OpenSEO's version numbers; `cacheOnly`; lookup snapshot hook. |
 | `openseo:src/serverFunctions/backlinks.ts` | `src/app/api/customer/backlinks/{overview,rows,referring-domains,top-pages}/route.ts` | PORT | `requireWorkspace`, priced actions. |
-| `openseo:src/serverFunctions/ahrefs.ts` | `src/lib/backlinks/ahrefsDomainRating.ts`, `src/app/api/customer/backlinks/ahrefs-dr/route.ts` | PORT | KV → F01 `cached` (global); flagged. |
+| `openseo:src/serverFunctions/ahrefs.ts` | `src/server/backlinks/ahrefsDomainRating.ts`, `src/app/api/customer/backlinks/ahrefs-dr/route.ts` | PORT | KV → F01 `cached` (global); flagged. |
 | `openseo:src/types/schemas/backlinks.ts`, `client/features/backlinks/{backlinksFilterTypes,backlinksPageUtils,export,backlinksPageTypes}.ts` (+ tests) | `src/shared/backlinks.ts` (+ `.test.ts`) | PORT | "—" for unknown; tests ported (`BacklinksTable.test.ts`, `backlinksFilterTypes.test.ts`, `backlinksPageUtils.test.ts`, `export.test.ts`). |
 | `openseo:src/client/features/backlinks/*.tsx`, `useBacklinksPageData.ts`, `useBacklinksFilters.ts`, `useBacklinksDomainExpansion.ts`, `useAhrefsDomainRatings.ts`, `openseo:src/client/hooks/useBacklinksSearchHistory.ts` | `src/components/portal/backlinks/**` | PORT | F04/F05/F06/F09/F13 components; live mode; quick picks; tracking control. |
 | `openseo:src/db/app.schema.ts:417-445`, `drizzle/pg/0012_dashboard.sql:1-33`, `0016_panoramic_blob.sql` | `supabase/migrations/115_f16_backlink_snapshots.sql` | PATTERN | Per-scope, per-day, opt-in targets with schedules; written by our jobs (theirs is unused). |
@@ -396,27 +396,27 @@ Accessibility and phone: as F14 §6.6; charts have `aria-label` "Backlink trend 
 **Goal:** the metered Backlinks client and target normalisation.
 
 - [x] **P1.T1 Client**
-  - [x] **P1.T1.S1** *Files:* `src/lib/providers/dataforseo/backlinks.ts`, `backlinks.test.ts`, `backlinksTarget.ts`, `backlinksTarget.test.ts`, fixtures `tests/fixtures/f16/backlinks-*.json`. *Do:* §6.2.1; port `backlinks.test.ts:31-200` (target normalisation cases; "rejects exact-url targets with query strings or fragments"; summary top-level error classified through F02 to `UnbilledCallError`/`dataforseo_balance`; domain scope sends `include_subdomains: false`); add body assertions for each fetcher, spam conditions with `hideSpam` true/false, and "every entry is priced" with a spy `meter`. *Verify:* `node --test src/lib/providers/dataforseo/backlinks.test.ts src/lib/providers/dataforseo/backlinksTarget.test.ts` → pass (F16-AC-01, 02).
-  - [x] **P1.T1.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
+  - [x] **P1.T1.S1** *Files:* `src/shared/providers/dataforseo/backlinks.ts`, `backlinks.test.ts`, `backlinksTarget.ts`, `backlinksTarget.test.ts`, fixtures `tests/fixtures/f16/backlinks-*.json`. *Do:* §6.2.1; port `backlinks.test.ts:31-200` (target normalisation cases; "rejects exact-url targets with query strings or fragments"; summary top-level error classified through F02 to `UnbilledCallError`/`dataforseo_balance`; domain scope sends `include_subdomains: false`); add body assertions for each fetcher, spam conditions with `hideSpam` true/false, and "every entry is priced" with a spy `meter`. *Verify:* `node --test src/shared/providers/dataforseo/backlinks.test.ts src/shared/providers/dataforseo/backlinksTarget.test.ts` → pass (F16-AC-01, 02).
+  - [x] **P1.T1.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/server/platform/thirdPartyNotices.test.mjs` → pass.
 
-**Checkpoint:** full suite `node --import ./src/lib/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'`, `npm run typecheck`, `npm run build`, F02's `noPrices.test.mjs` and `answerImportGuard.test.mjs` pass. Completes F16-AC-01, 02.
+**Checkpoint:** full suite `node --import ./src/server/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'`, `npm run typecheck`, `npm run build`, F02's `noPrices.test.mjs` and `answerImportGuard.test.mjs` pass. Completes F16-AC-01, 02.
 
 ### Phase 2 — Backlinks API
 
 **Goal:** priced, cached overview and tab routes.
 
 - [x] **P2.T1 Registration**
-  - [x] **P2.T1.S1** *Files:* `src/shared/spend-features.ts` (`"backlinks.research"`, `"backlinks.snapshots"`; labels "Backlink research", "Backlink history snapshots"), `src/lib/features/names.ts` (`backlinks: { spend: ["backlinks.research"] as const }`, `backlinks_ahrefs_dr: { spend: [] as const }`, `backlink_snapshots: { spend: ["backlinks.snapshots"] as const }`), `src/lib/features/clientFeatures.ts` (append the three), `.env.example` (`FEATURE_BACKLINKS=`, `FEATURE_BACKLINKS_BRANDS=`, `FEATURE_BACKLINKS_AHREFS_DR=`, `FEATURE_BACKLINKS_AHREFS_DR_BRANDS=`, `FEATURE_BACKLINK_SNAPSHOTS=`, `FEATURE_BACKLINK_SNAPSHOTS_BRANDS=`). *Verify:* `node --test src/lib/features/flags.test.ts src/shared/*.test.ts` → pass; `grep -c "^FEATURE_BACKLINKS=$" .env.example` → 1.
+  - [x] **P2.T1.S1** *Files:* `src/shared/spend-features.ts` (`"backlinks.research"`, `"backlinks.snapshots"`; labels "Backlink research", "Backlink history snapshots"), `src/server/features/names.ts` (`backlinks: { spend: ["backlinks.research"] as const }`, `backlinks_ahrefs_dr: { spend: [] as const }`, `backlink_snapshots: { spend: ["backlinks.snapshots"] as const }`), `src/server/features/clientFeatures.ts` (append the three), `.env.example` (`FEATURE_BACKLINKS=`, `FEATURE_BACKLINKS_BRANDS=`, `FEATURE_BACKLINKS_AHREFS_DR=`, `FEATURE_BACKLINKS_AHREFS_DR_BRANDS=`, `FEATURE_BACKLINK_SNAPSHOTS=`, `FEATURE_BACKLINK_SNAPSHOTS_BRANDS=`). *Verify:* `node --test src/server/features/flags.test.ts src/shared/*.test.ts` → pass; `grep -c "^FEATURE_BACKLINKS=$" .env.example` → 1.
 - [x] **P2.T2 Services**
   - [x] **P2.T2.S1** *Files:* `src/shared/backlinks.ts`, `src/shared/backlinks.test.ts`. *Do:* §6.2.2; port `BacklinksTable.test.ts` (zero vs missing spam), `backlinksFilterTypes.test.ts` (two cases), `backlinksPageUtils.test.ts` (truncateMiddle), `export.test.ts` (six cases incl. the DR column keyed off the `www.`-stripped source domain). *Verify:* `node --test src/shared/backlinks.test.ts` → pass (F16-AC-10 logic).
-  - [x] **P2.T2.S2** *Files:* `src/lib/backlinks/{backlinksApiFilters,backlinksRowMappers,backlinksOverviewSchema,backlinksSubfolderOverview}.ts`, `backlinksApiFilters.test.ts`. *Do:* COPY/PORT; port `backlinksApiFilters.test.ts:14-144`. *Verify:* `node --test src/lib/backlinks/backlinksApiFilters.test.ts` → pass (F16-AC-05).
-  - [x] **P2.T2.S3** *Files:* `src/lib/backlinks/backlinksService.ts`, `researchLog.ts`, `backlinksService.test.ts`. *Do:* §6.2.3; port the six cases of `BacklinksService.billing.test.ts:77-257` onto a fake client and F01 memory cache; add: exact URL makes no history call; subfolder calls are sequential (second starts after the first resolves); history range ends yesterday UTC with a fixed clock; referring domains always `hideSpam: false`; spam condition counts 2 (`400 filters_over_budget` at 7 user conditions with spam hiding); workspace B misses A's entry; `cacheOnly` miss → null with zero calls; `onFetchedSummary` called on a fetch only. *Verify:* `node --test src/lib/backlinks/backlinksService.test.ts` → pass (F16-AC-03, 04, 06, 08).
-  - [x] **P2.T2.S4** *Files:* `src/lib/pricing/actions/backlinks.ts` (`backlinks.lookup.run`, `backlinks.page`, `backlinks.expand_domain`), `src/lib/pricing/actions/index.ts` (one import), `src/lib/pricing/actions/backlinks.test.ts`. *Do:* §6.2.4; tests: worked example $0.087012 with a fixed clock; exact URL and subfolder lines; `subfolder_not_supported` block; `recent_research`. *Verify:* `node --test src/lib/pricing/actions/backlinks.test.ts` → pass (F16-AC-07 unit half, F16-AC-08 quote half).
+  - [x] **P2.T2.S2** *Files:* `src/server/backlinks/{backlinksApiFilters,backlinksRowMappers,backlinksOverviewSchema,backlinksSubfolderOverview}.ts`, `backlinksApiFilters.test.ts`. *Do:* COPY/PORT; port `backlinksApiFilters.test.ts:14-144`. *Verify:* `node --test src/server/backlinks/backlinksApiFilters.test.ts` → pass (F16-AC-05).
+  - [x] **P2.T2.S3** *Files:* `src/server/backlinks/backlinksService.ts`, `researchLog.ts`, `backlinksService.test.ts`. *Do:* §6.2.3; port the six cases of `BacklinksService.billing.test.ts:77-257` onto a fake client and F01 memory cache; add: exact URL makes no history call; subfolder calls are sequential (second starts after the first resolves); history range ends yesterday UTC with a fixed clock; referring domains always `hideSpam: false`; spam condition counts 2 (`400 filters_over_budget` at 7 user conditions with spam hiding); workspace B misses A's entry; `cacheOnly` miss → null with zero calls; `onFetchedSummary` called on a fetch only. *Verify:* `node --test src/server/backlinks/backlinksService.test.ts` → pass (F16-AC-03, 04, 06, 08).
+  - [x] **P2.T2.S4** *Files:* `src/shared/pricing/actions/backlinks.ts` (`backlinks.lookup.run`, `backlinks.page`, `backlinks.expand_domain`), `src/shared/pricing/actions/index.ts` (one import), `src/shared/pricing/actions/backlinks.test.ts`. *Do:* §6.2.4; tests: worked example $0.087012 with a fixed clock; exact URL and subfolder lines; `subfolder_not_supported` block; `recent_research`. *Verify:* `node --test src/shared/pricing/actions/backlinks.test.ts` → pass (F16-AC-07 unit half, F16-AC-08 quote half).
 - [x] **P2.T3 Routes**
-  - [x] **P2.T3.S1** *Files:* `src/app/api/customer/backlinks/{overview,rows,referring-domains,top-pages}/route.ts`, `src/lib/backlinks/backlinks.contract.ts`. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [x] **P2.T3.S2** *Files:* `src/lib/backlinks/backlinks.route.test.mjs` (hook pattern). Cases: flag off → 404; unknown field → 400; `cacheOnly` miss → `not_cached`, zero spend calls; stale `maxUsd` → 409; invalid target → 400; referring domains + subfolder → 400 `subfolder_not_supported`; spend refusal passes through; tenant isolation of cache (workspace B gets `cached: false`). *Verify:* `node --test src/lib/backlinks/backlinks.route.test.mjs` → pass (F16-AC-07, 11 route half).
-  - [x] **P2.T3.S3** *Files:* `src/lib/backlinks/tools.ts` (`get_backlinks_overview`, `list_backlinks`, `list_referring_domains`), `tools.test.ts`. *Verify:* `node --test src/lib/backlinks/tools.test.ts` → pass.
-  - [x] **P2.T3.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
+  - [x] **P2.T3.S1** *Files:* `src/app/api/customer/backlinks/{overview,rows,referring-domains,top-pages}/route.ts`, `src/server/backlinks/backlinks.contract.ts`. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass.
+  - [x] **P2.T3.S2** *Files:* `src/server/backlinks/backlinks.route.test.mjs` (hook pattern). Cases: flag off → 404; unknown field → 400; `cacheOnly` miss → `not_cached`, zero spend calls; stale `maxUsd` → 409; invalid target → 400; referring domains + subfolder → 400 `subfolder_not_supported`; spend refusal passes through; tenant isolation of cache (workspace B gets `cached: false`). *Verify:* `node --test src/server/backlinks/backlinks.route.test.mjs` → pass (F16-AC-07, 11 route half).
+  - [x] **P2.T3.S3** *Files:* `src/server/backlinks/tools.ts` (`get_backlinks_overview`, `list_backlinks`, `list_referring_domains`), `tools.test.ts`. *Verify:* `node --test src/server/backlinks/tools.test.ts` → pass.
+  - [x] **P2.T3.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/server/platform/thirdPartyNotices.test.mjs` → pass.
 
 **Checkpoint:** full suite, typecheck, build. Completes F16-AC-03…08, 11 (route half).
 
@@ -425,7 +425,7 @@ Accessibility and phone: as F14 §6.6; charts have `aria-label` "Backlink trend 
 **Goal:** `/portal/backlinks` with overview, charts, tabs, filters and export.
 
 - [x] **P3.T1 Components**
-  - [x] **P3.T1.S1** *Files:* `src/app/portal/backlinks/page.tsx`, `src/components/portal/backlinks/{BacklinksPage,BacklinksSearchCard,BacklinksQuickPicks,BacklinksPageContent,BacklinksNotLoadedCard,BacklinksOverviewPanels,BacklinksPageCharts,BacklinksPageSections,BacklinksPageStates,BacklinksFilterPanel,BacklinksToolbarMenus,BacklinksTable,BacklinksTableColumns,ReferringDomainsTable,TopPagesTable}.tsx`, `hooks/{useBacklinksPageData,useBacklinksFilters,useBacklinksDomainExpansion,useBacklinksSearchHistory,useBacklinksSearchTabs,useBacklinksLiveMode}.ts`, `telemetry.ts`, `src/components/app/navigation/items.ts` (entry), `src/lib/query/keys.ts` (factories). *Do:* §6.6 without P4/P5 rows. *Verify:* `npm run build` → exit 0.
+  - [x] **P3.T1.S1** *Files:* `src/app/portal/backlinks/page.tsx`, `src/components/portal/backlinks/{BacklinksPage,BacklinksSearchCard,BacklinksQuickPicks,BacklinksPageContent,BacklinksNotLoadedCard,BacklinksOverviewPanels,BacklinksPageCharts,BacklinksPageSections,BacklinksPageStates,BacklinksFilterPanel,BacklinksToolbarMenus,BacklinksTable,BacklinksTableColumns,ReferringDomainsTable,TopPagesTable}.tsx`, `hooks/{useBacklinksPageData,useBacklinksFilters,useBacklinksDomainExpansion,useBacklinksSearchHistory,useBacklinksSearchTabs,useBacklinksLiveMode}.ts`, `telemetry.ts`, `src/components/app/navigation/items.ts` (entry), `src/shared/query/keys.ts` (factories). *Do:* §6.6 without P4/P5 rows. *Verify:* `npm run build` → exit 0.
 - [x] **P3.T2 Browser checks**
   - [x] **P3.T2.S1** *Files:* `scripts/qa/check-f16-browser.mjs` (Playwright, local app, fixture APIs). B1 flag off; B2 `/portal/backlinks?target=offcult.in` sends only `cacheOnly` requests and shows "Run lookup · up to $0.09"; B3 click → overview metrics ("—" for a null), growth chart with a gap for the missing month, new/lost chart; B4 Best links off → `hideSpam: false` request; One per domain/All links toggles `mode`; B5 filters over budget → message, table hidden; B6 expand a domain → "Loading links…" then links, second domain error → "Couldn't load this domain's links."; B8 375 px no horizontal scroll; export CSV headers. *Verify:* `node scripts/qa/check-f16-browser.mjs --only B1-B6,B8` → "ok 7 scenarios" (F16-AC-07 browser half, F16-AC-10, F16-AC-11).
 
@@ -436,8 +436,8 @@ Accessibility and phone: as F14 §6.6; charts have `aria-label` "Backlink trend 
 **Goal:** the free DR column behind `backlinks_ahrefs_dr`, pending the owner's terms-of-use check.
 
 - [x] **P4.T1 Ahrefs DR service, route and column**
-  - [x] **P4.T1.S1** *Files:* `src/lib/backlinks/ahrefsDomainRating.ts`, `ahrefsDomainRating.test.ts`, fixtures `ahrefs-dr.json`, `ahrefs-dr-zero.json`. *Do:* §6.2.3 with injected `fetch` and memory cache. Tests: 101 domains → zod 400 at the route, service takes ≤ 100; `www.a.com` and `https://a.com` resolve once and fan out to both keys; at most 20 concurrent fetches (counter); 5 s timeout via fake timer → null, not cached, next call fetches again; DR 0 → null cached; second call within 24 h → zero fetches; every URL starts with `https://api.ahrefs.com/v3/public/domain-rating-free?target=`. *Verify:* `node --test src/lib/backlinks/ahrefsDomainRating.test.ts` → pass (F16-AC-09). *(BE 2026-11-14: 8/8 pass.)*
-  - [x] **P4.T1.S2** *Files:* `src/app/api/customer/backlinks/ahrefs-dr/route.ts`, contract, `backlinks.route.test.mjs` (flag off → 404), `src/components/portal/backlinks/{useAhrefsDomainRatings.ts,BacklinksToolbarMenus.tsx,BacklinksPageSections.tsx,BacklinksTableColumns.tsx,ReferringDomainsTable.tsx}`, `scripts/qa/check-f16-browser.mjs` (B7: flag off → no menu item and no column; on → menu item, column fills, export gains "Ahrefs DR", failure toast). *Verify:* `node --test src/lib/backlinks/backlinks.route.test.mjs src/lib/http/routeContract.test.ts` → pass; `node scripts/qa/check-f16-browser.mjs --only B7` → "ok 1 scenario". *(BE half 2026-11-14: route + contract + 6 route-test additions green, `routeContract.test.ts` green; FE half pending — box left for coordinator.)* *(FE 2026-11-14: hook + actions menu + DR columns/export/footnote + B7 green; full browser B1-B8 "ok 9 scenarios"; `npm run build` + `typecheck` green. Wiring lives in `BacklinksPageSections.tsx` — §8 file list omits the wiring site, see FE handoff SPEC GAP.)* *(CTO 2026-11-14: APPROVE — wiring file accepted as minimal fix (spec deviation #1); S2 file list updated to include `BacklinksPageSections.tsx`.)*
+  - [x] **P4.T1.S1** *Files:* `src/server/backlinks/ahrefsDomainRating.ts`, `ahrefsDomainRating.test.ts`, fixtures `ahrefs-dr.json`, `ahrefs-dr-zero.json`. *Do:* §6.2.3 with injected `fetch` and memory cache. Tests: 101 domains → zod 400 at the route, service takes ≤ 100; `www.a.com` and `https://a.com` resolve once and fan out to both keys; at most 20 concurrent fetches (counter); 5 s timeout via fake timer → null, not cached, next call fetches again; DR 0 → null cached; second call within 24 h → zero fetches; every URL starts with `https://api.ahrefs.com/v3/public/domain-rating-free?target=`. *Verify:* `node --test src/server/backlinks/ahrefsDomainRating.test.ts` → pass (F16-AC-09). *(BE 2026-11-14: 8/8 pass.)*
+  - [x] **P4.T1.S2** *Files:* `src/app/api/customer/backlinks/ahrefs-dr/route.ts`, contract, `backlinks.route.test.mjs` (flag off → 404), `src/components/portal/backlinks/{useAhrefsDomainRatings.ts,BacklinksToolbarMenus.tsx,BacklinksPageSections.tsx,BacklinksTableColumns.tsx,ReferringDomainsTable.tsx}`, `scripts/qa/check-f16-browser.mjs` (B7: flag off → no menu item and no column; on → menu item, column fills, export gains "Ahrefs DR", failure toast). *Verify:* `node --test src/server/backlinks/backlinks.route.test.mjs src/shared/http/routeContract.test.ts` → pass; `node scripts/qa/check-f16-browser.mjs --only B7` → "ok 1 scenario". *(BE half 2026-11-14: route + contract + 6 route-test additions green, `routeContract.test.ts` green; FE half pending — box left for coordinator.)* *(FE 2026-11-14: hook + actions menu + DR columns/export/footnote + B7 green; full browser B1-B8 "ok 9 scenarios"; `npm run build` + `typecheck` green. Wiring lives in `BacklinksPageSections.tsx` — §8 file list omits the wiring site, see FE handoff SPEC GAP.)* *(CTO 2026-11-14: APPROVE — wiring file accepted as minimal fix (spec deviation #1); S2 file list updated to include `BacklinksPageSections.tsx`.)*
 
 **Checkpoint:** full suite, build, browser B7. Completes F16-AC-09.
 
@@ -447,12 +447,12 @@ Accessibility and phone: as F14 §6.6; charts have `aria-label` "Backlink trend 
 
 - [x] **P5.T1 Database**
   - [x] **P5.T1.S1** *Files:* `supabase/migrations/115_f16_backlink_snapshots.sql`. *Do:* §6.1 verbatim. *Verify:* loopback `_qa` database, all migrations applied twice → exit 0.
-  - [x] **P5.T1.S2** *Files:* `scripts/setup-supabase.mjs` (`EXPECTED_OBJECTS` entry), `tests/customer-uat.sql` (§6.1 block). *Verify:* `node --test src/lib/migrationsRunner.test.mjs src/lib/migrationsLedger.test.mjs` → pass; CI customer-database commands against local Postgres 16 → exit 0.
-  - [x] **P5.T1.S3** *Files:* `README.md` (migration row), `docs/OPERATOR_LEDGER.md` § C ("apply 115 before deploying F16 phase 5"), `docs/PROD_MIGRATIONS.md` (one bullet: two tables, cap trigger, prune function). *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+  - [x] **P5.T1.S2** *Files:* `scripts/setup-supabase.mjs` (`EXPECTED_OBJECTS` entry), `tests/customer-uat.sql` (§6.1 block). *Verify:* `node --test src/server/migrationsRunner.test.mjs src/server/migrationsLedger.test.mjs` → pass; CI customer-database commands against local Postgres 16 → exit 0.
+  - [x] **P5.T1.S3** *Files:* `README.md` (migration row), `docs/OPERATOR_LEDGER.md` § C ("apply 115 before deploying F16 phase 5"), `docs/PROD_MIGRATIONS.md` (one bullet: two tables, cap trigger, prune function). *Verify:* `node --test src/server/docStatus.test.mjs src/server/migrationsRunner.test.mjs` → pass.
   - [x] **P5.T1.S4** *Files:* `scripts/qa/check-f16-db.mjs` (loopback `_qa`). Groups: `schema`, `rls` (member reads own rows only), `caps` (21st enabled target raises; disabling one allows another), `snapshots` (one per target/scope/day; `lookup` insert ignored on conflict), `retention` (rows older than 25 months pruned, newer kept). *Verify:* `node scripts/qa/check-f16-db.mjs` → "ok 5 groups" (F16-AC-12, 13 DB half, 14 retention).
 - [x] **P5.T2 Server**
-  - [x] **P5.T2.S1** *Files:* `src/lib/backlinks/snapshots.ts`, `snapshots.test.ts`, `src/lib/backlinks/jobs.ts` (periodics and `backlinks.snapshots_tick`), `src/lib/jobs/kinds.ts` (one import), `src/lib/pricing/actions/backlinks.ts` (`backlinks.snapshots.track`). *Do:* §6.3. Tests with F01 memory jobs/spend and F10 `runDueSchedules`: weekly target due → advance first, one billed summary with feature `backlinks.snapshots` and the target's `maxUsd`, snapshot inserted; flag off → `snapshots_disabled` recorded and advanced; price above approval → `price_changed`; `SpendRefused` → its reason; three missed weeks → one capture; a failed capture → `start_failed` and the next target still runs; lookup snapshot only for tracked targets and once per day. *Verify:* `node --test src/lib/backlinks/snapshots.test.ts` → pass (F16-AC-13).
-  - [x] **P5.T2.S2** *Files:* `src/app/api/customer/backlinks/snapshot-targets/route.ts` (GET, POST), `snapshot-targets/[targetId]/route.ts` (DELETE), `snapshots/route.ts` (GET), overview route (`tracked`, `recordLookupSnapshot`), contracts, `src/lib/backlinks/tools.ts` (`get_backlink_history`), `backlinks.route.test.mjs` (member POST → 403 `owner_required`; without `maxUsd` → 400 `approval_required`; duplicate → 409 `already_tracked`; flag off → 404). *Verify:* `node --test src/lib/backlinks/backlinks.route.test.mjs src/lib/http/routeContract.test.ts src/lib/backlinks/tools.test.ts` → pass.
+  - [x] **P5.T2.S1** *Files:* `src/server/backlinks/snapshots.ts`, `snapshots.test.ts`, `src/server/backlinks/jobs.ts` (periodics and `backlinks.snapshots_tick`), `src/server/jobs/kinds.ts` (one import), `src/shared/pricing/actions/backlinks.ts` (`backlinks.snapshots.track`). *Do:* §6.3. Tests with F01 memory jobs/spend and F10 `runDueSchedules`: weekly target due → advance first, one billed summary with feature `backlinks.snapshots` and the target's `maxUsd`, snapshot inserted; flag off → `snapshots_disabled` recorded and advanced; price above approval → `price_changed`; `SpendRefused` → its reason; three missed weeks → one capture; a failed capture → `start_failed` and the next target still runs; lookup snapshot only for tracked targets and once per day. *Verify:* `node --test src/server/backlinks/snapshots.test.ts` → pass (F16-AC-13).
+  - [x] **P5.T2.S2** *Files:* `src/app/api/customer/backlinks/snapshot-targets/route.ts` (GET, POST), `snapshot-targets/[targetId]/route.ts` (DELETE), `snapshots/route.ts` (GET), overview route (`tracked`, `recordLookupSnapshot`), contracts, `src/server/backlinks/tools.ts` (`get_backlink_history`), `backlinks.route.test.mjs` (member POST → 403 `owner_required`; without `maxUsd` → 400 `approval_required`; duplicate → 409 `already_tracked`; flag off → 404). *Verify:* `node --test src/server/backlinks/backlinks.route.test.mjs src/shared/http/routeContract.test.ts src/server/backlinks/tools.test.ts` → pass.
 - [x] **P5.T3 UI**
   - [x] **P5.T3.S1** *Files:* `src/components/portal/backlinks/{TrackHistoryControl,TrackedHistoryPanel,TrackedTargetsList}.tsx`, `hooks/{useSnapshotTargets,useSnapshots}.ts`, `BacklinksOverviewPanels.tsx`, `BacklinksPageContent.tsx`, `scripts/qa/check-f16-browser.mjs` (B9: owner tracks weekly via dialog with monthly projection; badge appears; tracked history chart from stored snapshots with a gap; stop tracking keeps the chart; member sees no "Track history"). *Verify:* `node scripts/qa/check-f16-browser.mjs --only B9` → "ok 1 scenario" (F16-AC-14).
 
@@ -462,15 +462,15 @@ Accessibility and phone: as F14 §6.6; charts have `aria-label` "Backlink trend 
 
 | File | Cases | ACs |
 |---|---|---|
-| `src/lib/providers/dataforseo/backlinks.test.ts`, `backlinksTarget.test.ts` | ported target/summary cases, bodies, spam conditions, priced entries | 01, 02 |
+| `src/shared/providers/dataforseo/backlinks.test.ts`, `backlinksTarget.test.ts` | ported target/summary cases, bodies, spam conditions, priced entries | 01, 02 |
 | `src/shared/backlinks.test.ts` | ported client cases (spam zero vs missing, budgets, truncation, exports) | 10 |
-| `src/lib/backlinks/backlinksApiFilters.test.ts` | ported | 05 |
-| `src/lib/backlinks/backlinksService.test.ts` | six ported billing cases + §8 P2.T2.S3 list | 03, 04, 06, 08 |
-| `src/lib/pricing/actions/backlinks.test.ts` | lines, warnings, blocks, snapshot projection | 07, 08, 13 |
-| `src/lib/backlinks/ahrefsDomainRating.test.ts` | §8 P4.T1.S1 list | 09 |
-| `src/lib/backlinks/snapshots.test.ts` | §8 P5.T2.S1 list | 13 |
-| `src/lib/backlinks/tools.test.ts` | closed inputs, outputs | — |
-| `src/lib/backlinks/backlinks.route.test.mjs` | flags, auth, strict bodies, cacheOnly, prices, isolation, owner-only tracking | 07, 09, 11, 13 |
+| `src/server/backlinks/backlinksApiFilters.test.ts` | ported | 05 |
+| `src/server/backlinks/backlinksService.test.ts` | six ported billing cases + §8 P2.T2.S3 list | 03, 04, 06, 08 |
+| `src/shared/pricing/actions/backlinks.test.ts` | lines, warnings, blocks, snapshot projection | 07, 08, 13 |
+| `src/server/backlinks/ahrefsDomainRating.test.ts` | §8 P4.T1.S1 list | 09 |
+| `src/server/backlinks/snapshots.test.ts` | §8 P5.T2.S1 list | 13 |
+| `src/server/backlinks/tools.test.ts` | closed inputs, outputs | — |
+| `src/server/backlinks/backlinks.route.test.mjs` | flags, auth, strict bodies, cacheOnly, prices, isolation, owner-only tracking | 07, 09, 11, 13 |
 | `scripts/qa/check-f16-db.mjs` | five groups | 12, 13, 14 |
 | `tests/customer-uat.sql` | tenant reads, target cap | 12 |
 | `scripts/qa/check-f16-browser.mjs` | B1–B9 | 07, 09, 10, 11, 14 |

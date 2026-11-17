@@ -3,8 +3,8 @@
 //   src/server/features/ai-visibility/services/aiVisibilityCost.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-// Shared code cannot import src/lib/, so the four-row LLM response table lives here and
-// src/lib/pricing/dataforseo.ts re-exports its `llmResponseUsd`.
+// Shared code cannot import src/server/, so the four-row LLM response table lives here and
+// src/shared/pricing/dataforseo.ts re-exports its `llmResponseUsd`.
 
 // `claude` stays in this union only because the ported DataForSEO price table and
 // `llmResponseUsd` know that slug. Claude is not a Perceev engine (owner decision,

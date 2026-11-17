@@ -15,11 +15,11 @@
  * customer reads.
  */
 
-import { AppError, jsonOk, toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { requireWorkspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../../lib/workspace/requireWorkspace.ts";
-import { getAnswerCosts, getScanCost, unavailableScanCost } from "../../../../../../lib/costs/scanCost.ts";
-import type { AnswerCost, ScanCost } from "../../../../../../lib/costs/types.ts";
+import { AppError, jsonOk, toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { requireWorkspace } from "../../../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../../../server/workspace/requireWorkspace.ts";
+import { getAnswerCosts, getScanCost, unavailableScanCost } from "../../../../../../server/costs/scanCost.ts";
+import type { AnswerCost, ScanCost } from "../../../../../../server/costs/types.ts";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
@@ -123,11 +123,11 @@ function logFailure(stage: string, scanId: string | undefined, err: unknown): vo
 async function resolveDeps(deps?: ScanReportRouteDeps): Promise<RequireWorkspaceDeps> {
   const resolved: RequireWorkspaceDeps = { ...deps };
   if (!resolved.getCustomerContext) {
-    const customer = await import("@/lib/supabase/customer");
+    const customer = await import("@/shared/supabase/customer");
     resolved.getCustomerContext = customer.getCustomerContext as RequireWorkspaceDeps["getCustomerContext"];
   }
   if (!resolved.getSupabaseAdmin) {
-    const admin = await import("@/lib/supabase/admin");
+    const admin = await import("@/shared/supabase/admin");
     resolved.getSupabaseAdmin = admin.getSupabaseAdmin;
   }
   return resolved;

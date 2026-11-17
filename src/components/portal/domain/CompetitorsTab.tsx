@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useExportRows } from "@/components/app/export/useExportRows";
-import type { ExportFormat } from "@/lib/export/exportRows";
+import type { ExportFormat } from "@/shared/export/exportRows";
 import {
   competitorsToTable,
   type DomainOverviewRouteState,

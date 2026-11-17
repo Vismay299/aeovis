@@ -1,9 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AppError, jsonOk, readJsonBody, toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { getSupabaseAdmin } from "../../../../../../lib/supabase/admin.js";
-import { invalidateFeatureFlagCache } from "../../../../../../lib/features/flags.ts";
-import { isSpendFeature } from "../../../../../../lib/spend/features.ts";
-import { spendControlPutSchema } from "../../../../../../lib/spend/spend.contract.ts";
+import { AppError, jsonOk, readJsonBody, toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { getSupabaseAdmin } from "../../../../../../shared/supabase/admin.js";
+import { invalidateFeatureFlagCache } from "../../../../../../server/features/flags.ts";
+import { isSpendFeature } from "../../../../../../shared/spend/features.ts";
+import { spendControlPutSchema } from "../../../../../../shared/spend/spend.contract.ts";
 
 export const dynamic = "force-dynamic";
 

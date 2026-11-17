@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { isCronAuthorized } from "../../../../lib/cronAuth.js";
-import { isFeatureEnabled } from "../../../../lib/features/flags.ts";
-import { AppError, jsonOk, toErrorResponse } from "../../../../lib/http/errors.ts";
-import { keepAlive } from "../../../../lib/keepAlive.js";
-import "../../../../lib/jobs/kinds.ts";
-import { runTick } from "../../../../lib/jobs/tick.ts";
-import type { TickReport } from "../../../../lib/jobs/tick.ts";
+import { isCronAuthorized } from "../../../../server/cronAuth.js";
+import { isFeatureEnabled } from "../../../../server/features/flags.ts";
+import { AppError, jsonOk, toErrorResponse } from "../../../../shared/http/errors.ts";
+import { keepAlive } from "../../../../server/keepAlive.js";
+import "../../../../server/jobs/kinds.ts";
+import { runTick } from "../../../../server/jobs/tick.ts";
+import type { TickReport } from "../../../../server/jobs/tick.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;

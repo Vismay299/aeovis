@@ -20,7 +20,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { sweepScans, sweepWindows } from "../../src/lib/email/sweeps.ts";
+import { sweepScans, sweepWindows } from "../../src/server/email/sweeps.ts";
 
 const host = process.env.PGHOST || "";
 const database = process.env.PGDATABASE || "";

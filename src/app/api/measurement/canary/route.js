@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { dispatchCanaries } from "@/lib/ops/providerCanary";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { createProbeDispatchStore } from "@/lib/db/probeDispatch";
+import { dispatchCanaries } from "@/server/ops/providerCanary";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { createProbeDispatchStore } from "@/server/db/probeDispatch";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 const OFFERED = ["aio", "chatgpt", "gemini", "perplexity"];

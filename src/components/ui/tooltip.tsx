@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 function TooltipProvider({
   delay = 0,

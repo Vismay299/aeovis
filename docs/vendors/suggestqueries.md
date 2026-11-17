@@ -2,7 +2,7 @@
 
 > <!-- doc-status -->
 > **Status: LIVE**, ungated and uncredentialed. Sole call site:
-> [`src/lib/engines/serp.js:372`](../../src/lib/engines/serp.js), inside
+> [`src/shared/engines/serp.js:372`](../../src/shared/engines/serp.js), inside
 > `fetchAutocomplete` (`serp.js:366-384`).
 
 **Date:** 2026-09-03 · **Task:** R6.3.1

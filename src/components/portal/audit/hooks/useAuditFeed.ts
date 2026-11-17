@@ -3,8 +3,8 @@
 // F18 phase 4 — the live crawl feed. Enabled only while the audit is active;
 // the server paces it at 1.5 s.
 
-import { fetchJson } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 import { useServerPacedQuery } from "@/components/app/hooks/useServerPacedQuery";
 
 export type AuditFeedEntry = {

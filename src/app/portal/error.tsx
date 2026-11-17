@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { ErrorBoundaryCard } from "@/components/app/ErrorBoundaryCard";
-import { captureClientError } from "@/lib/telemetry/client";
+import { captureClientError } from "@/shared/telemetry/client";
 
 export default function PortalError({
   error,

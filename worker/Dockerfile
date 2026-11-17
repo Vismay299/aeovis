@@ -2,7 +2,7 @@
 # docs/decisions/2026-09-05-worker-host.md §1 — not for a request-scoped runtime.
 #
 # Build context is `worker/`, NOT the repo root: nothing here may reach into
-# src/, and src/lib/workerIsolation.test.mjs enforces that in the main suite.
+# src/, and src/server/workerIsolation.test.mjs enforces that in the main suite.
 # A build context that included the root would make violating it possible.
 FROM node:22-bookworm-slim
 

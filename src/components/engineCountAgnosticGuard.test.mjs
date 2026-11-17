@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const COMPONENTS = path.join(HERE, "..");
-const ENGINES_DIR = path.join(COMPONENTS, "..", "lib", "engines");
+const ENGINES_DIR = path.join(COMPONENTS, "..", "shared", "engines");
 
 // ---------------------------------------------------------------------------
 // Patterns that indicate a hard-coded engine count in a UI surface.

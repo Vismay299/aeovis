@@ -2,7 +2,7 @@
 
 > <!-- doc-status -->
 > **Status: LIVE** for the API path
-> ([`src/lib/engines/perplexity.js`](../../src/lib/engines/perplexity.js)).
+> ([`src/shared/engines/perplexity.js`](../../src/shared/engines/perplexity.js)).
 > The **UI** path is the R1 target and does not exist yet.
 
 **Date:** 2026-09-02 · **Revised:** 2026-09-03 · **Task:** R6.3.1
@@ -56,7 +56,7 @@ targeting: the answer Perplexity gives an Indian buyer is not the answer it
 gives a US one, so a scan that silently lost this line would keep producing
 numbers while measuring a different market. Note that it is **hardcoded in the
 engine** — it does not come from `resolveSerpGeo()`
-([`serpGeo.js`](../../src/lib/engines/serpGeo.js)), which is where the SERP
+([`serpGeo.js`](../../src/shared/engines/serpGeo.js)), which is where the SERP
 engines get theirs. Two geo settings, one shared meaning, no shared source.
 
 ### 2. The citations — `POST https://api.perplexity.ai/search`
@@ -82,7 +82,7 @@ Text is read from **`choices[0].message.content`** and trimmed
 
 `results` is an array; each entry contributes `url` and `title`
 (`perplexity.js:110-117`). URLs are then run through `normalizeUrl`
-([`scoring/citations.js`](../../src/lib/scoring/citations.js)) and de-duplicated
+([`scoring/citations.js`](../../src/shared/scoring/citations.js)) and de-duplicated
 into a `Set` (`perplexity.js:119`), so `citations.length` counts *distinct
 normalised URLs*, not results returned.
 

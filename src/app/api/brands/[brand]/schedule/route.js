@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getScanSchedule, upsertScanSchedule } from "@/lib/db/analytics";
-import { validateScheduleBody, applyInsertDefaults, applyNextRunAt } from "@/lib/brandAnalyticsApi";
+import { getScanSchedule, upsertScanSchedule } from "@/server/db/analytics";
+import { validateScheduleBody, applyInsertDefaults, applyNextRunAt } from "@/shared/brandAnalyticsApi";
 
 // Schedule state changes on every PUT and the worker's own writes
 // (last_run_at/next_run_at) — never statically cache either verb.
@@ -38,7 +38,7 @@ function requireBrandKey(params) {
  * GET /api/brands/[brand]/schedule — plan.md §4 P0.4.
  *
  * Brand-keying contract: the `[brand]` path param is ALREADY a
- * resolveBrandKey() output (see src/lib/scoring/brandKey.js); used verbatim
+ * resolveBrandKey() output (see src/shared/scoring/brandKey.js); used verbatim
  * (decoded) as the scan_schedules.brand lookup key, never re-resolved here.
  *
  * Response 200: { schedule } — the stored row, or defaultSchedule(brandKey)

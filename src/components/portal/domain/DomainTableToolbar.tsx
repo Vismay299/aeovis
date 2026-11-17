@@ -12,7 +12,7 @@ import {
   DataTableToolbar,
 } from "@/components/app/table/DataTableToolbar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import type { ExportFormat } from "@/lib/export/exportRows";
+import type { ExportFormat } from "@/shared/export/exportRows";
 
 type Props = {
   overBudgetLimit: number | null;

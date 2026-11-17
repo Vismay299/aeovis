@@ -17,12 +17,12 @@ import React from "react";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { compileJsx, renderToHtml, textOf } from "../../lib/renderHarness.mjs";
-import * as scanProgress from "../../lib/scanProgress.js";
-import * as scanCompletion from "../../lib/scanCompletion.js";
-import { legacyTerminalOutcome } from "../../lib/scanOutcome.js";
+import { compileJsx, renderToHtml, textOf } from "../../server/renderHarness.mjs";
+import * as scanProgress from "../../shared/scanProgress.js";
+import * as scanCompletion from "../../shared/scanCompletion.js";
+import { legacyTerminalOutcome } from "../../shared/scanOutcome.js";
 
-import { createFakeReactQuery } from "../../lib/fakeReactQuery.mjs";
+import { createFakeReactQuery } from "../../server/fakeReactQuery.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const nextLink = {
@@ -41,13 +41,13 @@ async function loadTracker() {
   return compileJsx(path.join(here, "useScanTracker.js"), {
     modules: new Map([
       ["react", React],
-      ["@/lib/scanProgress", scanProgress],
+      ["@/shared/scanProgress", scanProgress],
       ["@tanstack/react-query", createFakeReactQuery(React)],
-      ["@/lib/query/polling", await import("../../lib/query/polling.ts")],
-      ["@/lib/query/keys", await import("../../lib/query/keys.ts")],
+      ["@/shared/query/polling", await import("../../shared/query/polling.ts")],
+      ["@/shared/query/keys", await import("../../shared/query/keys.ts")],
       ["./scanTrackerModel", await import("./scanTrackerModel.js")],
       ["@/components/app/onboarding/useOnboardingRedirect", { decideOnboardingRedirect: () => null }],
-      ["@/lib/telemetry/client", { trackEvent() {} }],
+      ["@/shared/telemetry/client", { trackEvent() {} }],
     ]),
   });
 }
@@ -114,7 +114,7 @@ async function renderCard(scan, props = {}) {
       ["react", React],
       ["./ui", ui],
       ["./useScanTracker", tracker],
-      ["@/lib/scanCompletion", scanCompletion],
+      ["@/shared/scanCompletion", scanCompletion],
       ["./PortalShell", { usePortal: () => ({ scan, brand: { display_name: "Acme" } }) }],
     ]),
     autoNull: ["lucide-react"],

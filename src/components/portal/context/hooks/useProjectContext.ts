@@ -6,8 +6,8 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { keys } from "@/lib/query/keys";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { keys } from "@/shared/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
 import type {
   ProjectContext,
   ProjectContextUpdate,
@@ -48,7 +48,7 @@ export function useContextUpdate(brandKey: string) {
       toast.success("Context updated");
     },
     // Refetch only after a failure. Not onError: a useMutation onError opts the
-    // mutation out of the shared error toast (src/lib/query/queryClient.ts).
+    // mutation out of the shared error toast (src/shared/query/queryClient.ts).
     onSettled: async (_data, error) => {
       if (error) await queryClient.invalidateQueries({ queryKey });
     },

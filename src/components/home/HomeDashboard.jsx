@@ -29,10 +29,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
-import { fetchScanHistory, saveScan } from '@/services/api';
-import { hasTimestamp } from '@/utils/format';
-import { historyLoadState } from '@/lib/historyStoreState';
-import { describeScanMeasurement } from '@/lib/scoring/enginePipeline';
+import { fetchScanHistory, saveScan } from '@/shared/api';
+import { hasTimestamp } from '@/shared/format';
+import { historyLoadState } from '@/shared/historyStoreState';
+import { describeScanMeasurement } from '@/shared/scoring/enginePipeline';
 
 /* The reading's own band. Rivals never take a semantic colour, but this is
    your own score against a threshold, which is exactly what they are for. */

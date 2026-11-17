@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runMockScan } from "@/lib/demo/mockScan";
+import { runMockScan } from "@/server/demo/mockScan";
 export const dynamic = "force-dynamic";
 export async function POST() {
   try { return NextResponse.json(await runMockScan(), { headers: { "Cache-Control": "no-store" } }); }

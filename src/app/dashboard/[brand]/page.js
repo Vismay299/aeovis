@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import {reportResponseState} from "@/lib/reportViewState";
+import {reportResponseState} from "@/shared/reportViewState";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 
 /**

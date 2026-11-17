@@ -3,15 +3,15 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { exploreKeys } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { exploreKeys } from "@/shared/query/keys";
 import type { ExploreModel } from "@/shared/explore";
 import type {
   ExploreGetResponse,
   ExploreListResponse,
   ExploreStartResponse,
   ExploreTrackResponse,
-} from "@/lib/explore/explore.contract";
+} from "@/server/explore/explore.contract";
 
 export type {
   ExploreGetResponse,

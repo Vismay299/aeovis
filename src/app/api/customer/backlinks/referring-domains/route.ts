@@ -1,22 +1,22 @@
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../lib/workspace/requireWorkspace.ts";
-import { requireApprovedPrice } from "../../../../../lib/pricing/pricedActions.ts";
+} from "../../../../../server/workspace/requireWorkspace.ts";
+import { requireApprovedPrice } from "../../../../../shared/pricing/pricedActions.ts";
 import {
   backlinksBrandQuery,
   referringDomainsRequestBody,
-} from "../../../../../lib/backlinks/backlinks.contract.ts";
+} from "../../../../../server/backlinks/backlinks.contract.ts";
 import {
   profileReferringDomainsPage,
   type BacklinksServiceDeps,
-} from "../../../../../lib/backlinks/backlinksService.ts";
-import { createBacklinksClient } from "../../../../../lib/providers/dataforseo/backlinks.ts";
-import { normalizeBacklinksTarget } from "../../../../../lib/providers/dataforseo/backlinksTarget.ts";
-import { toResearchError } from "../../../../../lib/research/providerErrors.ts";
+} from "../../../../../server/backlinks/backlinksService.ts";
+import { createBacklinksClient } from "../../../../../shared/providers/dataforseo/backlinks.ts";
+import { normalizeBacklinksTarget } from "../../../../../shared/providers/dataforseo/backlinksTarget.ts";
+import { toResearchError } from "../../../../../server/research/providerErrors.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

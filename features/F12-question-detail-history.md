@@ -38,8 +38,8 @@ Each tracked question gets its own page at `/portal/questions/[questionId]`. It 
 
 ## 3. What Perceev has today
 
-- **Answers.** Scan answers are `probe_observations` rows (`supabase/migrations/027_durable_probe_dispatch.sql:3-26`), each with `result` jsonb written by `finish_probe_dispatch`: `text`, `references`, `citations`, `brand_mentioned_in_text`, `brand_cited`, `competitors_found_in_text`, `competitors_cited`, `brands[]` (`name, is_self, mentioned, position, relationship, sentiment, sentiment_label, spans`, from `judgeBrandsSymmetric`, `src/lib/scoring/judge.js:305-322`), `entity_evidence` (`mention_state`, `mentioned`, `spans[{start,end,text,alias,source}]`, `cited`, `citation_evidence`, from `src/lib/scoring/entityEvidence.js:17-60`), `provenance` (`src/lib/provenance.js:87-140`), `measurement_method`, `serp_state`, `aio_present`, `evidence_state`, `evidence_captures`, `error`. They are projected into `prompt_results` keyed by `(job_id, engine, query)` (`027:255-267`); older scans have only `prompt_results` rows (`supabase/migrations/005_analytics_platform.sql:8-27`). Stored spans index into `result.text`, so excerpts need no recomputation and keep the brand identity used at judging time.
-- **Identity.** A question is only its text. Panels are versioned `repair_artifacts` (`supabase/migrations/029_repair_workflow.sql:1-35`) frozen onto `scan_jobs.panel_snapshot` (`supabase/migrations/032_durable_schedule_windows.sql:2`, `:36-46`). Observation ids hash `{jobId, engine, query}` (`src/lib/workers/durableProbing.js:116-128`); nothing ties two scans' answers to one question. F08 introduces `workspace_questions` (stable id, `text_normalized` unique per brand) and question ids in panel versions.
+- **Answers.** Scan answers are `probe_observations` rows (`supabase/migrations/027_durable_probe_dispatch.sql:3-26`), each with `result` jsonb written by `finish_probe_dispatch`: `text`, `references`, `citations`, `brand_mentioned_in_text`, `brand_cited`, `competitors_found_in_text`, `competitors_cited`, `brands[]` (`name, is_self, mentioned, position, relationship, sentiment, sentiment_label, spans`, from `judgeBrandsSymmetric`, `src/shared/scoring/judge.js:305-322`), `entity_evidence` (`mention_state`, `mentioned`, `spans[{start,end,text,alias,source}]`, `cited`, `citation_evidence`, from `src/shared/scoring/entityEvidence.js:17-60`), `provenance` (`src/shared/provenance.js:87-140`), `measurement_method`, `serp_state`, `aio_present`, `evidence_state`, `evidence_captures`, `error`. They are projected into `prompt_results` keyed by `(job_id, engine, query)` (`027:255-267`); older scans have only `prompt_results` rows (`supabase/migrations/005_analytics_platform.sql:8-27`). Stored spans index into `result.text`, so excerpts need no recomputation and keep the brand identity used at judging time.
+- **Identity.** A question is only its text. Panels are versioned `repair_artifacts` (`supabase/migrations/029_repair_workflow.sql:1-35`) frozen onto `scan_jobs.panel_snapshot` (`supabase/migrations/032_durable_schedule_windows.sql:2`, `:36-46`). Observation ids hash `{jobId, engine, query}` (`src/server/workers/durableProbing.js:116-128`); nothing ties two scans' answers to one question. F08 introduces `workspace_questions` (stable id, `text_normalized` unique per brand) and question ids in panel versions.
 - **Customer reads.** `GET /api/customer/scan/report/[scan_id]` returns `prompt_results` rows for one scan (`src/app/api/customer/scan/report/[scan_id]/route.js:11-72`); the report groups them by lower-cased question text (`src/components/portal/scans/reportData.js:180-202`) and renders each question with its engine answers (`src/components/portal/scans/ReportCards.jsx:143-270`). `GET /api/customer/measurement` lists observation metadata and capture states, deriving `withdrawn` from `reason = 'redaction_retracted'` and `expired` from `expires_at` (`src/app/api/customer/measurement/route.js:15-61`). `GET /api/customer/measurement/evidence` checks ownership through `scan_jobs`, returns 410 with "This capture was withdrawn because its redaction could not be verified. The measurement is retained." or "Raw capture expired under the retention policy. The measurement is retained.", and redirects to a signed URL valid at most 120 s (`src/app/api/customer/measurement/evidence/route.js:6-54`).
 - **Tables are service-only.** `probe_observations` and `measurement_evidence` have no customer grants (`027:59-64`, `028:19-22`); `prompt_results` has a tenant read policy on `brand` (`supabase/migrations/023_customer_auth_and_tenant_rls.sql:146-165`). Scheduled scans are identifiable by `measurement_windows.job_id` (`032:4-9`).
 - **Missing:** per-question identity across scans, a history page, date ranges, cross-scan brand rates per question, and links from the Questions page and the scan report.
@@ -53,11 +53,11 @@ Each tracked question gets its own page at `/portal/questions/[questionId]`. It 
 | F12-AC-02 | `link_question_answers(brand)` links each **terminal** scan observation of that workspace to a question: first by the `question_id` carried in the scan's frozen panel snapshot whose text matches, else by `normalize_question_text(query)`; it fills `prompt_result_id`, `scan_job_id`, `scan_id`, `collected_at`; it is idempotent and never links a non-terminal (`pending`, `leased`, `retry`, `posted`) row. | DB group `link-scan` |
 | F12-AC-03 | It links explore observations by their own `brand_key` and legacy `prompt_results` rows that have no observation; it never links across workspaces. | DB group `link-explore-legacy` |
 | F12-AC-04 | With `p_import_missing = true`, every distinct historical question text without a question becomes one `workspace_questions` row (`origin 'import'`, `status 'archived'`, `topic 'General'`) and is then linked; repeat runs create nothing. | DB group `link-import` |
-| F12-AC-05 | Links are created by the periodic `questions.link` job (every 300 s) and lazily before a history read (bounded to 500 rows); a failing lazy link does not fail the read. | unit `src/lib/questions/history/history.test.ts`; DB group `link-scan` |
-| F12-AC-06 | `GET /api/customer/questions/[questionId]/history` returns 404 for an unknown question or another workspace's; filters by `from`/`to` on `collected_at`; sorts newest first; returns at most 500 executions with `truncated`; contains no answer text. | route `src/lib/questions/history/history.route.test.mjs` |
-| F12-AC-07 | Brand summary: counts only scan and legacy answers with an answer (`explore` excluded); per brand `answers` = answered executions whose roster included it with a known mention state; `unknown` counts null mention states and is excluded from the denominator; your brand's citation = `brand_cited`, a rival's = its name in `competitors_cited`. Matches OpenSEO `summarizeAiBrands` on an equivalent fixture. | unit `src/lib/questions/history/summary.test.ts` |
+| F12-AC-05 | Links are created by the periodic `questions.link` job (every 300 s) and lazily before a history read (bounded to 500 rows); a failing lazy link does not fail the read. | unit `src/server/questions/history/history.test.ts`; DB group `link-scan` |
+| F12-AC-06 | `GET /api/customer/questions/[questionId]/history` returns 404 for an unknown question or another workspace's; filters by `from`/`to` on `collected_at`; sorts newest first; returns at most 500 executions with `truncated`; contains no answer text. | route `src/server/questions/history/history.route.test.mjs` |
+| F12-AC-07 | Brand summary: counts only scan and legacy answers with an answer (`explore` excluded); per brand `answers` = answered executions whose roster included it with a known mention state; `unknown` counts null mention states and is excluded from the denominator; your brand's citation = `brand_cited`, a rival's = its name in `competitors_cited`. Matches OpenSEO `summarizeAiBrands` on an equivalent fixture. | unit `src/server/questions/history/summary.test.ts` |
 | F12-AC-08 | `GET /api/customer/questions/[questionId]/answers/[answerId]` returns the answer (markdown when stored, else text, cut to 24,000 chars with `truncated`), safe citations only, brands with stored spans (no recomputation; spans outside the text dropped), provenance, and capture states (`stored`, `expired`, `withdrawn`, `incomplete`, `legacy_unknown`); an evidence link only for stored, unexpired, non-withdrawn captures; 404 for another workspace. | route test |
-| F12-AC-09 | `GET /api/customer/measurement/evidence` also serves explore observations owned by the workspace (`purpose = 'explore'` and `brand_key`), with the existing 404/409/410 copy unchanged for scan observations. | route `src/lib/questions/history/evidenceRoute.route.test.mjs` |
+| F12-AC-09 | `GET /api/customer/measurement/evidence` also serves explore observations owned by the workspace (`purpose = 'explore'` and `brand_key`), with the existing 404/409/410 copy unchanged for scan observations. | route `src/server/questions/history/evidenceRoute.route.test.mjs` |
 | F12-AC-10 | The page renders every state in §6.6 with the exact copy; changing the date range, engine or date updates the URL; back/forward restores them. | browser `scripts/qa/check-f12-browser.mjs` |
 | F12-AC-11 | The scan report shows a "History" link on every question row that has a linked question, pointing to `/portal/questions/{id}?from=scan&scan={scanId}`; rows without a link show no link; existing report tests pass. | unit `src/components/portal/scans/reportHistoryLinks.test.mjs`; `src/components/portal/portalRegressions.test.mjs` |
 | F12-AC-12 | `questions.links.retention` deletes links older than 395 days in batches and never touches P0 rows. | DB group `links-retention` |
@@ -247,7 +247,7 @@ Notes:
 
 ### 6.2 Server modules
 
-All under `src/lib/questions/history/` (TypeScript, relative imports with extensions), shared types in `src/shared/question-history.ts`.
+All under `src/server/questions/history/` (TypeScript, relative imports with extensions), shared types in `src/shared/question-history.ts`.
 
 #### `src/shared/question-history.ts` (PORT of `PromptDateRange.tsx:11-60`, `ai-visibility.ts` answer types)
 
@@ -274,11 +274,11 @@ export const answerDetailSchema = z.looseObject({ … });   // §6.5
 export function excerpt(text: string, span: { start: number; end: number }, radius = 70): { before: string; match: string; after: string };
 ```
 
-#### `src/lib/questions/history/links.ts`
+#### `src/server/questions/history/links.ts`
 
 `linkQuestionAnswers(admin, brandKey, { limit, importMissing, linkedBy }) → { scan, explore, legacy, imported, unmatched }` (RPC). `linkBeforeRead(admin, brandKey)` = `linkQuestionAnswers(..., { limit: 500, linkedBy: "read" })` wrapped so any error logs `[question-history] lazy link failed {brandKey}` and returns `null`.
 
-#### `src/lib/questions/history/history.ts`
+#### `src/server/questions/history/history.ts`
 
 ```ts
 export async function getQuestionHistory(ws: Workspace, questionId: string,
@@ -295,14 +295,14 @@ export async function getQuestionHistory(ws: Workspace, questionId: string,
 6. `summary = summarizeBrands(rows.filter(r => r.source !== "explore"))`; `coverage = { total, answered, noAnswer, failed, explore, legacy }`.
 7. Telemetry `question_history:viewed { executions: n, range: preset }` (no text).
 
-#### `src/lib/questions/history/summary.ts` (PORT of `ai-visibility-results.ts:8-44`)
+#### `src/server/questions/history/summary.ts` (PORT of `ai-visibility-results.ts:8-44`)
 
 ```ts
 export function summarizeBrands(rows: ExecutionFacts[]): BrandSummary[];
 ```
 For each row with `status === "answered"`: roster = `brands[]` (self + rivals tracked at that scan); if `brands` is empty, roster = self only from `own_mentioned`. Per brand (keyed by lower-cased name; self keyed as `self`): `mentioned === null` (or self `mention_state !== "observed"`) → `unknown++`; else `answers++` and `mentions += mentioned ? 1 : 0`; citations: self `own_cited === true`; rival `competitors_cited` contains its name (case-insensitive). Order: self first, then by mentions desc, citations desc, name asc (OpenSEO `PromptSummary.tsx:22-29`). The workspace display name labels the self row.
 
-#### `src/lib/questions/history/answer.ts`
+#### `src/server/questions/history/answer.ts`
 
 ```ts
 export async function getQuestionAnswer(ws: Workspace, questionId: string, answerId: string, deps?): Promise<AnswerDetail>;
@@ -326,10 +326,10 @@ Adds `questionIdByQuery: Record<string, string>`: rows of `question_answer_links
 
 #### Jobs and registrations
 
-- `src/lib/questions/history/jobs.ts` (imported from `src/lib/jobs/kinds.ts`): `definePeriodic({ name: "questions.link", everySeconds: 300, run })` → `enqueueSystemJob("questions.link", {}, { dedupeKey: "questions.link:" + slot5m })`; the job lists active brands (`customer_brands.is_active`, ordered, at most 200) and runs `step.do("link-" + n, DB_STEP, () => linkQuestionAnswers(admin, brand, { limit: 2000, linkedBy: "periodic" }))` for n = 1…count. `definePeriodic({ name: "questions.links.retention", everySeconds: 86400, run })` → `prune_question_answer_links(now − 395 days, 5000)` looped up to 20 times.
+- `src/server/questions/history/jobs.ts` (imported from `src/server/jobs/kinds.ts`): `definePeriodic({ name: "questions.link", everySeconds: 300, run })` → `enqueueSystemJob("questions.link", {}, { dedupeKey: "questions.link:" + slot5m })`; the job lists active brands (`customer_brands.is_active`, ordered, at most 200) and runs `step.do("link-" + n, DB_STEP, () => linkQuestionAnswers(admin, brand, { limit: 2000, linkedBy: "periodic" }))` for n = 1…count. `definePeriodic({ name: "questions.links.retention", everySeconds: 86400, run })` → `prune_question_answer_links(now − 395 days, 5000)` looped up to 20 times.
 - Event names use F26's `area:action` form. F26 adds the calls directly (F26 §6.2.7, no sink module).
-- `src/lib/telemetry/events.ts` (F26): `question_history:viewed { executions, range }`, `question_history:answer_opened { engine, source }`.
-- `src/lib/query/keys.ts`: `questionHistoryKeys = { history: (brandKey, questionId, from, to) => ["question-history", brandKey, questionId, from ?? "", to ?? ""], answer: (brandKey, questionId, answerId) => ["question-history", brandKey, questionId, "answer", answerId] }`.
+- `src/shared/telemetry/events.ts` (F26): `question_history:viewed { executions, range }`, `question_history:answer_opened { engine, source }`.
+- `src/shared/query/keys.ts`: `questionHistoryKeys = { history: (brandKey, questionId, from, to) => ["question-history", brandKey, questionId, from ?? "", to ?? ""], answer: (brandKey, questionId, answerId) => ["question-history", brandKey, questionId, "answer", answerId] }`.
 
 ### 6.3 Jobs
 
@@ -344,7 +344,7 @@ None. F12 reads stored data only. Evidence links are signed by the existing rout
 
 ### 6.5 API routes
 
-All routes: `requireWorkspace` (F01), `toErrorResponse`, `Cache-Control: no-store`; contracts in `src/lib/questions/history/history.contract.ts`. Paths are under `[questionId]/history` and `[questionId]/answers` so they cannot collide with F08's question CRUD routes.
+All routes: `requireWorkspace` (F01), `toErrorResponse`, `Cache-Control: no-store`; contracts in `src/server/questions/history/history.contract.ts`. Paths are under `[questionId]/history` and `[questionId]/answers` so they cannot collide with F08's question CRUD routes.
 
 **`GET /api/customer/questions/[questionId]/history`** (file `src/app/api/customer/questions/[questionId]/history/route.ts`)
 
@@ -502,12 +502,12 @@ Route `src/app/portal/questions/[questionId]/page.tsx` (client component in the 
 | `openseo:src/client/features/ai-visibility/PromptAnalysis.tsx` | `QuestionHistoryPage.tsx`, `AnswerPanel.tsx` | PORT | Range filtering moves to the server (`from`/`to`); selection rules and `ExecutionSelects` kept; URL state added. |
 | `openseo:src/client/features/ai-visibility/PromptDateRange.tsx` | `src/shared/question-history.ts`, `HistoryDateRange.tsx` | PORT | `enum` → string union (erasable TS); same presets, default and copy. |
 | `openseo:src/client/features/ai-visibility/PromptSummary.tsx` | `BrandComparison.tsx` | PORT | Unknown counts; brand keyed by name (we track names and aliases, not domains); no favicon fetch. |
-| `openseo:src/shared/ai-visibility-results.ts:8-44` | `src/lib/questions/history/summary.ts` | PORT | Unknown mention states excluded from the denominator; rival citation from `competitors_cited`; explore excluded. |
+| `openseo:src/shared/ai-visibility-results.ts:8-44` | `src/server/questions/history/summary.ts` | PORT | Unknown mention states excluded from the denominator; rival citation from `competitors_cited`; explore excluded. |
 | `openseo:src/client/features/ai-visibility/PromptAnswers.tsx` | `AnswerPanel.tsx` | PORT | Copy kept; provenance line added. |
 | `openseo:src/client/features/ai-visibility/AnswerContent.tsx` | `AnswerEvidence.tsx` | PORT | Stored spans instead of read-time matching; evidence footer (stored/expired/withdrawn); owned/competitor citation badges; relationship/sentiment badges. |
 | `openseo:src/client/features/ai-visibility/PromptExecutions.tsx` | `Executions.tsx` | PORT | Triggers Scheduled/Explorer/Legacy; more statuses. |
 | `openseo:src/client/features/ai-visibility/shared.tsx:97-109, 184-206` | `hooks/useQuestionHistory.ts`, `MentionBadge.tsx`, `src/shared/question-history.ts` | PORT | `aiRate`, `aiDate`, `AiMatchBadge` (adds "Unknown"). |
-| `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts:56-89, 205-288` | `src/lib/questions/history/history.ts`, `answer.ts` | PORT | Rows from our observations/prompt_results via links; 50 runs → 500 answers; 24,000-char display limit kept. |
+| `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts:56-89, 205-288` | `src/server/questions/history/history.ts`, `answer.ts` | PORT | Rows from our observations/prompt_results via links; 50 runs → 500 answers; 24,000-char display limit kept. |
 | `openseo:src/server/features/ai-visibility/services/aiVisibilityMatching.ts:12-63` | (not used on read) | PATTERN | We keep the spans recorded at judging time (`entityEvidence.js`, `judge.js`), matching OpenSEO's brand-snapshot principle. |
 | `openseo:src/client/features/ai-search/components/MarkdownAnswer.tsx` | `src/components/app/markdown/MarkdownAnswer.tsx` (F11) | COPY | Shared with F11; `collapse={false}` here. |
 
@@ -522,9 +522,9 @@ Route `src/app/portal/questions/[questionId]/page.tsx` (client component in the 
 - [ ] **P1.T2 DB tests**
   - [x] **P1.T2.S1** *Files:* `scripts/qa/check-f12-db.mjs` (loopback `_qa` DB, pattern `scripts/qa/check-repair-workflows.mjs:13-18`). Fixture: two workspaces; workspace A has questions Q1 (text "Best oversized tees in India"), Q2; scan 1 (panel v1 without question ids) and scan 2 (panel v2 with `question_id` = Q1 for text "best  oversized tees in india"); observations in states answered, valid_no_aio, failed, leased, posted; matching `prompt_results`; two legacy `prompt_results` without observations; one historical text with no question; workspace B with the same text. Groups: `links-rls` (AC-01), `link-scan` (AC-02: both scans link to Q1, non-terminal rows skipped, `prompt_result_id` filled, second call inserts 0), `link-explore-legacy` (AC-03; explore rows inserted only when F11's 090 is applied, else the group asserts zero explore links), `link-import` (AC-04), `links-retention` (AC-12). *Verify:* `node scripts/qa/check-f12-db.mjs` → "ok 5 groups".
 - [ ] **P1.T3 Linking code and jobs**
-  - [x] **P1.T3.S1** *Files:* `src/lib/questions/history/links.ts`, `links.test.ts` (RPC args, lazy-link error swallowed and logged without text). *Verify:* `node --test src/lib/questions/history/links.test.ts` → pass (F12-AC-05 unit half).
-  - [x] **P1.T3.S2** *Files:* `src/lib/questions/history/jobs.ts`, `src/lib/jobs/kinds.ts` (one import line). *Verify:* `node --test src/lib/jobs/*.test.ts` → pass; `node scripts/qa/check-f12-db.mjs --group link-scan` → ok.
-  - [x] **P1.T3.S3** *Files:* `docs/runbooks/question-history-backfill.md` (the one-time owner SQL in §6.1, how to read `unmatched`, how to re-run). *Verify:* doc-status header present (`node --test src/lib/docStatus.test.mjs` → pass).
+  - [x] **P1.T3.S1** *Files:* `src/server/questions/history/links.ts`, `links.test.ts` (RPC args, lazy-link error swallowed and logged without text). *Verify:* `node --test src/server/questions/history/links.test.ts` → pass (F12-AC-05 unit half).
+  - [x] **P1.T3.S2** *Files:* `src/server/questions/history/jobs.ts`, `src/server/jobs/kinds.ts` (one import line). *Verify:* `node --test src/server/jobs/*.test.ts` → pass; `node scripts/qa/check-f12-db.mjs --group link-scan` → ok.
+  - [x] **P1.T3.S3** *Files:* `docs/runbooks/question-history-backfill.md` (the one-time owner SQL in §6.1, how to read `unmatched`, how to re-run). *Verify:* doc-status header present (`node --test src/server/docStatus.test.mjs` → pass).
 
 **Checkpoint:** CI database job, `check-f12-db.mjs`, full suite, build green. Completes F12-AC-01…05, 12.
 
@@ -534,13 +534,13 @@ Route `src/app/portal/questions/[questionId]/page.tsx` (client component in the 
 
 - [x] **P2.T1 Shared and summary**
   - [x] **P2.T1.S1** *Files:* `src/shared/question-history.ts`, `src/shared/question-history.test.ts` (presets, local-day bounds across a DST-free and a UTC+5:30 zone, invalid custom → null, `excerpt` at text edges and with surrogate pairs). *Verify:* `node --test src/shared/question-history.test.ts` → pass.
-  - [x] **P2.T1.S2** *Files:* `src/lib/questions/history/summary.ts`, `summary.test.ts` (OpenSEO parity fixture translated to our rows: same numbers; unknown excluded; explore excluded; rival citations; ordering). *Verify:* pass (F12-AC-07).
+  - [x] **P2.T1.S2** *Files:* `src/server/questions/history/summary.ts`, `summary.test.ts` (OpenSEO parity fixture translated to our rows: same numbers; unknown excluded; explore excluded; rival citations; ordering). *Verify:* pass (F12-AC-07).
 - [x] **P2.T2 Services and routes**
-  - [x] **P2.T2.S1** *Files:* `src/lib/questions/history/history.ts`, `answer.ts`, `history.test.ts`, `answer.test.ts` (memory admin client), fixtures `tests/fixtures/f12/{observations.json,prompt-results.json,evidence.json}` (synthetic text; spans valid and out-of-range; a withdrawn and an expired capture; unsafe citation URL). *Verify:* `node --test src/lib/questions/history/*.test.ts` → pass (F12-AC-08 unit half, 13, 14).
-  - [x] **P2.T2.S2** *Files:* `src/app/api/customer/questions/[questionId]/history/route.ts`, `src/app/api/customer/questions/[questionId]/answers/[answerId]/route.ts`, `src/lib/questions/history/history.contract.ts`, `src/lib/questions/history/history.route.test.mjs` (hook pattern `src/lib/customerRoutes.test.hooks.mjs`). Cases: 404 other workspace and unknown ids; range filter; `from > to` → 400 `invalid_range`; 500 cap with `truncated`; response JSON contains no `text` key in history; answer 404 cross-workspace; evidence `href` only for stored. *Verify:* `node --test src/lib/questions/history/history.route.test.mjs src/lib/http/routeContract.test.ts` → pass (F12-AC-06, 08).
-  - [x] **P2.T2.S3** *Files:* `src/app/api/customer/measurement/evidence/route.js`, `src/lib/questions/history/evidenceRoute.route.test.mjs` (scan observation unchanged: 404/409/410 copy byte-identical; explore observation of own workspace → 302; other workspace → 404). *Verify:* pass (F12-AC-09).
-  - [x] **P2.T2.S4** *Files:* `src/app/api/customer/scan/report/[scan_id]/route.js` (`questionIdByQuery`), `src/lib/questions/history/reportLinks.route.test.mjs`. *Verify:* pass; `node --test src/components/portal/portalRegressions.test.mjs` → pass.
-  - [x] **P2.T2.S5** *Files:* `src/lib/telemetry/events.ts`, `src/lib/query/keys.ts`. *Verify:* `npm run typecheck` → exit 0.
+  - [x] **P2.T2.S1** *Files:* `src/server/questions/history/history.ts`, `answer.ts`, `history.test.ts`, `answer.test.ts` (memory admin client), fixtures `tests/fixtures/f12/{observations.json,prompt-results.json,evidence.json}` (synthetic text; spans valid and out-of-range; a withdrawn and an expired capture; unsafe citation URL). *Verify:* `node --test src/server/questions/history/*.test.ts` → pass (F12-AC-08 unit half, 13, 14).
+  - [x] **P2.T2.S2** *Files:* `src/app/api/customer/questions/[questionId]/history/route.ts`, `src/app/api/customer/questions/[questionId]/answers/[answerId]/route.ts`, `src/server/questions/history/history.contract.ts`, `src/server/questions/history/history.route.test.mjs` (hook pattern `src/server/customerRoutes.test.hooks.mjs`). Cases: 404 other workspace and unknown ids; range filter; `from > to` → 400 `invalid_range`; 500 cap with `truncated`; response JSON contains no `text` key in history; answer 404 cross-workspace; evidence `href` only for stored. *Verify:* `node --test src/server/questions/history/history.route.test.mjs src/shared/http/routeContract.test.ts` → pass (F12-AC-06, 08).
+  - [x] **P2.T2.S3** *Files:* `src/app/api/customer/measurement/evidence/route.js`, `src/server/questions/history/evidenceRoute.route.test.mjs` (scan observation unchanged: 404/409/410 copy byte-identical; explore observation of own workspace → 302; other workspace → 404). *Verify:* pass (F12-AC-09).
+  - [x] **P2.T2.S4** *Files:* `src/app/api/customer/scan/report/[scan_id]/route.js` (`questionIdByQuery`), `src/server/questions/history/reportLinks.route.test.mjs`. *Verify:* pass; `node --test src/components/portal/portalRegressions.test.mjs` → pass.
+  - [x] **P2.T2.S5** *Files:* `src/shared/telemetry/events.ts`, `src/shared/query/keys.ts`. *Verify:* `npm run typecheck` → exit 0.
 
 **Checkpoint:** full suite, typecheck, build, contract test. Completes F12-AC-06…09, 13, 14 (API half).
 
@@ -551,7 +551,7 @@ Route `src/app/portal/questions/[questionId]/page.tsx` (client component in the 
 - [x] **P3.T1 Page**
   - [x] **P3.T1.S1** *Files:* `src/components/app/markdown/MarkdownAnswer.tsx` (only if F11 has not added it), `src/components/portal/questions/history/*` (§6.6), `src/app/portal/questions/[questionId]/page.tsx`. *Verify:* `npm run build` → exit 0.
 - [x] **P3.T2 Entry points**
-  - [x] **P3.T2.S1** *Files:* (`QuestionHistoryLink.tsx` already exists from F08; import it, do not recreate it) `src/components/portal/scans/ReportCards.jsx` (`QuestionsCard` and `QuestionRow` take `questionIdByQuery`, `scanId`), `src/app/portal/scans/[scanId]/page.jsx` (passes them), `src/components/portal/scans/reportHistoryLinks.test.mjs` (render harness `src/lib/renderHarness.mjs`: link present only for linked questions, href includes `from_scan`). *Verify:* `node --test src/components/portal/scans/reportHistoryLinks.test.mjs src/components/portal/portalRegressions.test.mjs` → pass (F12-AC-11).
+  - [x] **P3.T2.S1** *Files:* (`QuestionHistoryLink.tsx` already exists from F08; import it, do not recreate it) `src/components/portal/scans/ReportCards.jsx` (`QuestionsCard` and `QuestionRow` take `questionIdByQuery`, `scanId`), `src/app/portal/scans/[scanId]/page.jsx` (passes them), `src/components/portal/scans/reportHistoryLinks.test.mjs` (render harness `src/server/renderHarness.mjs`: link present only for linked questions, href includes `from_scan`). *Verify:* `node --test src/components/portal/scans/reportHistoryLinks.test.mjs src/components/portal/portalRegressions.test.mjs` → pass (F12-AC-11).
   - [x] **P3.T2.S2** *Files:* `src/components/portal/questions/history/QuestionHistoryLink.tsx` (F08 shipped it with `QUESTION_HISTORY_AVAILABLE = false`; conventions §5.3). *Do:* set `QUESTION_HISTORY_AVAILABLE = true`; change nothing else in the file. F08's question rows already render the link when the constant is true. *Verify:* `npm run build` → exit 0; `node --test src/components/portal/questions/questionRow.test.ts` → pass (F08-AC-24); browser scenario below.
 - [x] **P3.T3 Browser**
   - [x] **P3.T3.S1** *Files:* `scripts/qa/check-f12-browser.mjs` (Playwright from `worker/node_modules/playwright`, local app with fixture API responses). Scenarios: loading skeletons; 404 state; no answers; no answers in range + "Show all available history"; custom range validation (no request sent); brand table "x of y", "(n unknown)", "Show 2 more"; engine switch keeps scan; date select; Answer/Citations/Brands on 390 px; citations badges "Your site"/"Competitor: …"; excerpts with `<mark>`; evidence footer stored/expired/withdrawn copy; executions tags Scheduled/Explorer/Legacy and statuses; wording notices; URL restores on reload and back; `data-ph-mask` present; scan report "History" link navigates with "Back to scan report". *Verify:* `node scripts/qa/check-f12-browser.mjs` → "16 passed" (F12-AC-10, 13, 14 UI half).
@@ -563,13 +563,13 @@ Route `src/app/portal/questions/[questionId]/page.tsx` (client component in the 
 | Test file | Cases | ACs |
 |---|---|---|
 | `scripts/qa/check-f12-db.mjs` | links-rls, link-scan, link-explore-legacy, link-import, links-retention | 01–05, 12 |
-| `src/lib/questions/history/links.test.ts` | RPC args, lazy failure | 05 |
+| `src/server/questions/history/links.test.ts` | RPC args, lazy failure | 05 |
 | `src/shared/question-history.test.ts` | ranges, excerpts | 10 |
-| `src/lib/questions/history/summary.test.ts` | parity, unknown, explore exclusion | 07 |
-| `src/lib/questions/history/history.test.ts`, `answer.test.ts` | facts, statuses, spans, citations, evidence states, no text logs | 06, 08, 13, 14 |
-| `src/lib/questions/history/history.route.test.mjs` | routes, tenant isolation, contract | 06, 08, 13 |
-| `src/lib/questions/history/evidenceRoute.route.test.mjs` | explore ownership, unchanged copy | 09 |
-| `src/lib/questions/history/reportLinks.route.test.mjs`, `src/components/portal/scans/reportHistoryLinks.test.mjs`, `src/components/portal/portalRegressions.test.mjs` | report links | 11 |
+| `src/server/questions/history/summary.test.ts` | parity, unknown, explore exclusion | 07 |
+| `src/server/questions/history/history.test.ts`, `answer.test.ts` | facts, statuses, spans, citations, evidence states, no text logs | 06, 08, 13, 14 |
+| `src/server/questions/history/history.route.test.mjs` | routes, tenant isolation, contract | 06, 08, 13 |
+| `src/server/questions/history/evidenceRoute.route.test.mjs` | explore ownership, unchanged copy | 09 |
+| `src/server/questions/history/reportLinks.route.test.mjs`, `src/components/portal/scans/reportHistoryLinks.test.mjs`, `src/components/portal/portalRegressions.test.mjs` | report links | 11 |
 | `scripts/qa/check-f12-browser.mjs` | UI states | 10, 13, 14 |
 
 Fixtures are synthetic; no provider calls. Answer texts in fixtures are short invented sentences naming fictional brands plus the Offcult competitor names already public in the handoff.

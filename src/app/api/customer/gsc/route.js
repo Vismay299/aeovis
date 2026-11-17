@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { findCustomerBrand, getCustomerContext } from "@/lib/supabase/customer";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { disconnectGsc, isGscOAuthConfigured } from "@/lib/gsc/oauthFlow";
+import { findCustomerBrand, getCustomerContext } from "@/shared/supabase/customer";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { disconnectGsc, isGscOAuthConfigured } from "@/server/gsc/oauthFlow";
 
 export const dynamic = "force-dynamic";
 

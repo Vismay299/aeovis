@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { customerRouteContext } from "@/lib/supabase/customerRoute";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { repairWorkflowStore } from "@/lib/db/repairWorkflow";
-import { verifyPublishUrl } from "@/lib/content/publishVerification";
+import { customerRouteContext } from "@/shared/supabase/customerRoute";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { repairWorkflowStore } from "@/server/db/repairWorkflow";
+import { verifyPublishUrl } from "@/shared/content/publishVerification";
 export const dynamic = "force-dynamic";
 const json = (value, status = 200) =>
   NextResponse.json(value, {

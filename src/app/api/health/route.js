@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/db";
-import { getCronTicks } from "@/lib/db/analytics";
-import { readProviderReadiness } from "@/lib/db/probeDispatch";
-import { buildProviderReadiness } from "@/lib/engines/providerReadiness";
-import { buildHealthPayload } from "@/lib/health";
+import { supabase } from "@/server/db";
+import { getCronTicks } from "@/server/db/analytics";
+import { readProviderReadiness } from "@/server/db/probeDispatch";
+import { buildProviderReadiness } from "@/shared/engines/providerReadiness";
+import { buildHealthPayload } from "@/server/health";
 
 // Reads live state; must never be prerendered at build time.
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export const dynamic = "force-dynamic";
  * perimeter so an uptime monitor can reach it. If a field is ever added that
  * reveals more than that, it belongs behind the perimeter instead.
  *
- * The payload shape lives in src/lib/health.js so it is unit-testable without
+ * The payload shape lives in src/server/health.js so it is unit-testable without
  * a server; this route is just I/O.
  */
 export async function GET() {

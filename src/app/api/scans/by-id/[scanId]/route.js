@@ -3,7 +3,7 @@ import { getScanById, enrichScanForClient, isValidScanId } from "../../_lib/scan
 
 // P0.3: fetch ONE scan by its DB row id, raw_results included. Backs
 // /dashboard/[brand]/[scanId] and the runScan() result_id completion path in
-// src/services/api.js. Must always be fresh — a scan that just completed has
+// src/shared/api.js. Must always be fresh — a scan that just completed has
 // to be readable on the very next request.
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";
@@ -38,7 +38,7 @@ export async function GET(request, { params }) {
     }
 
     if (scan.brand_key) {
-      const { getCustomerContext } = await import("@/lib/supabase/customer");
+      const { getCustomerContext } = await import("@/shared/supabase/customer");
       const context = await getCustomerContext();
       if (context.error || !context.brands.some((brand) => brand.brandKey === scan.brand_key)) {
         return NextResponse.json({ detail: "Scan not found." }, { status: 404 });

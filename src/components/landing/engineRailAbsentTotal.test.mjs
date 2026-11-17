@@ -36,7 +36,7 @@
  *     page still passes a real `total` is guarded by nothing; if that prop goes
  *     away the rail now degrades honestly, which is the whole point.
  *   - The SOURCE-level ban on the `?? 0` shape returning anywhere on the landing
- *     surface lives in src/lib/landingProbeCounter.test.mjs (rule
+ *     surface lives in src/server/landingProbeCounter.test.mjs (rule
  *     "zero-fallback"), not here.
  */
 

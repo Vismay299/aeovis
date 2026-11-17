@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { isCronAuthorized } from "@/lib/cronAuth.js";
-import { processGscSyncJob, wakeGscWorker } from "@/lib/gsc/syncJobs.js";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { isCronAuthorized } from "@/server/cronAuth.js";
+import { processGscSyncJob, wakeGscWorker } from "@/server/gsc/syncJobs.js";
 import crypto from "node:crypto";
 
 export const dynamic = "force-dynamic";

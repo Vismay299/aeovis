@@ -18,7 +18,7 @@ import {
 import { SegmentedToggle, type SegmentedToggleItem } from "@/components/app/SegmentedToggle";
 import { PricedActionButton } from "@/components/app/cost/PricedActionButton";
 import { googleMapsPointUrl, parseMapsLocation } from "@/shared/local-coordinates";
-import { describeError } from "@/lib/query/errors";
+import { describeError } from "@/shared/query/errors";
 import type { SavedBusinessView } from "./hooks/useLocalBusinesses";
 import { useLocalGrid } from "./hooks/useLocalGrid";
 import { GridHistory } from "./GridHistory";

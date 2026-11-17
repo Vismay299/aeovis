@@ -8,7 +8,7 @@ import { contentItemStatus } from "../status";
 import { contentRequest, countWords, cx, playbookLabel, readingMinutes } from "./shared";
 import ReviewFindings from "./ReviewFindings";
 import IndexNowOffer from "./IndexNowOffer";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 
 /** Statuses the customer API accepts edits for (PATCH). */
 const EDITABLE_STATUSES = ["draft", "awaiting_approval", "approved", "rejected"];

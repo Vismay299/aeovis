@@ -33,7 +33,7 @@ import { summarizeSources } from '@/components/dashboard/sourcesMetrics';
  * number; the absence of one renders as an em dash, a state chip, and the
  * reason read off the per-engine slice the missing number mirrors
  * (`citation_denominator` / `citations_unverified_count`, emitted by
- * summarizeEngineSlice in src/lib/scoring/enginePipeline.js and exposed as
+ * summarizeEngineSlice in src/shared/scoring/enginePipeline.js and exposed as
  * `result.perEngineSummaries` by services/api.js) — see the slice selection
  * below for why it is one slice and not all of them.
  *
@@ -63,7 +63,7 @@ export function describeCitationShare(result) {
   //
   // READ THE SLICE THE MISSING NUMBER CAME FROM, not all of them. The scan-level
   // share is a MIRROR of one engine summary: summarizeEngineResults takes
-  // `engines.aio || Object.values(engines)[0]` (src/lib/scoring/enginePipeline
+  // `engines.aio || Object.values(engines)[0]` (src/shared/scoring/enginePipeline
   // .js) and divides that slice's `cited_non_branded` by that slice's
   // `citation_denominator`. On a multi-engine scan the other slices can have
   // healthy denominators while the mirrored one has none — summing them would

@@ -1,11 +1,11 @@
-import { requireUser as defaultRequireUser, type RequireUserDeps } from "../../../../../lib/auth/requireUser.ts";
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { requireUser as defaultRequireUser, type RequireUserDeps } from "../../../../../server/auth/requireUser.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../../server/features/flags.ts";
 import {
   saveOnboardingWebsite as defaultSaveOnboardingWebsite,
   type SaveWebsiteDeps,
-} from "../../../../../lib/onboarding/website.ts";
+} from "../../../../../server/onboarding/website.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

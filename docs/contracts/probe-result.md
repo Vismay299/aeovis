@@ -3,7 +3,7 @@
 > <!-- doc-status -->
 > **Status: LIVE** as the normative target for the R1 probe fleet
 > (`worker/`) and the R1.2.4 ingest route.
-> It is **not** a description of what `src/lib/scoring/enginePipeline.js`
+> It is **not** a description of what `src/shared/scoring/enginePipeline.js`
 > returns today. Section 2 records that shape as it actually is; section 7 lists
 > every place today's code violates section 3.
 
@@ -46,11 +46,11 @@ corrected in revision 2:
    against a reproduction; see §3.2.
 2. **§6.1 labelled our own inference `vendor_reported`.** `basis` now has a
    fourth value; see §3.9.
-3. **§3.9 did not reconcile with `src/lib/llmPricing.js`**, which landed the
+3. **§3.9 did not reconcile with `src/shared/llmPricing.js`**, which landed the
    same day and emits a `free_tier` cost source that no `basis` could represent.
    §3.9 now carries the mapping table.
 4. **One citation was read from the dirty tree.** The V11 note cited
-   `src/lib/scoring/promptGen.js:9` under a declared `8502166` baseline, where
+   `src/shared/scoring/promptGen.js:9` under a declared `8502166` baseline, where
    that import sat at `:3`; the concurrency disclosure did not name
    `promptGen.js` as a file under edit. (At `25e7727` and at `49fe39e` it is
    `:9`.)
@@ -103,13 +103,13 @@ all seven still reproduce. V12's *mechanism* needed correcting — "nothing writ
 exists and is wired; see V12 and §2.3.
 
 **The dirty-tree trap, recorded once so it need not be relearned.** An early
-draft of §3.9 was written by reading `src/lib/llmPricing.js` out of the working
+draft of §3.9 was written by reading `src/shared/llmPricing.js` out of the working
 tree, because a `git diff` run minutes earlier had come back clean. An
 implementer landed in that file in between. Every §3.9 line number in that draft
 was wrong by the same silent amount, and every one of them *resolved*, to
 plausible neighbouring code. For the record, across the three baselines this
 document has carried, `resolveCost`'s `free_tier` branch sits in three different
-places: `src/lib/llmPricing.js` does not exist at all at `8502166`, the branch is
+places: `src/shared/llmPricing.js` does not exist at all at `8502166`, the branch is
 at `:283` at `25e7727`, and at `:335` at `49fe39e`. The rule that follows: on a
 repo with concurrent writers, `git diff` being clean is a fact about the past,
 and only `git show <commit>:<path>` produces a citation that means anything.
@@ -142,18 +142,18 @@ ran.* This document states it as a data shape.
 
 Two functions in one file build every probe row the product scores:
 
-- `probeAio` — `src/lib/scoring/enginePipeline.js:77`, result literal at
+- `probeAio` — `src/shared/scoring/enginePipeline.js:77`, result literal at
   `:78-98`
-- `probeTextEngine` — `src/lib/scoring/enginePipeline.js:172`, result literal at
+- `probeTextEngine` — `src/shared/scoring/enginePipeline.js:172`, result literal at
   `:176-196`
 
 They are reached through `ENGINE_REGISTRY`
-(`src/lib/scoring/enginePipeline.js:735-775`) — `probe: probeAio` at `:740`, and
+(`src/shared/scoring/enginePipeline.js:735-775`) — `probe: probeAio` at `:740`, and
 two thin wrappers around `probeTextEngine` at `:747-756` and `:763-772`.
 
 The chain from there to an HTTP request, hop by hop, each hop read at `49fe39e`:
 
-1. `engine.probe(...)` is invoked at `src/lib/workers/scanWorker.js:1307`.
+1. `engine.probe(...)` is invoked at `src/server/workers/scanWorker.js:1307`.
 2. That line is inside `runProbingPhase` (`scanWorker.js:1227`) — **not**
    directly inside `runScanChunk`, which is 700 lines further down.
 3. `runScanChunk` (`scanWorker.js:2006`) dispatches to it at `scanWorker.js:2181`.
@@ -180,7 +180,7 @@ Every field below is initialised in both literals, so the shape is the same for
 | `is_branded_query` | boolean | both | `isBrandedQuery(query.text, brandAliases)` |
 | `topic` | string | both | defaults to `"General"` |
 | `source` | string | both | defaults to `"unknown"` |
-| `intent_tier` | string | both | `resolveQueryIntentTier`, `src/lib/scoring/aioQueryClassify.js:38-44`; `"branded"` or `"exploratory"` by default |
+| `intent_tier` | string | both | `resolveQueryIntentTier`, `src/shared/scoring/aioQueryClassify.js:38-44`; `"branded"` or `"exploratory"` by default |
 | `answer_present` | boolean | both | **initialised `false`**, set true only after a text-or-citations check (`:117`, `:243`) |
 | `aio_present` | boolean | both | backward-compat duplicate of `answer_present`; text engines leave it `false` |
 | `text` | string | both | `""` when nothing came back |
@@ -191,7 +191,7 @@ Every field below is initialised in both literals, so the shape is the same for
 | `visible` | boolean | both | `brand_mentioned_in_text \|\| brand_cited` (`:144`, `:257`); **stays `false` when the probe failed** |
 | `competitors_found_in_text` | string[] | both | |
 | `competitors_cited` | string[] | both | |
-| `brands` | `{name,is_self,mentioned,position,sentiment}[]` | both | `judgeBrandsSymmetric`, `src/lib/scoring/judge.js:317-323`; `position`/`sentiment` are `null` when not mentioned |
+| `brands` | `{name,is_self,mentioned,position,sentiment}[]` | both | `judgeBrandsSymmetric`, `src/shared/scoring/judge.js:317-323`; `position`/`sentiment` are `null` when not mentioned |
 | `error` | string \| null | both | free-text message, or the `EMPTY_ANSWER` sentinel |
 | `cost` | number | both | USD, always a number, never null |
 | `organic` | `{position,href,domain,title}[]` | **aio only** | `:104` |
@@ -229,7 +229,7 @@ satisfy.
 
 ### 2.4 How v1 is persisted
 
-`src/lib/workers/scanWorker.js:1345-1369` (`const rows = batchResults.map`, in
+`src/server/workers/scanWorker.js:1345-1369` (`const rows = batchResults.map`, in
 `runProbingPhase`, twenty lines after the `engine.probe` call of §2.1) maps the
 probe row onto `prompt_results`
 (`supabase/migrations/005_analytics_platform.sql:8-27`): `answered` ←
@@ -257,18 +257,18 @@ Four things, each already a filed finding:
    path. A consumer that counts `!r.visible` counts unmeasured rows as measured
    absences. Today's consumers happen to guard on `answer_present` first
    (`src/components/dashboard/interlocking.js:30-32`,
-   `src/lib/content/weeklyReport.js:95-98`,
+   `src/shared/content/weeklyReport.js:95-98`,
    `src/components/studio/OpportunitiesPanel.jsx:25-28`) — but that is
    convention, not structure, and one unguarded reader reintroduces the bug.
 3. **Zero citations does not mean zero citations.** `probePerplexity` runs two
    independent legs; if `/search` exhausts its retries while the answer leg
    succeeds, the function returns `citations: []`, `references: []` and a
-   hardcoded `error: null` (`src/lib/engines/perplexity.js:174-180`). "Cited
+   hardcoded `error: null` (`src/shared/engines/perplexity.js:174-180`). "Cited
    nothing" and "citations unverifiable" are the same value. Filed as R2.2.2;
    documented at `docs/vendors/perplexity.md:123-140`.
 4. **`cost` is never null, so an unpriced probe reports a price.** The
    Perplexity answer leg falls back to a hardcoded `0.005`
-   (`src/lib/engines/perplexity.js:67`) and the search leg returns a flat
+   (`src/shared/engines/perplexity.js:67`) and the search leg returns a flat
    `0.005` that no vendor reported (`:121`). `probeAio` assigns a constant
    `0.0015` (`enginePipeline.js:111`). Aggregating these and calling the total
    measured spend is a fabrication.
@@ -339,7 +339,7 @@ corrected here rather than deleted.
 
 Reproduction — ten non-branded `chatgpt` rows built to today's v1 shape (§2.2)
 and passed through the real `summarizeEngineSlice`
-(`src/lib/scoring/enginePipeline.js:329`). Five carry `answer_present: true`;
+(`src/shared/scoring/enginePipeline.js:329`). Five carry `answer_present: true`;
 five carry `answer_present: false` with the `EMPTY_ANSWER` sentinel R2.2.1
 introduced. This was run, not reasoned about, and re-run at `49fe39e` for this
 revision:
@@ -354,9 +354,9 @@ revision:
 
 (On the last row: on a *chat* slice today's health gate does trip, because
 `TEXT_ENGINE_MIN_NON_BRANDED_COVERAGE` is `0.9`
-(`src/lib/scoring/enginePipeline.js:36`) and `0.5` is under it. That is the
+(`src/shared/scoring/enginePipeline.js:36`) and `0.5` is under it. That is the
 opposite of the aio case in §7's V3, where the equivalent floor is `0.15`
-(`src/lib/scoring/aioConstants.js:4`) and nothing trips. The gate is not what
+(`src/shared/scoring/aioConstants.js:4`) and nothing trips. The gate is not what
 this section is about, but it is the difference between the two reproductions
 and must not be read across.)
 
@@ -394,9 +394,9 @@ second half of them is misreporting:
    this contract forbids, and it is the reason the rule stands.
 
 R2.2.1 is the reason the empty row is typed at all
-(`src/lib/scoring/enginePipeline.js:217-241`, `EMPTY_ANSWER` at `:162`,
+(`src/shared/scoring/enginePipeline.js:217-241`, `EMPTY_ANSWER` at `:162`,
 `result.error = EMPTY_ANSWER` with `answer_present = false` at `:234-235`;
-regression test `src/lib/scoring/emptyAnswer.test.mjs:86`). This contract keeps
+regression test `src/shared/scoring/emptyAnswer.test.mjs:86`). This contract keeps
 that typing and moves the row out of the denominator entirely — a deliberate
 change in coverage semantics, not a defence of the existing one. **R2.1.1 and
 R1.2.4 encode this paragraph, and neither of them may ship the exclusion without
@@ -407,7 +407,7 @@ not be rendered.**
 `skipped` is never a success. It is the state for "an engine frozen into a
 checkpoint no longer resolves", "no credential", "budget exhausted" — the same
 class of discarded decision `CHUNK_SKIP_REASONS`
-(`src/lib/workers/scanWorker.js:193-207`) was created to stop losing.
+(`src/server/workers/scanWorker.js:193-207`) was created to stop losing.
 
 ### 3.3 `state_reason`
 
@@ -423,7 +423,7 @@ mandatory is `scan_runs_reason_chk` at `:144-145`
 (`CHECK (outcome IS NULL OR outcome = 'succeeded' OR btrim(COALESCE(reason, ''))
 <> '')`), raised as a sentence rather than a constraint name by
 `close_scan_run` at `:327-329`. In application code `recordSkip` throws on a
-reason-less skip (`src/lib/workers/scanWorker.js:254-259`). A skip with no
+reason-less skip (`src/server/workers/scanWorker.js:254-259`). A skip with no
 reason is the discarded fact this whole phase exists to keep.
 
 `no_answer` requires a reason too, and this is deliberate: `no_ai_overview`
@@ -484,10 +484,10 @@ Rules:
 ### 3.6 `geo`
 
 The geo **actually used for the request**, not the configured default. Today the
-default resolves through `resolveSerpGeo` (`src/lib/engines/serpGeo.js:25-27`,
+default resolves through `resolveSerpGeo` (`src/shared/engines/serpGeo.js:25-27`,
 default `"in"` at `:15`), and the ChatGPT and Perplexity API adapters hardcode
-`country: "IN"` in the request body (`src/lib/engines/openai.js:28`,
-`src/lib/engines/perplexity.js:47`) while recording it nowhere on the result.
+`country: "IN"` in the request body (`src/shared/engines/openai.js:28`,
+`src/shared/engines/perplexity.js:47`) while recording it nowhere on the result.
 
 A result whose geo is unknown to the producer **must** be `skipped` with
 `state_reason: "geo_unresolved"`. It must not default.
@@ -561,7 +561,7 @@ today:
 - `ui_surface_no_metered_call` — a browser drove a public surface; no metered API
   request was issued. Says nothing about proxy or compute cost (see above).
 - `free_model_id_suffix` — the model id ends in `:free`
-  (`src/lib/llmPricing.js:105-107`), which is a gateway naming convention we are
+  (`src/shared/llmPricing.js:105-107`), which is a gateway naming convention we are
   trusting, not a price the gateway quoted.
 
 A consumer summing `amount_usd` **must** report the `unpriced` **and**
@@ -571,7 +571,7 @@ measurement, and it must be legible as one. Standing rule 5 of the rebuild — a
 unpriced model id fails loud, never `$0` — is what `unpriced` enforces;
 `no_charge` is the narrow, reasoned exception to it and is not a way around it.
 
-#### Mapping to `src/lib/llmPricing.js`
+#### Mapping to `src/shared/llmPricing.js`
 
 `llmPricing.js` landed the same day as this contract and is the tree's only
 existing cost-provenance vocabulary. It returns `cost_source` of
@@ -588,7 +588,7 @@ normative — an adapter that calls it **must** translate, never pass
 `free_tier` is why the fourth `basis` value is not optional. It is a **priced
 zero**: `isFreeModelId` (`llmPricing.js:105-107`) infers it from the `:free`
 suffix, no vendor quoted it and no rate card produced it, and
-`src/lib/openrouter.test.mjs:537` pins the distinction verbatim — *"free is a
+`src/server/openrouter.test.mjs:537` pins the distinction verbatim — *"free is a
 priced 0, not an unpriced one"*. Under the three-value vocabulary it had no
 representable `basis` at all. With the free-model decision locked for this
 project, that gap was live, not theoretical.
@@ -613,10 +613,10 @@ path priced nothing at all. That is standing rule 5 holding at the layer below
 this contract, and `no_charge` must not be used to route around it.
 
 **Liveness, so this table is not read as more than it is.** `cost_source` runs
-today only on the LLM-call path — `resolveCost` at `src/lib/openrouter.js:124`,
-returned to callers at `:139`, reaching `src/lib/llm.js` and from there
-`src/lib/scoring/promptGen.js:13`, `src/lib/scoring/competitorExtract.js:4` and
-`src/lib/analytics/citationEnrich.js:1`. **No probe row carries it.** Probe rows
+today only on the LLM-call path — `resolveCost` at `src/server/openrouter.js:124`,
+returned to callers at `:139`, reaching `src/server/llm.js` and from there
+`src/shared/scoring/promptGen.js:13`, `src/shared/scoring/competitorExtract.js:4` and
+`src/shared/analytics/citationEnrich.js:1`. **No probe row carries it.** Probe rows
 still carry a bare `cost` number that is never null (§2.2), which is V6 in §7.
 This mapping is what the R1.3 and R1.4 adapters must implement, not a
 description of what any row contains today.
@@ -640,7 +640,7 @@ citations_state: "measured" | "unverified" | "not_applicable"
 > visibility denominators, because the answer itself was measured.
 
 This is R2.2.2 stated as a contract rather than a bug: the Perplexity two-leg
-split at `src/lib/engines/perplexity.js:145-148` produces exactly the
+split at `src/shared/engines/perplexity.js:145-148` produces exactly the
 answer-ok/search-failed row that must be `unverified`.
 
 ### 3.11 The denominator rule
@@ -658,7 +658,7 @@ Concretely, for a slice of rows from one engine:
 - **Coverage denominator** = rows with `state ∈ {answered, no_answer}`.
   Coverage numerator = rows with `state = answered`.
 - **Visibility denominator** = rows with `state = answered`, further narrowed to
-  the eliciting pool (`src/lib/scoring/enginePipeline.js:367-373`).
+  the eliciting pool (`src/shared/scoring/enginePipeline.js:367-373`).
   Numerator = those with `visible === true`.
 - **Citation denominator** = rows with `state = answered` **and**
   `citations_state = "measured"`.
@@ -680,15 +680,15 @@ failed`. The mapping this contract fixes:
 | `measured` | visibility denominator ≥ the minimum sample and at least one `visible` row |
 | `measured_zero` | visibility denominator ≥ the minimum sample and zero `visible` rows — **a real 0%** |
 | `not_assessed` | visibility denominator below the minimum sample, or zero |
-| `failed` | the health gate tripped (`src/lib/scoring/enginePipeline.js:466-469`) |
+| `failed` | the health gate tripped (`src/shared/scoring/enginePipeline.js:466-469`) |
 
 `share_of_ai_pct` **must** be `null` for `not_assessed` and `failed`, and `0`
 **only** for `measured_zero`. Today it is `0` for all three
-(`src/lib/scoring/enginePipeline.js:393-396`) — see §7.
+(`src/shared/scoring/enginePipeline.js:393-396`) — see §7.
 
 The precedent this follows already exists in the same file: `share_of_voice_pct`
 is `null`, not `0` and not `100`, when there is no rival roster to compute it
-over (`src/lib/scoring/enginePipeline.js:427-431`), for exactly this reason.
+over (`src/shared/scoring/enginePipeline.js:427-431`), for exactly this reason.
 
 ### 3.13 Who consumes this contract, and how that is checkable
 
@@ -718,7 +718,7 @@ citation to maintain.)
 
 **R2.1.1 has not consumed it yet.** Its ledger status at `49fe39e` is `todo`,
 its `readiness.why` is `"waiting on R1.1.1"`, and `summarizeEngineSlice`'s
-return object (`src/lib/scoring/enginePipeline.js:480-510`) carries no `state`
+return object (`src/shared/scoring/enginePipeline.js:480-510`) carries no `state`
 and no `state_reason` — twenty-seven fields, none of them either. The dependency is
 declared and the contract is written; the consumption is scheduled, not done.
 §9 says the same thing and it is repeated here so this section cannot be read as
@@ -867,7 +867,7 @@ row out of every citation denominator. `visible` is `true` on the strength of th
 mention alone, which is legitimate because a mention was observed. Nobody priced
 the call, so the cost is `null` and says why.
 
-This is the exact row `src/lib/engines/perplexity.js:174-180` produces today with
+This is the exact row `src/shared/engines/perplexity.js:174-180` produces today with
 `error: null`, `citations: []` and `brand_cited: false` — which is why it is the
 worked example.
 
@@ -954,7 +954,7 @@ this document; each needs a task.
 — V1, V2, V3, V6, V8, V10 — were each re-checked against
 `git show 49fe39e:<path>` for this revision. **All six still reproduce**, and V3
 was re-run rather than re-read (see the note below). The stale citation in
-`src/lib/engines/deployedEngines.js:21` also still reproduces. Nothing in this
+`src/shared/engines/deployedEngines.js:21` also still reproduces. Nothing in this
 section has been fixed since the previous revision; if you are reading this
 after a fix has landed, the honest move is to strike the row and name the
 commit, not to leave it standing.
@@ -968,17 +968,17 @@ between* the lines that could not run.
 
 | # | Violation | Where | Existing task |
 |---|---|---|---|
-| V1 | No `state` field exists. Outcome is inferred from `answer_present` plus a free-text `error`. | `src/lib/scoring/enginePipeline.js:78-98`, `:176-196` | none — needs one |
+| V1 | No `state` field exists. Outcome is inferred from `answer_present` plus a free-text `error`. | `src/shared/scoring/enginePipeline.js:78-98`, `:176-196` | none — needs one |
 | V2 | Measurement fields are initialised `false` and left `false` on the failure path, so not-measured is stored as measured-absent. | `enginePipeline.js:90-92`, `:188-190`; failure return at `:200-205` | none — needs one |
 | V3 | `coverage_pct`'s denominator is every non-branded row **including errored ones**, so a provider outage reads identically to Google genuinely serving no AI Overview. **Reproduced — see below.** | `enginePipeline.js:334`, `:331`, `:386-389`; renders via `:503` → `:728` → `DashboardShell.jsx:661`, `:735` (gated) and via `:939` → `scanWorker.js:1769` → `db.js:123`/`:147` → `weeklyReport.js:24`, `:35` (ungated) | none — needs one |
 | V4 | `share_of_ai_pct` is `0` for an empty eliciting pool, where §3.12 requires `null`. | `enginePipeline.js:393-396` | R2.1.1 |
-| V5 | Perplexity search-leg failure returns `error: null` and `citations: []`; no `citations_state`. | `src/lib/engines/perplexity.js:174-180` | R2.2.2 |
-| V6 | `cost` is a bare number and is never null; two hardcoded `0.005` constants and one `0.0015` are reported as spend, with no provenance. The vocabulary to fix it already exists one layer over (`cost_source`, §3.9) and no probe adapter uses it. | `perplexity.js:67`, `perplexity.js:121`, `enginePipeline.js:111`; contrast `src/lib/llmPricing.js:308` | none — needs one |
+| V5 | Perplexity search-leg failure returns `error: null` and `citations: []`; no `citations_state`. | `src/shared/engines/perplexity.js:174-180` | R2.2.2 |
+| V6 | `cost` is a bare number and is never null; two hardcoded `0.005` constants and one `0.0015` are reported as spend, with no provenance. The vocabulary to fix it already exists one layer over (`cost_source`, §3.9) and no probe adapter uses it. | `perplexity.js:67`, `perplexity.js:121`, `enginePipeline.js:111`; contrast `src/shared/llmPricing.js:308` | none — needs one |
 | V7 | No `engine_surface` anywhere. Every row today is `api`, and nothing says so. | `enginePipeline.js:78-98`, `:176-196` | R1.4.4 (partially) |
 | V8 | No `geo` on the result. `resolveSerpGeo()` is called per request but discarded; the two chat adapters hardcode `country: "IN"` in the body. | `enginePipeline.js:101` via `brightdata.js:361`; `openai.js:28`; `perplexity.js:47` | none — needs one |
 | V9 | No `evidence`, no `timings`, no `attempt`, no `probed_at`. | both result literals | R1.5.1/R1.5.2 (evidence); none for timings |
 | V10 | `error` is free text with no closed vocabulary; `EMPTY_ANSWER` is the only sentinel. | `enginePipeline.js:162`, `:234`; `:148` | none — needs one |
-| V11 | Three adapters return a "skipped" sentinel with `cost: 0.0` and no error at all — a missing credential is indistinguishable from a successful empty answer. | `src/lib/engines/gemini.js:15`, `:29`; `src/lib/engines/serp.js:162`, `:275` | see note below |
+| V11 | Three adapters return a "skipped" sentinel with `cost: 0.0` and no error at all — a missing credential is indistinguishable from a successful empty answer. | `src/shared/engines/gemini.js:15`, `:29`; `src/shared/engines/serp.js:162`, `:275` | see note below |
 | V12 | `probe_tasks.outcome` has the right eight-value CHECK and a *working writer*, but no producer. `reportBatch` writes outcomes through `complete_probe_tasks`, and the worker loop calls it — but `probeBatch` throws first, so no outcome is ever produced to write. The vocabulary is enforced on a column that receives no rows, and the reason is upstream of the write, not at it. **Corrected in this revision**; see §2.3. | `supabase/migrations/010_probe_tasks.sql:57-61`; `worker/src/lib/probe.js:26-31`; writer at `worker/src/lib/queue.js:207-231`, called at `worker/src/index.js:211`, unreachable because of `worker/src/index.js:174` | R1.3.3, R1.4.3 |
 
 ### Note on V3 — reproduced, and it renders
@@ -987,7 +987,7 @@ V3 is not inferred from reading the code. It was run, and re-run against
 `49fe39e` for this revision; the table below is that second run's output.
 
 Two ten-row `aio` slices were passed through `summarizeEngineSlice`
-(`src/lib/scoring/enginePipeline.js:329`). Both have five identical answered
+(`src/shared/scoring/enginePipeline.js:329`). Both have five identical answered
 non-branded rows. They differ **only** in the other five:
 
 - **Slice A (provider outage):** five rows with `answer_present: false` and
@@ -1025,7 +1025,7 @@ denominator of 5 and has measured nothing about the other five.
 set on the slice at `enginePipeline.js:503` and the slice map is returned as
 `engines` (`:909`, `:964`).
 
-*Path 1 — gated, the dashboard health panel.* `src/services/api.js:597` reads
+*Path 1 — gated, the dashboard health panel.* `src/shared/api.js:597` reads
 `engines` into `perEngineSummaries` and
 `src/components/dashboard/DashboardShell.jsx:369` calls
 `describeScanDataSourceIssue` on it. Slices flagged `data_source_issue` go
@@ -1038,10 +1038,10 @@ mounted by `src/app/dashboard/[brand]/page.js:88` and
 *Path 2 — ungated, the weekly-report KPI.* `enginePipeline.js:939` —
 `aio_coverage_pct: aioSummary.coverage_pct || 0` — copies the same number onto
 the scan `summary` with **no gate at all**. From there, hop by hop:
-`src/lib/workers/scanWorker.js:1769` (`summary_stats: summary`) →
-`src/lib/db.js:123` and the `raw_results` payload assembled at `src/lib/db.js:147`
-→ read back by `getScansForBrand` (`src/lib/db.js:237-251`, `select("*")`),
-called at `src/lib/content/weeklyReport.js:114` → `scanMetrics` reads
+`src/server/workers/scanWorker.js:1769` (`summary_stats: summary`) →
+`src/server/db.js:123` and the `raw_results` payload assembled at `src/server/db.js:147`
+→ read back by `getScansForBrand` (`src/server/db.js:237-251`, `select("*")`),
+called at `src/shared/content/weeklyReport.js:114` → `scanMetrics` reads
 `raw.summary_stats` at `weeklyReport.js:24` and lifts the number at `:35` →
 rendered as the *"AI answer coverage"* KPI at `:65-71` → reached over HTTP by
 `POST /api/content/report` (`src/app/api/content/report/route.js:14`, importing
@@ -1051,9 +1051,9 @@ rendered as the *"AI answer coverage"* KPI at `:65-71` → reached over HTTP by
 revision drew path 2 as `:939` → `db.js:119` → `weeklyReport.js:35`. Every one
 of those three lines is real and every one of them resolves, but **that chain
 cannot execute**: `db.js:119` is the promoted `aio_coverage_pct` *column* in
-`insertScan`'s allowlist, fed by `src/lib/workers/scanWorker.js:1729`, and the
+`insertScan`'s allowlist, fed by `src/server/workers/scanWorker.js:1729`, and the
 weekly report never reads it — it reads `raw_results.summary_stats`. The column
-is read by `src/services/api.js:396-399` and
+is read by `src/shared/api.js:396-399` and
 `src/app/api/scans/_lib/scanRow.js:81-82` instead. Both surfaces carry the same
 fabricated denominator, so the violation is unchanged; the trace was wrong and
 is corrected here because a chain drawn between correct lines is still a
@@ -1063,7 +1063,7 @@ fabrication if it cannot run.
 Neither health gate trips. The gate reads its two numbers from
 `engineHealthThresholds` (`enginePipeline.js:56-66`, called at `:465`), which for
 `aio` returns `AIO_MIN_NON_BRANDED_COVERAGE` = `0.15` and
-`AIO_ERROR_RATE_LIMIT_PCT` = `50` (`src/lib/scoring/aioConstants.js:4`, `:1`).
+`AIO_ERROR_RATE_LIMIT_PCT` = `50` (`src/shared/scoring/aioConstants.js:4`, `:1`).
 Coverage reads `0.5`, which clears `0.15`; and the comparison at
 `enginePipeline.js:466-469` is a strict `>`, so a 50% error rate is not over its
 own limit of 50. `data_source_issue` is `false`, as the run above confirms.
@@ -1081,17 +1081,17 @@ This is a scoring bug, not merely a contract gap. It has no owning task.
 standing rule 10, these were traced before being listed, and re-traced at
 `49fe39e` with `git grep` over `src/`, `worker/` and `scripts/`:
 
-- `probeGemini` (`src/lib/engines/gemini.js:11`) has **no importer anywhere**.
-  Nothing imports `src/lib/engines/gemini.js` at all. (Beware the near-miss:
-  `src/lib/gemini.js` is a *different* file and its `generateContent` is
+- `probeGemini` (`src/shared/engines/gemini.js:11`) has **no importer anywhere**.
+  Nothing imports `src/shared/engines/gemini.js` at all. (Beware the near-miss:
+  `src/shared/gemini.js` is a *different* file and its `generateContent` is
   imported by `prompts.js:1` and `judge.js:1`. Grepping for `gemini.js` finds
   those and proves nothing about the adapter.)
-- `probeGoogleAiOverview` (`src/lib/engines/serp.js:158`) is imported only by
-  `src/lib/engines/serp.test.mjs:3` and `src/lib/engines/serpGeo.test.mjs:4` —
+- `probeGoogleAiOverview` (`src/shared/engines/serp.js:158`) is imported only by
+  `src/shared/engines/serp.test.mjs:3` and `src/shared/engines/serpGeo.test.mjs:4` —
   tests, both of them.
 - The only non-test import from `serp.js` is `fetchPeopleAlsoAsk` /
-  `fetchAutocomplete` into `src/lib/scoring/promptGen.js:9`, which *is* live:
-  imported by `src/lib/workers/scanWorker.js:28` and called at
+  `fetchAutocomplete` into `src/shared/scoring/promptGen.js:9`, which *is* live:
+  imported by `src/server/workers/scanWorker.js:28` and called at
   `promptGen.js:185-186`. It does not reach either sentinel above.
 
 (That `:9` is the citation revision 1 got from the dirty tree: it was `:3` at
@@ -1104,9 +1104,9 @@ by one added import; the correct fix is deletion (R1.7.3), not conformance.
 
 ### A stale citation found while verifying
 
-**Still reproduces at `49fe39e`.** `src/lib/engines/deployedEngines.js:21` cites
-`resolveEnabledEngines (src/lib/scoring/enginePipeline.js:527)`. At `49fe39e`
-that function is at `src/lib/scoring/enginePipeline.js:818`. It was `:777` at
+**Still reproduces at `49fe39e`.** `src/shared/engines/deployedEngines.js:21` cites
+`resolveEnabledEngines (src/shared/scoring/enginePipeline.js:527)`. At `49fe39e`
+that function is at `src/shared/scoring/enginePipeline.js:818`. It was `:777` at
 `8502166` and `:818` at `25e7727`, so the comment has been wrong by two
 different amounts across the three baselines this contract has used — which is
 the whole argument for naming the function rather than the line. The prose in
@@ -1128,7 +1128,7 @@ line number rather than update it.
   and this section should name the migration.
 - **A fifth `cost.basis`.** Unlike `state`, `basis` is this contract's own
   vocabulary and is not frozen in a migration, so it can be extended here alone.
-  `no_charge` was the fourth, added because `src/lib/llmPricing.js`'s `free_tier`
+  `no_charge` was the fourth, added because `src/shared/llmPricing.js`'s `free_tier`
   had no representable value. A fifth needs the same test: a real cost source
   whose provenance none of the four describes. Adding a `no_charge` **reason** is
   cheaper and is the right move for anything that is still "we know the meter did
@@ -1153,14 +1153,14 @@ line number rather than update it.
 - **No consumer reads a row `state` or a slice `state`, because neither is
   emitted.** R2.1.1 is `todo` and blocked on this contract;
   `summarizeEngineSlice`'s return object
-  (`src/lib/scoring/enginePipeline.js:480-510`) has no such field. §3.13 states
+  (`src/shared/scoring/enginePipeline.js:480-510`) has no such field. §3.13 states
   the consumption link as a declared dependency, which is what it is — not as
   work that has happened.
 - **`basis: "no_charge"` has never been emitted or validated.** It is defined in
   §3.9 and used in two constructed examples. Nothing in the tree writes it,
   nothing rejects a malformed one, and no adapter performs the §3.9 mapping from
   `cost_source`. The `free_tier` gap it closes is real and verified
-  (`src/lib/llmPricing.js:335`, `src/lib/openrouter.test.mjs:537`); the closure
+  (`src/shared/llmPricing.js:335`, `src/server/openrouter.test.mjs:537`); the closure
   is on paper.
 - **§3.11's `not_measured` tally does not exist in code.** §3.2's argument for
   excluding empty chat bodies from the coverage denominator depends on it

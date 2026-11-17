@@ -1,10 +1,10 @@
-import { requireWorkspace } from "../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, jsonOk, AppError } from "../../../../lib/http/errors.ts";
-import { requireApprovedPrice } from "../../../../lib/pricing/pricedActions.ts";
-import "../../../../lib/pricing/actions/index.ts";
-import { startCustomerScan } from "../../../../lib/pricing/startCustomerScan.ts";
-import { scanRouteBody } from "../../../../lib/pricing/scanRoute.contract.ts";
-import { captureServerEvent } from "../../../../lib/telemetry/server.ts";
+import { requireWorkspace } from "../../../../server/workspace/requireWorkspace.ts";
+import { toErrorResponse, jsonOk, AppError } from "../../../../shared/http/errors.ts";
+import { requireApprovedPrice } from "../../../../shared/pricing/pricedActions.ts";
+import "../../../../shared/pricing/actions/index.ts";
+import { startCustomerScan } from "../../../../shared/pricing/startCustomerScan.ts";
+import { scanRouteBody } from "../../../../shared/pricing/scanRoute.contract.ts";
+import { captureServerEvent } from "../../../../shared/telemetry/server.ts";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";

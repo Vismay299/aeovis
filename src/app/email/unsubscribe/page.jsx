@@ -3,8 +3,8 @@ export const dynamic = "force-dynamic";
 import Link from "next/link";
 import AuthLayout from "@/components/portal/AuthLayout";
 import { Button } from "@/components/ui/button";
-import { readEmailConfig } from "@/lib/email/config.ts";
-import { verifyUnsubscribe } from "@/lib/email/links.ts";
+import { readEmailConfig } from "@/server/email/config.ts";
+import { verifyUnsubscribe } from "@/server/email/links.ts";
 import { firstParam } from "@/shared/auth-redirect";
 
 export const metadata = {

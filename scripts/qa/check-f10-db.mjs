@@ -21,14 +21,14 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import pg from "pg";
-import { artifactHash, validatePanel } from "../../src/lib/repairs/workflow.js";
+import { artifactHash, validatePanel } from "../../src/server/repairs/workflow.js";
 import {
   SCHEDULES_TICK_KIND,
   registerAiVisibilityScheduleJobs,
   resetAiVisibilityScheduleJobDeps,
-} from "../../src/lib/schedules/aiVisibilitySchedules.jobs.ts";
-import { listDueCustomerSchedules } from "../../src/lib/schedules/aiVisibilitySchedules.ts";
-import { getJobDefinition } from "../../src/lib/jobs/registry.ts";
+} from "../../src/server/schedules/aiVisibilitySchedules.jobs.ts";
+import { listDueCustomerSchedules } from "../../src/server/schedules/aiVisibilitySchedules.ts";
+import { getJobDefinition } from "../../src/server/jobs/registry.ts";
 
 const host = process.env.PGHOST || "";
 const database = process.env.PGDATABASE || "";

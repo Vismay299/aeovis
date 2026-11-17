@@ -4,11 +4,11 @@ import {
   resolveNodeEnv,
   warnDevPerimeterOpen,
   PERIMETER,
-} from "@/lib/operatorPerimeter";
+} from "@/server/operatorPerimeter";
 
 /**
  * Operator perimeter (R0.1.3). The decision lives in
- * src/lib/operatorPerimeter.js so it is unit-testable without a server; this
+ * src/server/operatorPerimeter.js so it is unit-testable without a server; this
  * file is only the Next.js binding.
  *
  * Scoped to /api by the matcher below — page routes are untouched, so the

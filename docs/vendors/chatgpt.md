@@ -2,7 +2,7 @@
 
 > <!-- doc-status -->
 > **Status: LIVE** for the API path
-> ([`src/lib/engines/openai.js`](../../src/lib/engines/openai.js)), but
+> ([`src/shared/engines/openai.js`](../../src/shared/engines/openai.js)), but
 > **NOT DEPLOYED**: `OPENAI_API_KEY` is unconfigured, so the engine is skipped.
 > The **UI** path is the R1.4 target and does not exist yet.
 
@@ -17,7 +17,7 @@ a claim about coverage the product could not have honoured even if the key had
 been present.
 
 Any user-facing surface naming engines derives them from
-[`deployedEngines.js`](../../src/lib/engines/deployedEngines.js). Do not
+[`deployedEngines.js`](../../src/shared/engines/deployedEngines.js). Do not
 hardcode a list.
 
 ## API contract
@@ -40,7 +40,7 @@ items where **`type === "message"` AND `role === "assistant"`**, then reads
 **Both conditions matter.** A fixture omitting `role: "assistant"` parses to
 empty text with no error — which silently turns a "real answer" test case into
 an empty-answer one. That happened while writing
-[`emptyAnswer.test.mjs`](../../src/lib/scoring/emptyAnswer.test.mjs): two tests
+[`emptyAnswer.test.mjs`](../../src/shared/scoring/emptyAnswer.test.mjs): two tests
 passed for entirely the wrong reason, and only the *failing* neighbours
 revealed it.
 

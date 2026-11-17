@@ -1,8 +1,8 @@
-import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toGa4ErrorResponse } from "../../../../../lib/ga4/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { getOrganicOverview } from "../../../../../lib/ga4/overview.ts";
+import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toGa4ErrorResponse } from "../../../../../server/ga4/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { getOrganicOverview } from "../../../../../server/ga4/overview.ts";
 import { z } from "zod";
 
 export const dynamic = "force-dynamic";

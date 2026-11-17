@@ -5,7 +5,7 @@
 
 ## Problem it answers
 
-Today (after R14) a scan only runs against a hand-written, approved question panel (`src/app/api/customer/scan/route.js` refuses with 409 without one). The customer lands on a blank textarea. The product promise is the opposite: **the AI works out what buyers ask.** The question generator still exists (`generatePromptsForBrand` in `src/lib/prompts.js`: Firecrawl scrape, then Gemini summary, then 18–22 buyer questions) but nothing in the R14 panel flow calls it.
+Today (after R14) a scan only runs against a hand-written, approved question panel (`src/app/api/customer/scan/route.js` refuses with 409 without one). The customer lands on a blank textarea. The product promise is the opposite: **the AI works out what buyers ask.** The question generator still exists (`generatePromptsForBrand` in `src/server/prompts.js`: Firecrawl scrape, then Gemini summary, then 18–22 buyer questions) but nothing in the R14 panel flow calls it.
 
 The opposite extreme — fresh AI questions every scan, as before R14 — makes scan-to-scan trends meaningless, because each scan measures a different question set.
 

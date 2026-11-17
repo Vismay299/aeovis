@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { candidateSiteUrls, getGscServiceAccount, listGscSites } from "@/lib/engines/gsc";
-import { getGscConnection, upsertGscConnection } from "@/lib/db/gsc";
+import { candidateSiteUrls, getGscServiceAccount, listGscSites } from "@/shared/engines/gsc";
+import { getGscConnection, upsertGscConnection } from "@/server/db/gsc";
 
 export const dynamic = "force-dynamic";
 

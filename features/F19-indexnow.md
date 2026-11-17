@@ -8,7 +8,7 @@
 | ID | F19 |
 | Wave | 3 |
 | Comparison rows covered | "IndexNow" (OpenSEO: generates a key, checks it is hosted, submits to Bing with fallbacks. Perceev: none) |
-| Depends on | F01 (merged): `requireWorkspace`, `AppError`/`toErrorResponse`/`jsonOk`, `safeFetch` (`src/lib/http/safeFetch.ts`), `isFeatureEnabled`, `definePeriodic`/`enqueueSystemJob`/`defineJob`, `f01_touch_updated_at()`, `stableStringify`, route-contract harness. F04 (settings layout and `src/components/portal/settings/tabs.ts`, `CardShell`, `Collapsible`, `CopyButton`, `SafeExternalLink`, `Alert`, `Button`, `Skeleton`, `Table`). F05 (`fetchJson`, `keys`, `useWorkspace`). Phase 3 needs F18's audit pages (it hosts the IndexNow tab and the page action, §6.6.3). Phase 4 touches Content Studio (`src/components/portal/content/DraftEditor.jsx`). |
+| Depends on | F01 (merged): `requireWorkspace`, `AppError`/`toErrorResponse`/`jsonOk`, `safeFetch` (`src/shared/http/safeFetch.ts`), `isFeatureEnabled`, `definePeriodic`/`enqueueSystemJob`/`defineJob`, `f01_touch_updated_at()`, `stableStringify`, route-contract harness. F04 (settings layout and `src/components/portal/settings/tabs.ts`, `CardShell`, `Collapsible`, `CopyButton`, `SafeExternalLink`, `Alert`, `Button`, `Skeleton`, `Table`). F05 (`fetchJson`, `keys`, `useWorkspace`). Phase 3 needs F18's audit pages (it hosts the IndexNow tab and the page action, §6.6.3). Phase 4 touches Content Studio (`src/components/portal/content/DraftEditor.jsx`). |
 | Blocks | F22 (`submit_indexnow_urls` tool), F27 (onboarding may link the settings tab) |
 | Reserved migrations | 130–134. **130** `130_f19_indexnow.sql` (phase 1). 131–134 unused. |
 | Feature flag | `FEATURE_INDEXNOW` (name `indexnow`, spend `[]`): settings tab, audit tab and action, Content Studio offer, routes. In `CLIENT_FEATURES`; off in production by default. |
@@ -33,8 +33,8 @@ Customers tell Bing and the other IndexNow engines (Yandex, Seznam, Naver, Yep) 
 ## 3. What Perceev has today
 
 - No IndexNow. Workspaces always have `customer_brands.website` and `website_host` (`supabase/migrations/023_customer_auth_and_tenant_rls.sql:5-17`, both `NOT NULL`).
-- Content Studio verifies publications: `verifyPublishUrl` fetches the live URL through `safeFetch` and checks the body against the approved draft (`src/lib/content/publishVerification.js:64-126`); `POST /api/customer/content/[id]/publish` records it through `record_verified_publication` and returns `{ published: true, publication, indexing: null, observed_citation: null }` (`src/app/api/customer/content/[id]/publish/route.js:56-72`), where `publication.url` is the verified final URL (`supabase/migrations/029_repair_workflow.sql:104-106`). `src/lib/publishRoute.test.mjs:93-102` asserts `indexing === null` ("preserves indexing uncertainty"): **F19 must not change this route.** The editor calls it from `checkedAction("publish")` (`src/components/portal/content/DraftEditor.jsx:143-155`); `src/components/portal/portalRegressions.test.mjs:149-169` compiles `DraftEditor.jsx` with an explicit module map.
-- The existing SSRF guard (`src/lib/ssrfGuard.js:612-641`) follows redirects and throws at the hop limit; F01's new `safeFetch` (`src/lib/http/safeFetch.ts`) replaces it for new code.
+- Content Studio verifies publications: `verifyPublishUrl` fetches the live URL through `safeFetch` and checks the body against the approved draft (`src/shared/content/publishVerification.js:64-126`); `POST /api/customer/content/[id]/publish` records it through `record_verified_publication` and returns `{ published: true, publication, indexing: null, observed_citation: null }` (`src/app/api/customer/content/[id]/publish/route.js:56-72`), where `publication.url` is the verified final URL (`supabase/migrations/029_repair_workflow.sql:104-106`). `src/server/publishRoute.test.mjs:93-102` asserts `indexing === null` ("preserves indexing uncertainty"): **F19 must not change this route.** The editor calls it from `checkedAction("publish")` (`src/components/portal/content/DraftEditor.jsx:143-155`); `src/components/portal/portalRegressions.test.mjs:149-169` compiles `DraftEditor.jsx` with an explicit module map.
+- The existing SSRF guard (`src/server/ssrfGuard.js:612-641`) follows redirects and throws at the hop limit; F01's new `safeFetch` (`src/shared/http/safeFetch.ts`) replaces it for new code.
 - No `/portal/audit` (F18) and no `/portal/settings` sections yet (F04 shell).
 
 ## 4. Target behaviour and acceptance criteria
@@ -42,21 +42,21 @@ Customers tell Bing and the other IndexNow engines (Yandex, Seznam, Naver, Yep) 
 | ID | Statement | Verified by |
 |---|---|---|
 | F19-AC-01 | Migration 130 creates `indexnow_keys`, `indexnow_submissions`, `indexnow_key_checks` with RLS and read policies; one key per workspace; key format `^[0-9a-f]{32}$`; members read only their workspace's rows. | DB `scripts/qa/check-f19-db.mjs`; `tests/customer-uat.sql` |
-| F19-AC-02 | The key is created on first setup or submission as 32 lowercase hex characters; concurrent first uses converge on one key; an existing key is returned with `created: false`. | unit `src/lib/indexnow/keys.test.ts`; DB group `ensure` |
+| F19-AC-02 | The key is created on first setup or submission as 32 lowercase hex characters; concurrent first uses converge on one key; an existing key is returned with `created: false`. | unit `src/server/indexnow/keys.test.ts`; DB group `ensure` |
 | F19-AC-03 | The domain is `website_host` lowercased without `www.`; the checked hosts are the domain and `www.<domain>`. | unit `keys.test.ts` |
-| F19-AC-04 | Key-file statuses: 2xx body equal to the key → `found`; other 2xx body or a body over 4,096 bytes → `wrong_content`; 404/410 → `missing`; 3xx to the same path on another host → `moved`; other 3xx → `redirects`; other statuses and timeouts → `unknown`; DNS failure, refused connection or an SSRF refusal → `unreachable`. The check uses F01 `safeFetch` with `maxRedirects: 0` and never follows a redirect. | unit `src/lib/indexnow/keyFile.test.ts` (port of `IndexNowService.test.ts:182-200` plus cases) |
-| F19-AC-05 | Submission keeps `http(s)` URLs on the domain or its subdomains, removes `#hash` and duplicates, groups by host and reports every skipped URL with a reason (`off_site`, `invalid`, `recently_submitted`); at most 10,000 URLs per call. | unit `src/lib/indexnow/submit.test.ts` (port of `IndexNowService.test.ts:61`) |
+| F19-AC-04 | Key-file statuses: 2xx body equal to the key → `found`; other 2xx body or a body over 4,096 bytes → `wrong_content`; 404/410 → `missing`; 3xx to the same path on another host → `moved`; other 3xx → `redirects`; other statuses and timeouts → `unknown`; DNS failure, refused connection or an SSRF refusal → `unreachable`. The check uses F01 `safeFetch` with `maxRedirects: 0` and never follows a redirect. | unit `src/server/indexnow/keyFile.test.ts` (port of `IndexNowService.test.ts:182-200` plus cases) |
+| F19-AC-05 | Submission keeps `http(s)` URLs on the domain or its subdomains, removes `#hash` and duplicates, groups by host and reports every skipped URL with a reason (`off_site`, `invalid`, `recently_submitted`); at most 10,000 URLs per call. | unit `src/server/indexnow/submit.test.ts` (port of `IndexNowService.test.ts:61`) |
 | F19-AC-06 | A host whose key file is `missing`, `wrong_content`, `redirects` or `moved` fails with the exact fix message and no engine call; `unknown`/`unreachable`/`found` proceed. | unit `submit.test.ts` (port of `:137`) |
 | F19-AC-07 | Engines are tried Bing → Yandex → Yep; 429, 5xx or no response moves on; 200/202/400/403/422 stop; each host result records the engine, HTTP status and message (copy as §6.2.3). | unit `submit.test.ts` (ports of `:151`, `:169`) |
-| F19-AC-08 | Rate limits: ≤ 30 submit requests per workspace per rolling hour, ≤ 10,000 URLs per workspace per UTC day, ≤ 60 host checks per workspace per hour; a URL successfully submitted in the last 10 minutes is skipped; refusals are `429 indexnow_rate_limited` with `details.retryAfterSeconds`. | unit `src/lib/indexnow/limits.test.ts`; DB group `usage` |
+| F19-AC-08 | Rate limits: ≤ 30 submit requests per workspace per rolling hour, ≤ 10,000 URLs per workspace per UTC day, ≤ 60 host checks per workspace per hour; a URL successfully submitted in the last 10 minutes is skipped; refusals are `429 indexnow_rate_limited` with `details.retryAfterSeconds`. | unit `src/server/indexnow/limits.test.ts`; DB group `usage` |
 | F19-AC-09 | Every host result is recorded (`indexnow_submissions`, first 100 URLs), listed newest first in settings and the audit tab, and pruned after 395 days; key-check logs are pruned after 7 days. | DB groups `history`, `retention` |
-| F19-AC-10 | No IndexNow code reserves spend or calls `metered()`; `names.ts` lists `indexnow` with `spend: []`. | unit `src/lib/indexnow/noSpend.test.ts` |
+| F19-AC-10 | No IndexNow code reserves spend or calls `metered()`; `names.ts` lists `indexnow` with `spend: []`. | unit `src/server/indexnow/noSpend.test.ts` |
 | F19-AC-11 | The settings tab renders setup, key file (with per-host status), submit and history states with the copy in §6.6.1. | browser `scripts/qa/check-f19-browser.mjs` B1–B3 |
 | F19-AC-12 | Site Audit hosts an "IndexNow" tab and a "Submit to IndexNow" page action through the registries in §6.6.3; only loaded, indexable pages are offered; nothing is pre-selected; more than 100 URLs need an extra confirmation. | browser B4–B5 (fixture audit page) |
-| F19-AC-13 | After Content Studio verifies a publication, an offer appears (flag on) that submits the verified URL with `source "content"`; the offer explains setup when there is no key or the key file is unverified; the publish route's response is unchanged (`publishRoute.test.mjs` still passes). | browser B6; `node --test src/lib/publishRoute.test.mjs`; `portalRegressions.test.mjs` |
+| F19-AC-13 | After Content Studio verifies a publication, an offer appears (flag on) that submits the verified URL with `source "content"`; the offer explains setup when there is no key or the key file is unverified; the publish route's response is unchanged (`publishRoute.test.mjs` still passes). | browser B6; `node --test src/server/publishRoute.test.mjs`; `portalRegressions.test.mjs` |
 | F19-AC-14 | Flag off → settings tab, audit tab, page action and offer hidden; routes `404 feature_unavailable`. | route tests; browser B7 |
-| F19-AC-15 | No log line or telemetry event contains a URL, host or key. | unit `src/lib/indexnow/logging.test.ts` |
-| F19-AC-16 | `src/lib/indexnow/tools.ts` exports `submit_indexnow_urls` (free) with a strict input and a loose output, using the same service. | unit `tools.test.ts` |
+| F19-AC-15 | No log line or telemetry event contains a URL, host or key. | unit `src/server/indexnow/logging.test.ts` |
+| F19-AC-16 | `src/server/indexnow/tools.ts` exports `submit_indexnow_urls` (free) with a strict input and a loose output, using the same service. | unit `tools.test.ts` |
 
 ## 5. Scope
 
@@ -200,7 +200,7 @@ NOTIFY pgrst, 'reload schema';
 
 ### 6.2 Server modules
 
-All under `src/lib/indexnow/` (TypeScript, erasable syntax, relative imports with extensions). PORT files carry the licence header.
+All under `src/server/indexnow/` (TypeScript, erasable syntax, relative imports with extensions). PORT files carry the licence header.
 
 #### 6.2.1 `src/shared/indexnow.ts` (client-safe)
 
@@ -255,7 +255,7 @@ export async function checkKeyFiles(admin, ws, i: { force: boolean }, deps?): Pr
 | DNS failure, connection refused, TLS failure | `unreachable` |
 | `SsrfBlockedError` (the host resolves to a private or blocked address) | `unreachable` |
 
-**F01 contract required:** with `maxRedirects: 0`, `safeFetch` returns a 3xx response unfollowed (status and `Location` header intact) instead of throwing. If F01's merged `safeFetch` throws on the first 3xx, P1.T1.S2 adds this behaviour to `src/lib/http/safeFetch.ts` (additive: only `maxRedirects === 0` changes, with a test in F01's `safeFetch.test.ts`). The SSRF guarantees (DNS pinning, private-range refusal, byte cap) apply to the single hop.
+**F01 contract required:** with `maxRedirects: 0`, `safeFetch` returns a 3xx response unfollowed (status and `Location` header intact) instead of throwing. If F01's merged `safeFetch` throws on the first 3xx, P1.T1.S2 adds this behaviour to `src/shared/http/safeFetch.ts` (additive: only `maxRedirects === 0` changes, with a test in F01's `safeFetch.test.ts`). The SSRF guarantees (DNS pinning, private-range refusal, byte cap) apply to the single hop.
 
 `keyFileProblem` copy (exact): `missing` → "No key file at the root of https://{host}. Upload it there, then try again."; `wrong_content` → "The key file on https://{host} should contain only the key."; `redirects`/`moved` → "The key file on https://{host} redirects. Upload it to https://{host} itself."; others → `null`.
 
@@ -305,9 +305,9 @@ Refusals: `AppError(429,"indexnow_rate_limited", message, { recovery, details: {
 
 - `listSubmissions(admin, ws, { source?, sourceRef?, limit = 20 })` → newest first `{ id, createdAt, source, sourceRef, host, urlCount, urls (first 5), status, engine, httpStatus, message }`.
 - `tools.ts`: `submit_indexnow_urls` (F13 §6.2.6 shape): description adapted from `openseo:src/server/mcp/tools/submit-indexnow-urls.ts:23-24` ("Tells Bing, Yandex, Seznam, Naver, Yep and other IndexNow search engines that pages on this workspace's website changed, so they recrawl them sooner. Google does not use IndexNow. Submit only new, updated, redirected or removed pages, not the whole site. The site must host the workspace key file at the root of each host. URLs outside the website are skipped. Free."); input `z.strictObject({ urls: z.array(z.string().max(2048)).min(1).max(10000) })`; output `z.looseObject({ key, keyCreated, hosts, skipped })`; handler → `submitUrls(…, { source: "tool", requestId: crypto.randomUUID() })`.
-- `jobs.ts`: periodic `indexnow.retention` (86,400 s) → `enqueueSystemJob("indexnow.retention", {}, { dedupeKey: "indexnow.retention:" + YYYY-MM-DD })`; kind `indexnow.retention`: `prune-1`…`prune-20` (`DB_STEP`) `prune_indexnow(now − 395 days, now − 7 days, 5000)` while submissions = 5,000. `src/lib/jobs/kinds.ts` gains `import "../indexnow/jobs.ts";`.
+- `jobs.ts`: periodic `indexnow.retention` (86,400 s) → `enqueueSystemJob("indexnow.retention", {}, { dedupeKey: "indexnow.retention:" + YYYY-MM-DD })`; kind `indexnow.retention`: `prune-1`…`prune-20` (`DB_STEP`) `prune_indexnow(now − 395 days, now − 7 days, 5000)` while submissions = 5,000. `src/server/jobs/kinds.ts` gains `import "../indexnow/jobs.ts";`.
 - `indexnow.contract.ts`: contracts for §6.5.
-- `src/lib/features/names.ts`: `indexnow: { spend: [] as const }`; `src/lib/features/clientFeatures.ts` appends `"indexnow"`. `src/shared/spend-features.ts` is **not** changed.
+- `src/server/features/names.ts`: `indexnow: { spend: [] as const }`; `src/server/features/clientFeatures.ts` appends `"indexnow"`. `src/shared/spend-features.ts` is **not** changed.
 
 ### 6.3 Jobs
 
@@ -343,7 +343,7 @@ A submission whose every URL is skipped returns 200 with `hosts: []`. A repeated
 
 ### 6.6 UI
 
-Built from F04 (`CardShell`, `Button`, `Alert`, `Skeleton`, `Collapsible`, `CopyButton`, `SafeExternalLink`, `Table`, `Badge`, `Tooltip`, `FormDialog`, `ConfirmDialog`, `Textarea`), F05 (`fetchJson`, `useWorkspace`, `keys`), sonner toasts. Query keys (`src/lib/query/keys.ts`): `indexnowSetup(brandKey)`, `indexnowSubmissions(brandKey, source, sourceRef)`. Components in `src/components/portal/indexnow/`. Hooks: `hooks/useIndexNowSetup.ts` (`staleTime: 0`, refetch on each visit as `IndexNowSettings.tsx:76-82`), `useIndexNowSubmit.ts` (mutation; generates `requestId` once per submit click), `useIndexNowCheck.ts`.
+Built from F04 (`CardShell`, `Button`, `Alert`, `Skeleton`, `Collapsible`, `CopyButton`, `SafeExternalLink`, `Table`, `Badge`, `Tooltip`, `FormDialog`, `ConfirmDialog`, `Textarea`), F05 (`fetchJson`, `useWorkspace`, `keys`), sonner toasts. Query keys (`src/shared/query/keys.ts`): `indexnowSetup(brandKey)`, `indexnowSubmissions(brandKey, source, sourceRef)`. Components in `src/components/portal/indexnow/`. Hooks: `hooks/useIndexNowSetup.ts` (`staleTime: 0`, refetch on each visit as `IndexNowSettings.tsx:76-82`), `useIndexNowSubmit.ts` (mutation; generates `requestId` once per submit click), `useIndexNowCheck.ts`.
 
 #### 6.6.1 Settings tab (`/portal/settings/indexnow`; `src/app/portal/settings/indexnow/page.tsx` → `IndexNowSettings.tsx`, PORT of `IndexNowSettings.tsx:74-379`)
 
@@ -416,11 +416,11 @@ F19 appends `{ id: "indexnow", label: "IndexNow", flag: "indexnow", Panel: Index
 
 | OpenSEO source | Perceev target | Mode | Adaptation notes |
 |---|---|---|---|
-| `openseo:src/server/features/indexnow/services/IndexNowService.ts` (+ `IndexNowService.test.ts:60-200`) | `src/lib/indexnow/{keys,keyFile,submit}.ts` (+ tests) | PORT | Project → workspace (`website_host`); `normalizeAndValidateStartUrl` + `fetch(redirect: "manual")` + `readBoundedText` → F01 `safeFetch({ maxRedirects: 0, maxBytes: 4096 })`; SSRF refusals → `unreachable`; 400/422 copy added; history rows, rate limits and recent-URL skip added. |
+| `openseo:src/server/features/indexnow/services/IndexNowService.ts` (+ `IndexNowService.test.ts:60-200`) | `src/server/indexnow/{keys,keyFile,submit}.ts` (+ tests) | PORT | Project → workspace (`website_host`); `normalizeAndValidateStartUrl` + `fetch(redirect: "manual")` + `readBoundedText` → F01 `safeFetch({ maxRedirects: 0, maxBytes: 4096 })`; SSRF refusals → `unreachable`; 400/422 copy added; history rows, rate limits and recent-URL skip added. |
 | `openseo:src/server/features/projects/repositories/ProjectRepository.ts:153-168`, `openseo:drizzle/pg/0036_right_praxagora.sql` | `130_f19_indexnow.sql` (`indexnow_keys`, `indexnow_ensure_key`) | PORT | Own table instead of a column on `customer_brands`. |
 | `openseo:src/serverFunctions/indexnow.ts`, `openseo:src/types/schemas/indexnow.ts` | `src/app/api/customer/indexnow/**/route.ts`, `indexnow.contract.ts` | PORT | Server functions → JSON routes; `source`, `requestId` added. |
 | `openseo:src/client/features/settings/IndexNowSettings.tsx` | `src/components/portal/indexnow/IndexNowSettings.tsx`, `IndexNowPanel.tsx`, `src/shared/indexnow.ts` | PORT | F04 components; agent prompt removed; history table added; Perceev copy. |
-| `openseo:src/server/mcp/tools/submit-indexnow-urls.ts` | `src/lib/indexnow/tools.ts` | PATTERN | F22 tool shape; no MCP server. |
+| `openseo:src/server/mcp/tools/submit-indexnow-urls.ts` | `src/server/indexnow/tools.ts` | PATTERN | F22 tool shape; no MCP server. |
 | `openseo:docs/maintainers/specs/0016-indexnow.md` | this spec §2, §5 | PATTERN | Read as data. Its "no audit submit" decision is reversed with safeguards (§6.6.3, §11 risk 2). |
 
 ## 8. Implementation plan
@@ -430,28 +430,28 @@ F19 appends `{ id: "indexnow", label: "IndexNow", flag: "indexnow", Panel: Index
 **Goal:** key, checks, submission, limits and history work and are tested without the network.
 
 - [x] **P1.T1 Foundations**
-  - [x] **P1.T1.S1** *Files:* `supabase/migrations/130_f19_indexnow.sql`, `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`. *Do:* §6.1. *Verify:* `node --test src/lib/migrationsRunner.test.mjs src/lib/migrationsLedger.test.mjs` → pass; CI customer-database commands against local Postgres 16 → exit 0.
-  - [x] **P1.T1.S2** *Files:* `src/lib/http/safeFetch.ts` and `safeFetch.test.ts` (F01 files; only if needed). *Do:* assert that `safeFetch(url, { maxRedirects: 0 })` returns a 301 with its `Location`; if F01's implementation throws instead, change only the `maxRedirects === 0` branch to return the response, keeping every SSRF check on the first hop. *Verify:* `node --test src/lib/http/safeFetch.test.ts` → pass.
-  - [x] **P1.T1.S3** *Files:* `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
-  - [x] **P1.T1.S4** *Files:* `src/lib/features/names.ts`, `src/lib/features/clientFeatures.ts`, `.env.example` (`FEATURE_INDEXNOW=`, `FEATURE_INDEXNOW_BRANDS=`, `INDEXNOW_MAX_REQUESTS_PER_HOUR=`, `INDEXNOW_MAX_URLS_PER_DAY=`, `INDEXNOW_MAX_HOST_CHECKS_PER_HOUR=`, `INDEXNOW_RESUBMIT_COOLDOWN_SECONDS=`). *Verify:* `node --test src/lib/features/flags.test.ts` → pass; `grep -c "^FEATURE_INDEXNOW=$" .env.example` → 1.
+  - [x] **P1.T1.S1** *Files:* `supabase/migrations/130_f19_indexnow.sql`, `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`. *Do:* §6.1. *Verify:* `node --test src/server/migrationsRunner.test.mjs src/server/migrationsLedger.test.mjs` → pass; CI customer-database commands against local Postgres 16 → exit 0.
+  - [x] **P1.T1.S2** *Files:* `src/shared/http/safeFetch.ts` and `safeFetch.test.ts` (F01 files; only if needed). *Do:* assert that `safeFetch(url, { maxRedirects: 0 })` returns a 301 with its `Location`; if F01's implementation throws instead, change only the `maxRedirects === 0` branch to return the response, keeping every SSRF check on the first hop. *Verify:* `node --test src/shared/http/safeFetch.test.ts` → pass.
+  - [x] **P1.T1.S3** *Files:* `README.md`, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Verify:* `node --test src/server/docStatus.test.mjs src/server/migrationsRunner.test.mjs` → pass.
+  - [x] **P1.T1.S4** *Files:* `src/server/features/names.ts`, `src/server/features/clientFeatures.ts`, `.env.example` (`FEATURE_INDEXNOW=`, `FEATURE_INDEXNOW_BRANDS=`, `INDEXNOW_MAX_REQUESTS_PER_HOUR=`, `INDEXNOW_MAX_URLS_PER_DAY=`, `INDEXNOW_MAX_HOST_CHECKS_PER_HOUR=`, `INDEXNOW_RESUBMIT_COOLDOWN_SECONDS=`). *Verify:* `node --test src/server/features/flags.test.ts` → pass; `grep -c "^FEATURE_INDEXNOW=$" .env.example` → 1.
 - [x] **P1.T2 Service**
-  - [x] **P1.T2.S1** *Files:* `src/shared/indexnow.ts`, `src/shared/indexnow.test.ts`, `src/lib/indexnow/keys.ts`, `keys.test.ts`. *Do:* §6.2.1–6.2.2; key format; `www.` stripping; converging first use (port of `IndexNowService.test.ts:85`); `keyFileReady` cases (found + moved → ready; missing + unreachable → not ready; all unused → not ready). *Verify:* `node --test src/shared/indexnow.test.ts src/lib/indexnow/keys.test.ts` → pass (F19-AC-02, 03).
-  - [x] **P1.T2.S2** *Files:* `src/lib/indexnow/keyFile.ts`, `keyFile.test.ts`, fixtures `tests/fixtures/f19/*`. *Do:* every row of the §6.2.2 table with an injected `safeFetch`; port `IndexNowService.test.ts:182-200` (forward to www vs missing); cache window 60 s; check rows written. *Verify:* `node --test src/lib/indexnow/keyFile.test.ts` → pass (F19-AC-04).
-  - [x] **P1.T2.S3** *Files:* `src/lib/indexnow/submit.ts`, `submit.test.ts`. *Do:* §6.2.3; ports of `IndexNowService.test.ts:61` (one request per host, off-site skipped), `:100` (no website → in Perceev every workspace has one: assert a blank `website_host` yields `400 invalid_request` "This workspace has no website." before any key), `:137` (bot wall → submits), `:151` (429 → next engine), `:169` (403 → stop); 202 and 422 copy; no-response copy; hash removal; recently-submitted skip; repeated `requestId` makes no engine call. *Verify:* `node --test src/lib/indexnow/submit.test.ts` → pass (F19-AC-05, 06, 07).
-  - [x] **P1.T2.S4** *Files:* `src/lib/indexnow/limits.ts`, `limits.test.ts`. *Do:* §6.2.4 with an injected usage reader and clock: 31st request → 429 with `retryAfterSeconds`; 10,001st URL of the day → 429 until midnight UTC; 61st host check → 429; env parsing. *Verify:* `node --test src/lib/indexnow/limits.test.ts` → pass (F19-AC-08).
-  - [x] **P1.T2.S5** *Files:* `src/lib/indexnow/history.ts`, `jobs.ts`, `retention.test.ts`, `src/lib/jobs/kinds.ts` (one import), `noSpend.test.ts`, `logging.test.ts`. *Do:* history listing; retention loop; `noSpend.test.ts` asserts no file in `src/lib/indexnow/` imports `../spend/` or the DataForSEO client; `logging.test.ts` captures `console.*` during a full submit and asserts no URL, host or key appears. *Verify:* `node --test src/lib/indexnow/retention.test.ts src/lib/indexnow/noSpend.test.ts src/lib/indexnow/logging.test.ts` → pass (F19-AC-10, 15).
+  - [x] **P1.T2.S1** *Files:* `src/shared/indexnow.ts`, `src/shared/indexnow.test.ts`, `src/server/indexnow/keys.ts`, `keys.test.ts`. *Do:* §6.2.1–6.2.2; key format; `www.` stripping; converging first use (port of `IndexNowService.test.ts:85`); `keyFileReady` cases (found + moved → ready; missing + unreachable → not ready; all unused → not ready). *Verify:* `node --test src/shared/indexnow.test.ts src/server/indexnow/keys.test.ts` → pass (F19-AC-02, 03).
+  - [x] **P1.T2.S2** *Files:* `src/server/indexnow/keyFile.ts`, `keyFile.test.ts`, fixtures `tests/fixtures/f19/*`. *Do:* every row of the §6.2.2 table with an injected `safeFetch`; port `IndexNowService.test.ts:182-200` (forward to www vs missing); cache window 60 s; check rows written. *Verify:* `node --test src/server/indexnow/keyFile.test.ts` → pass (F19-AC-04).
+  - [x] **P1.T2.S3** *Files:* `src/server/indexnow/submit.ts`, `submit.test.ts`. *Do:* §6.2.3; ports of `IndexNowService.test.ts:61` (one request per host, off-site skipped), `:100` (no website → in Perceev every workspace has one: assert a blank `website_host` yields `400 invalid_request` "This workspace has no website." before any key), `:137` (bot wall → submits), `:151` (429 → next engine), `:169` (403 → stop); 202 and 422 copy; no-response copy; hash removal; recently-submitted skip; repeated `requestId` makes no engine call. *Verify:* `node --test src/server/indexnow/submit.test.ts` → pass (F19-AC-05, 06, 07).
+  - [x] **P1.T2.S4** *Files:* `src/server/indexnow/limits.ts`, `limits.test.ts`. *Do:* §6.2.4 with an injected usage reader and clock: 31st request → 429 with `retryAfterSeconds`; 10,001st URL of the day → 429 until midnight UTC; 61st host check → 429; env parsing. *Verify:* `node --test src/server/indexnow/limits.test.ts` → pass (F19-AC-08).
+  - [x] **P1.T2.S5** *Files:* `src/server/indexnow/history.ts`, `jobs.ts`, `retention.test.ts`, `src/server/jobs/kinds.ts` (one import), `noSpend.test.ts`, `logging.test.ts`. *Do:* history listing; retention loop; `noSpend.test.ts` asserts no file in `src/server/indexnow/` imports `../spend/` or the DataForSEO client; `logging.test.ts` captures `console.*` during a full submit and asserts no URL, host or key appears. *Verify:* `node --test src/server/indexnow/retention.test.ts src/server/indexnow/noSpend.test.ts src/server/indexnow/logging.test.ts` → pass (F19-AC-10, 15).
   - [x] **P1.T2.S6** *Files:* `scripts/qa/check-f19-db.mjs`. *Do:* groups `schema`, `rls`, `ensure` (two concurrent `indexnow_ensure_key` with different keys → both return the first, one `created: true`), `usage` (counts across the hour/day boundaries), `history` (`indexnow_recently_submitted`), `retention`. *Verify:* `node scripts/qa/check-f19-db.mjs` → "ok 6 groups" (F19-AC-01, 02 DB half, 08 DB half, 09).
-  - [x] **P1.T2.S7** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
+  - [x] **P1.T2.S7** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/server/platform/thirdPartyNotices.test.mjs` → pass.
 
-**Checkpoint:** full suite `node --import ./src/lib/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'`, `npm run typecheck`, `check-f19-db.mjs` pass. Completes F19-AC-01 to 10, 15.
+**Checkpoint:** full suite `node --import ./src/server/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'`, `npm run typecheck`, `check-f19-db.mjs` pass. Completes F19-AC-01 to 10, 15.
 
 ### Phase 2 — API and settings tab (requires F04 and F05 merged)
 
 - [x] **P2.T1 Routes**
-  - [x] **P2.T1.S1** *Files:* `src/app/api/customer/indexnow/route.ts`, `setup/route.ts`, `check/route.ts`, `submit/route.ts`, `submissions/route.ts`, `src/lib/indexnow/indexnow.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [x] **P2.T1.S2** *Files:* `src/lib/indexnow/indexnow.route.test.mjs`. *Do:* customer-route hook pattern: flag off → 404 `feature_unavailable`; check before setup → 409; submit creates the key on first use (`keyCreated: true`); 429 with `details.retryAfterSeconds`; `source: "tool"` from the route → 400; unknown field → 400; cross-site POST → 403 `cross_site`. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/indexnow/indexnow.route.test.mjs` → pass (F19-AC-14 route half).
+  - [x] **P2.T1.S1** *Files:* `src/app/api/customer/indexnow/route.ts`, `setup/route.ts`, `check/route.ts`, `submit/route.ts`, `submissions/route.ts`, `src/server/indexnow/indexnow.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass.
+  - [x] **P2.T1.S2** *Files:* `src/server/indexnow/indexnow.route.test.mjs`. *Do:* customer-route hook pattern: flag off → 404 `feature_unavailable`; check before setup → 409; submit creates the key on first use (`keyCreated: true`); 429 with `details.retryAfterSeconds`; `source: "tool"` from the route → 400; unknown field → 400; cross-site POST → 403 `cross_site`. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/server/indexnow/indexnow.route.test.mjs` → pass (F19-AC-14 route half).
 - [x] **P2.T2 Settings UI**
-  - [x] **P2.T2.S1** *Files:* `src/app/portal/settings/indexnow/page.tsx`, `src/components/portal/indexnow/{IndexNowSettings,IndexNowPanel,KeyFileStep,SubmitUrlsForm,SubmissionHistory}.tsx`, `hooks/{useIndexNowSetup,useIndexNowSubmit,useIndexNowCheck}.ts`, `telemetry.ts`, `src/components/portal/settings/tabs.ts` (entry), `src/lib/query/keys.ts`. *Do:* §6.6.1–6.6.2 with exact copy. *Verify:* `npm run build` → exit 0.
+  - [x] **P2.T2.S1** *Files:* `src/app/portal/settings/indexnow/page.tsx`, `src/components/portal/indexnow/{IndexNowSettings,IndexNowPanel,KeyFileStep,SubmitUrlsForm,SubmissionHistory}.tsx`, `hooks/{useIndexNowSetup,useIndexNowSubmit,useIndexNowCheck}.ts`, `telemetry.ts`, `src/components/portal/settings/tabs.ts` (entry), `src/shared/query/keys.ts`. *Do:* §6.6.1–6.6.2 with exact copy. *Verify:* `npm run build` → exit 0.
   - [x] **P2.T2.S2** *Files:* `scripts/qa/check-f19-browser.mjs`, `tests/fixtures/f19/api/*.json`. *Do:* fixture API server; B1 no key → "Set up IndexNow" → key shown with both hosts unchecked; B2 "Check again" → "Not found" on both; then found + moved → title "Your key file is set up" and only the bare host listed; B3 submit two URLs (one off-site) → success toast "Submitted 1 URL" and warning "Skipped 1 URL not on offcult.in", history row "Submitted via Bing"; phone width 390 px has no horizontal scroll. *Verify:* `node scripts/qa/check-f19-browser.mjs --only B1,B2,B3` → "ok 3 scenarios" (F19-AC-11).
 
 **Checkpoint:** full suite, build, B1–B3 pass. Completes F19-AC-11.
@@ -467,14 +467,14 @@ F19 appends `{ id: "indexnow", label: "IndexNow", flag: "indexnow", Panel: Index
 ### Phase 4 — Content Studio offer
 
 - [x] **P4.T1 Offer**
-  - [x] **P4.T1.S1** *Files:* `src/components/portal/content/IndexNowOffer.tsx`, `src/components/portal/content/DraftEditor.jsx`, `src/components/portal/portalRegressions.test.mjs` (`autoNull` gains `"./IndexNowOffer"`). *Do:* §6.6.4. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/components/portal/portalRegressions.test.mjs src/lib/publishRoute.test.mjs src/components/portal/tenantWorkspace.test.mjs` → pass; `npm run build` → exit 0.
+  - [x] **P4.T1.S1** *Files:* `src/components/portal/content/IndexNowOffer.tsx`, `src/components/portal/content/DraftEditor.jsx`, `src/components/portal/portalRegressions.test.mjs` (`autoNull` gains `"./IndexNowOffer"`). *Do:* §6.6.4. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/components/portal/portalRegressions.test.mjs src/server/publishRoute.test.mjs src/components/portal/tenantWorkspace.test.mjs` → pass; `npm run build` → exit 0.
   - [x] **P4.T1.S2** *Files:* `scripts/qa/check-f19-browser.mjs` (B6–B7). *Do:* B6 publish a fixture draft (`POST /api/customer/content/<id>/publish` fixture returns `publication.url`) → the offer "Tell Bing and other IndexNow search engines about this page now? It's free." → "Submit to IndexNow" → the 202 message; with no key the setup link shows instead; B7 with `features.indexnow = false` the settings tab, the offer and the audit tab are absent. *Verify:* `node scripts/qa/check-f19-browser.mjs --only B6,B7` → "ok 2 scenarios" (F19-AC-13, 14).
 
 **Checkpoint:** full suite, build, `node scripts/qa/check-f19-browser.mjs` → "ok 7 scenarios". Completes F19-AC-13, 14.
 
 ### Phase 5 — Tool definition for F22
 
-- [x] **P5.T1.S1** *Files:* `src/lib/indexnow/tools.ts`, `tools.test.ts`. *Do:* §6.2.5; strict input; loose output; handler records `source "tool"`. *Verify:* `node --test src/lib/indexnow/tools.test.ts` → pass (F19-AC-16).
+- [x] **P5.T1.S1** *Files:* `src/server/indexnow/tools.ts`, `tools.test.ts`. *Do:* §6.2.5; strict input; loose output; handler records `source "tool"`. *Verify:* `node --test src/server/indexnow/tools.test.ts` → pass (F19-AC-16).
 
 **Checkpoint:** full suite passes. Completes F19-AC-16.
 
@@ -484,15 +484,15 @@ F19 appends `{ id: "indexnow", label: "IndexNow", flag: "indexnow", Panel: Index
 |---|---|---|
 | `scripts/qa/check-f19-db.mjs` | schema, rls, ensure, usage, history, retention | 01, 02, 08, 09 |
 | `src/shared/indexnow.test.ts` | labels, readiness, URL splitting | 11 |
-| `src/lib/indexnow/keys.test.ts` | key format, domain/hosts, first use | 02, 03 |
-| `src/lib/indexnow/keyFile.test.ts` | every status mapping, cache, no redirect following | 04 |
-| `src/lib/indexnow/submit.test.ts` | grouping, skip reasons, gate, engine fallback, copy, idempotency | 05, 06, 07 |
-| `src/lib/indexnow/limits.test.ts` | hour/day/check limits, env | 08 |
-| `src/lib/indexnow/{retention,noSpend,logging}.test.ts` | prune loop, no spend, no URLs in logs | 09, 10, 15 |
-| `src/lib/indexnow/indexnow.route.test.mjs` | auth, flags, 409/429/400 | 14 |
-| `src/lib/http/safeFetch.test.ts` (F01) | `maxRedirects: 0` returns the 3xx | 04 |
-| `src/lib/publishRoute.test.mjs`, `src/components/portal/portalRegressions.test.mjs` | unchanged publish route; DraftEditor still compiles | 13 |
-| `src/lib/indexnow/tools.test.ts` | tool shape | 16 |
+| `src/server/indexnow/keys.test.ts` | key format, domain/hosts, first use | 02, 03 |
+| `src/server/indexnow/keyFile.test.ts` | every status mapping, cache, no redirect following | 04 |
+| `src/server/indexnow/submit.test.ts` | grouping, skip reasons, gate, engine fallback, copy, idempotency | 05, 06, 07 |
+| `src/server/indexnow/limits.test.ts` | hour/day/check limits, env | 08 |
+| `src/server/indexnow/{retention,noSpend,logging}.test.ts` | prune loop, no spend, no URLs in logs | 09, 10, 15 |
+| `src/server/indexnow/indexnow.route.test.mjs` | auth, flags, 409/429/400 | 14 |
+| `src/shared/http/safeFetch.test.ts` (F01) | `maxRedirects: 0` returns the 3xx | 04 |
+| `src/server/publishRoute.test.mjs`, `src/components/portal/portalRegressions.test.mjs` | unchanged publish route; DraftEditor still compiles | 13 |
+| `src/server/indexnow/tools.test.ts` | tool shape | 16 |
 | `scripts/qa/check-f19-browser.mjs` | B1–B7 | 11–14 |
 
 No test reaches the network: `safeFetch` and `fetchImpl` are injected; browser tests use a fixture API server.

@@ -6,9 +6,9 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useServerPacedQuery } from "@/components/app/hooks/useServerPacedQuery";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
-import { isRankRunActive } from "@/lib/rank-tracking/runPolling";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
+import { isRankRunActive } from "@/shared/rank-tracking/runPolling";
 
 export type RankRunView = {
   id: string;

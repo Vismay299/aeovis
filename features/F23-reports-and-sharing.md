@@ -51,23 +51,23 @@ The assistant can save its work as a one-page HTML report that the team opens in
 ## 3. What Perceev has today
 
 - **No report store.** The customer scan report page offers a JSON download per scan (`src/app/api/customer/scan/report/[scan_id]/route.js:46-67`). The free scan's dashboard is shareable by URL at `/dashboard/[brand]/[scanId]`, a private-prefix route with `noindex`.
-- **Middleware** runs only on `/api/:path*` (`src/middleware.js:88-91`), so new page routes `/r/*` and `/s/*` never reach it; there is no auth middleware for pages. The operator perimeter (`src/lib/operatorPerimeter.js`) is untouched by this feature.
-- **Indexing:** `PRIVATE_ROUTE_PREFIXES` (`src/lib/publicSite.js:57-67`) drive `robots.txt` disallows (`src/app/robots.js:18-25`) and an `X-Robots-Tag: noindex, nofollow` header from `next.config.mjs:5-11`; `sitemap.js` lists only `PUBLIC_INDEXABLE_ROUTES` (`publicSite.js:14-51`, `:129-137`). Tests: `src/lib/repairs/r20-public-site.test.mjs:73-75`, `:90-99`, `:117-123`; hosted check `scripts/qa/check-public-site.mjs:17-25`.
+- **Middleware** runs only on `/api/:path*` (`src/middleware.js:88-91`), so new page routes `/r/*` and `/s/*` never reach it; there is no auth middleware for pages. The operator perimeter (`src/server/operatorPerimeter.js`) is untouched by this feature.
+- **Indexing:** `PRIVATE_ROUTE_PREFIXES` (`src/server/publicSite.js:57-67`) drive `robots.txt` disallows (`src/app/robots.js:18-25`) and an `X-Robots-Tag: noindex, nofollow` header from `next.config.mjs:5-11`; `sitemap.js` lists only `PUBLIC_INDEXABLE_ROUTES` (`publicSite.js:14-51`, `:129-137`). Tests: `src/server/repairs/r20-public-site.test.mjs:73-75`, `:90-99`, `:117-123`; hosted check `scripts/qa/check-public-site.mjs:17-25`.
 - **Sign-in redirect** uses `?next=` (`src/app/login/page.jsx:33-36`).
 - **Brand colours** `--brand: #3730CE`, `--brand-lift: #5B54F0` (`src/app/globals.css:57-58`). There is no `public/` folder.
-- **F22** provides the registry (`src/lib/tools/`), `TOOL_NAMES` with the four report names in `PLANNED_TOOL_NAMES`, the assistant runtime, `registerKickoff`, `buildSystemPrompt({ templatesBlock })`, and `TOOL_PRESENTATION`. **F21** provides the skill library and its expected-list test.
+- **F22** provides the registry (`src/server/tools/`), `TOOL_NAMES` with the four report names in `PLANNED_TOOL_NAMES`, the assistant runtime, `registerKickoff`, `buildSystemPrompt({ templatesBlock })`, and `TOOL_PRESENTATION`. **F21** provides the skill library and its expected-list test.
 - **F04** provides `APP_SURFACES` (append-only; F23 adds `/r`), UI primitives, `PageHeader`, `BackLink`, `EmptyState`, `QueryError`, `ConfirmDialog`, `RowActionsMenu`, `SkeletonPresets`; **F05** `fetchJson`, keys, `useWorkspace()`.
 
 ## 4. Target behaviour and acceptance criteria
 
 | ID | Statement | Verified by |
 |---|---|---|
-| F23-AC-01 | `saveReport` validates in the order of §6.2.3 and writes nothing when any check fails; each refusal has the code and copy listed there. | unit `src/lib/reports/service.test.ts` |
+| F23-AC-01 | `saveReport` validates in the order of §6.2.3 and writes nothing when any check fails; each refusal has the code and copy listed there. | unit `src/server/reports/service.test.ts` |
 | F23-AC-02 | Byte limits are UTF-8 (`TextEncoder`) and measured on the sanitised document; input over 1,000,000 bytes is refused before sanitising; the refusal prints the size rounded up and the limit rounded down. | unit `service.test.ts` |
 | F23-AC-03 | A save without `</html>` at the end, or without `<html`, is refused with `report_incomplete` and the stored report is unchanged. | unit `service.test.ts` |
 | F23-AC-04 | Titles are unique per workspace (DB unique index and service check); a clash names the existing id. Creates stop at 2,000 reports per workspace; creates and updates stop at 250,000,000 stored bytes net of the replaced document. | unit `service.test.ts`; DB group `reports` |
 | F23-AC-05 | Updates keep `skill`, `skill_version` and `template_id` when omitted, never change `created_by`, `created_by_user_id`, `share_token` or `shared_at`, and bump `updated_at`; share changes do not bump `updated_at`. | unit; DB group `reports` |
-| F23-AC-06 | **Sanitiser:** the output contains no element outside the allowlist of §6.2.2, no `on*` attribute, no `javascript:`/`vbscript:`/`data:` link, no `<meta http-equiv>`, no remote `img`, no CSS `@import`, `expression(`, `behavior:` or non-`data:` `url(…)`; non-fragment links get `target="_blank" rel="noopener noreferrer nofollow"`; `<!doctype html>` is first; the result of sanitising the sanitised output is identical (idempotent). | unit `src/lib/reports/sanitize.test.ts` (40-case corpus) |
+| F23-AC-06 | **Sanitiser:** the output contains no element outside the allowlist of §6.2.2, no `on*` attribute, no `javascript:`/`vbscript:`/`data:` link, no `<meta http-equiv>`, no remote `img`, no CSS `@import`, `expression(`, `behavior:` or non-`data:` `url(…)`; non-fragment links get `target="_blank" rel="noopener noreferrer nofollow"`; `<!doctype html>` is first; the result of sanitising the sanitised output is identical (idempotent). | unit `src/server/reports/sanitize.test.ts` (40-case corpus) |
 | F23-AC-07 | `/r/[reportId]` and `/s/[token]/raw` responses carry exactly the CSP of `reportCsp(print)`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`, `Cross-Origin-Opener-Policy: same-origin`, `X-Robots-Tag: noindex, nofollow`; the iframe attribute equals `REPORT_IFRAME_SANDBOX` and never contains `allow-same-origin`. | unit `src/shared/report-sandbox.test.ts`, `documentRoutes.test.ts` |
 | F23-AC-08 | Print mode appends the print script once, last, attribute-free; the CSP authorises exactly its hash; `PRINT_SCRIPT_SHA256` equals the recomputed digest. | unit `report-sandbox.test.ts` (port of OpenSEO's) |
 | F23-AC-09 | `/r/[reportId]`: invalid id shape, unknown id, another workspace's report, or `reports` off → 404 with the single body "This report does not exist or you do not have access to it."; signed out → 302 `/login?next=%2Fr%2F<id>`; HTML is read only after authorisation; `private, no-store`. | unit `documentRoutes.test.ts` |
@@ -76,13 +76,13 @@ The assistant can save its work as a one-page HTML report that the team opens in
 | F23-AC-12 | A served public document records one view: `record_report_view(report, brand, "share:<16 hex>", fromBrowser)`; the pseudonym is derived from the token and never equals it; no IP, user agent or cookie is stored. | unit `documentRoutes.test.ts`; DB group `views` |
 | F23-AC-13 | `/s/[token]` wrapper: static HTML with every report value HTML-escaped (a title `<script>alert(1)</script>` appears escaped), `<meta name="robots" content="noindex, nofollow">`, OG and Twitter tags with image `/s/<token>/og.png?v=<updatedAt>`, the iframe with `REPORT_IFRAME_SANDBOX` and `referrerpolicy="no-referrer"`, headers `no-store`, `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: no-referrer`, `X-Frame-Options: DENY` and the wrapper CSP of §6.2.6 whose `script-src` hash matches `SHARE_SCRIPT`. Dead ends are 404 pages that do not contain the report title. | unit `sharePage.test.ts` |
 | F23-AC-14 | `/s/[token]/og.png`: same access checks as raw; 200 `image/png` 1200×630 with `no-store` and `noindex`; title and workspace host only; a render failure returns 500 `text/plain` "Preview image unavailable." with `no-store`. | unit `ogRoute.test.ts`; browser check |
-| F23-AC-15 | **Indexing and auth:** `/r` is in `PRIVATE_ROUTE_PREFIXES` (robots disallow + noindex header); `/s` is in the new `NOINDEX_ROUTE_PREFIXES` (noindex header and meta, **not** disallowed in robots so link previews can read the tags); neither appears in the sitemap; `getRouteIndexingPolicy("/s/x")` → `{ index: false, follow: false, disallowRobots: false, reason: "share_link" }`; the middleware matcher still covers only `/api/:path*`. Existing R20 tests pass unchanged. | unit `src/lib/reports/indexing.test.mjs`; `node --test src/lib/repairs/r20-public-site.test.mjs` |
-| F23-AC-16 | Report tools: `list_reports`, `get_report`, `save_report`, `list_report_templates` are registered, pass F22's contract tests, never return a share token or URL, and mark `summary`/`html` read back as untrusted; `save_report` with `reportId` needs a `confirm` approval; there is no tool to share, unshare or delete. | unit `src/lib/reports/tools.test.ts`, F22 `contract.test.ts` |
+| F23-AC-15 | **Indexing and auth:** `/r` is in `PRIVATE_ROUTE_PREFIXES` (robots disallow + noindex header); `/s` is in the new `NOINDEX_ROUTE_PREFIXES` (noindex header and meta, **not** disallowed in robots so link previews can read the tags); neither appears in the sitemap; `getRouteIndexingPolicy("/s/x")` → `{ index: false, follow: false, disallowRobots: false, reason: "share_link" }`; the middleware matcher still covers only `/api/:path*`. Existing R20 tests pass unchanged. | unit `src/server/reports/indexing.test.mjs`; `node --test src/server/repairs/r20-public-site.test.mjs` |
+| F23-AC-16 | Report tools: `list_reports`, `get_report`, `save_report`, `list_report_templates` are registered, pass F22's contract tests, never return a share token or URL, and mark `summary`/`html` read back as untrusted; `save_report` with `reportId` needs a `confirm` approval; there is no tool to share, unshare or delete. | unit `src/server/reports/tools.test.ts`, F22 `contract.test.ts` |
 | F23-AC-17 | `TOOL_NAMES` contains the four report tools and `PLANNED_TOOL_NAMES` is empty; F22's registry equality test and F21's reference test pass; the `seo-report` skill is served when `save_report` is available and F21's expected list has 15 names. | unit F22 `registry.test.ts`, F21 `skills.test.ts`, `toolReferences.test.ts` |
 | F23-AC-18 | Templates: create, update, delete; caps 10 per workspace (creates), name 80, description 200, instructions 3,000 (trimmed); case-insensitive unique names; refusals return 400/409 with OpenSEO's copy; deleting a template leaves reports intact and their Type falls back to the skill. | unit `templateService.test.ts`; route test |
 | F23-AC-19 | `POST /api/customer/reports/generate { templateId }` requires `reports`, `report_generate` and `assistant`, creates an assistant session titled "Report: {name}" with kickoff `{ kind: "generate_report", templateId }` and returns its path; the kickoff builder produces the text of §6.2.8 and the chip "Generate a report from “{name}”". | route test; unit `generate.test.ts` |
-| F23-AC-20 | The assistant's system prompt lists the workspace's templates in `<report_templates>` (name, id, description) when `reports` is on and templates exist. | unit `src/lib/reports/promptBlock.test.ts` |
-| F23-AC-21 | Customer routes: list (no `html`, no `summary`), detail (with `views30d` for the current link), delete, share/unshare (`report_sharing` off → 404 `feature_unavailable`), templates CRUD; every route rejects unknown fields and other workspaces' ids with 404. | route test `src/lib/reports/reports.route.test.mjs` |
+| F23-AC-20 | The assistant's system prompt lists the workspace's templates in `<report_templates>` (name, id, description) when `reports` is on and templates exist. | unit `src/server/reports/promptBlock.test.ts` |
+| F23-AC-21 | Customer routes: list (no `html`, no `summary`), detail (with `views30d` for the current link), delete, share/unshare (`report_sharing` off → 404 `feature_unavailable`), templates CRUD; every route rejects unknown fields and other workspaces' ids with 404. | route test `src/server/reports/reports.route.test.mjs` |
 | F23-AC-22 | UI: list, empty state, detail with viewer skeleton, Export opens `/r/<id>?print=1`, full screen with Esc and Exit, share dialog states, delete confirm, templates page and form, Generate dialog; phone layout has no horizontal page scroll. | browser `scripts/qa/check-f23-browser.mjs` |
 | F23-AC-23 | Public pages in a real browser: the report document runs no script (an injected `<script>` in a fixture is absent and `window.__pwned` stays undefined), cannot read `document.cookie` (opaque origin), cannot load a remote image (no request leaves to the fixture's remote host), and links open new tabs. | browser `scripts/qa/check-f23-browser.mjs` |
 | F23-AC-24 | `APP_SURFACES` contains `{ prefix: "/r", theme: "light" }`. | unit F04 `theme.test.ts` (case added) |
@@ -289,7 +289,7 @@ NOTIFY pgrst, 'reload schema';
 | `src/shared/report-share.ts` | `mintShareToken()`, `sharePath(token)`, `SHARE_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32}$/`, `sharePseudonym(token): Promise<string>` ("share:" + first 16 hex of SHA-256) | COPY `report-share.ts:11-20`; PORT `shareAccess.ts:23`, `raw.ts:44-53` |
 | `src/shared/report-sandbox.ts` | `REPORT_IFRAME_SANDBOX`, `REPORT_CSP`, `PRINT_SCRIPT`, `PRINT_SCRIPT_SHA256`, `reportCsp(print?)`, `textResponse(body, status)`, `reportDocumentResponse(html, { print?, cacheControl, noindex? })` | COPY `report-sandbox.ts:1-130` (constants byte-identical; `PRINT_SCRIPT_SHA256` stays `uE0MLbgBgIu3I3pghlY0762kVHKlP7Udz5qzZNT7piw=` because the script text is unchanged) |
 
-#### 6.2.2 Sanitiser — `src/lib/reports/sanitize.ts`
+#### 6.2.2 Sanitiser — `src/server/reports/sanitize.ts`
 
 Dependencies added to `package.json`, pinned exactly (no caret): `sanitize-html` (current 2.x release) and `htmlparser2` (the major version `sanitize-html` itself uses), plus `@types/sanitize-html` in devDependencies.
 
@@ -313,7 +313,7 @@ Configuration (exact):
 
 Every serve path re-sanitises documents whose `sanitizer_version < SANITIZER_VERSION` before responding and updates the row in `keepAlive` (so a sanitiser fix reaches old reports).
 
-#### 6.2.3 Service — `src/lib/reports/service.ts` (PORT `ReportService.ts`), `repository.ts` (PORT `ReportRepository.ts`), `templateService.ts`, `templateRepository.ts`
+#### 6.2.3 Service — `src/server/reports/service.ts` (PORT `ReportService.ts`), `repository.ts` (PORT `ReportRepository.ts`), `templateService.ts`, `templateRepository.ts`
 
 ```ts
 export async function saveReport(admin: SupabaseClient, p: { brandKey: string; reportId?: string; title: string; summary: string; html: string;
@@ -350,7 +350,7 @@ export async function viewsLast30Days(admin, i: { brandKey: string; reportId: st
 
 `templateService.ts` (PORT `ReportTemplateService.ts:17-184`): `listReportTemplates(admin, brandKey) → { templates, remaining }`, `getReportTemplate`, `saveReportTemplate(admin, { brandKey, templateId?, name, description, instructions, createdBy: "app", createdByUserId })`, `deleteReportTemplate`. Copy (trimmed values): empty name 400 `template_name_required` "Give the template a name."; name > 80 400 `template_name_too_long` "Name is {n} characters; the limit is 80. Shorten it and save again."; empty description 400 `template_description_required` "Add a one-line description saying when to use this template. It is what the assistant reads to decide."; description > 200 400 `template_description_too_long` "Description is {n} characters; the limit is 200. It is one line saying when to use the template — move the detail into the instructions."; empty instructions 400 `template_instructions_required` "Add instructions: the audience, the sections in order, the tone, and the sign-off."; instructions > 3,000 400 `template_instructions_too_long` "Instructions are {n} characters; the limit is 3,000. A template is a brief, not the report — say the audience, the sections in order, the tone and the sign-off, and cut the rest."; unknown id 404 `template_not_found`; name clash (case-insensitive) 409 `template_name_taken` "A template named \"{name}\" exists in this workspace. Choose another name."; creating at 10 → 409 `template_limit` "This workspace has 10 report templates, the limit. Delete one from the Templates page."
 
-#### 6.2.4 Tools — `src/lib/reports/tools.ts` and `src/lib/tools/catalog/reports.ts`
+#### 6.2.4 Tools — `src/server/reports/tools.ts` and `src/server/tools/catalog/reports.ts`
 
 Shape of F22 §6.2.1. Handler context `ToolHandlerContext`.
 
@@ -369,7 +369,7 @@ Descriptions (exact):
 
 Registrations (`catalog/reports.ts`): area `reports`, gate `reports`; `list_reports`, `get_report`, `list_report_templates` effect `read`, approval none; `save_report` effect `write`, approval `input.reportId ? { kind: "confirm", label: "Replace the report “" + (existing title) + "”" } : { kind: "none" }` (label resolves the stored title; unknown id → none, the handler then returns `report_not_found`), annotations `destructiveHint: true`; links `/portal/reports/<reportId>` or `/portal/reports`; untrusted paths `get_report`: `report.summary`, `report.html`; `list_reports`: `reports[*].summaryPreview`. Summaries: "Saved report “{title}” ({size})." / "Replaced report “{title}” ({size})."; "{rowCount} of {totalCount} reports."; "Report “{title}” ({size})."; "{n} report templates.". `size` = bytes < 1,000 → "{n} bytes", else "{round(n/1000)} KB" (OpenSEO `report-tools.ts:34-39`).
 
-#### 6.2.5 Document routes — `src/lib/reports/documentRoutes.ts` (pure handlers; route files call them)
+#### 6.2.5 Document routes — `src/server/reports/documentRoutes.ts` (pure handlers; route files call them)
 
 ```ts
 export async function handleReportRequest(reportId: string, request: Request, deps?: DocDeps): Promise<Response>;        // /r/[reportId]
@@ -401,9 +401,9 @@ Route files (all `export const dynamic = "force-dynamic"`, `runtime = "nodejs"`,
 - `src/app/r/[reportId]/route.ts` → `handleReportRequest(params.reportId, request)`.
 - `src/app/s/[token]/route.ts` → `handleSharePage`.
 - `src/app/s/[token]/raw/route.ts` → `handleSharedReportRequest`.
-- `src/app/s/[token]/og.png/route.tsx` → `handleReportSocialImage(params.token, { render: renderReportSocialImage })` from `src/lib/reports/ogImage.tsx`.
+- `src/app/s/[token]/og.png/route.tsx` → `handleReportSocialImage(params.token, { render: renderReportSocialImage })` from `src/server/reports/ogImage.tsx`.
 
-#### 6.2.6 Share wrapper — `src/lib/reports/sharePage.ts` (PORT `sharePage.tsx:12-260`)
+#### 6.2.6 Share wrapper — `src/server/reports/sharePage.ts` (PORT `sharePage.tsx:12-260`)
 
 Rendered to a string with an `escapeHtml` helper (`&`, `<`, `>`, `"`, `'`) applied to every interpolated value; no React and no app bundle. Exports `renderSharePageHtml(i: { title; description; canonical; imageUrl; token; updatedAgo }): string`, `renderUnavailableHtml(heading, detail): string`, `SHARE_SCRIPT`, `SHARE_SCRIPT_SHA256` (base64 SHA-256 of `SHARE_SCRIPT`, hardcoded; the test recomputes it), `WRAPPER_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; frame-src 'self'; script-src 'sha256-" + SHARE_SCRIPT_SHA256 + "'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"`, `shareDescription(summary)` (COPY `:32-41`, 200 chars), `formatUpdatedAgo(iso, now)`.
 
@@ -413,14 +413,14 @@ Rendered to a string with an `escapeHtml` helper (`&`, `<`, `>`, `"`, `'`) appli
 - Dead ends (404, same headers, no report title anywhere): unknown/revoked/off → heading "This report isn't shared." detail "The link may have been turned off, or the report may have been deleted."; inactive workspace → heading "This report isn't available." detail "Its workspace is no longer active." Both show the "Try Perceev" button.
 - Headers: `Content-Type: text/html; charset=utf-8`, `Cache-Control: no-store`, `Content-Security-Policy: WRAPPER_CSP`, `X-Robots-Tag: noindex, nofollow`, `Referrer-Policy: no-referrer`, `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`.
 
-#### 6.2.7 Social image — `src/lib/reports/ogImage.tsx`
+#### 6.2.7 Social image — `src/server/reports/ogImage.tsx`
 
 `renderReportSocialImage(title: string, host: string | null): Promise<Response>` using `ImageResponse` from `next/og` (PORT of `reportSocialImage.tsx:6-89`, takumi-js replaced): 1200×630, background `#ffffff`, text `#0a0a0a`; top-left mark: 64×64 `div` with `borderRadius: 14`, `background: linear-gradient(135deg, #3730CE, #5B54F0)`, then the wordmark "perceev" (34 px, weight 700, letter-spacing −1); title centred vertically, font size 80/64/54 by length (> 48, > 85 chars, as OpenSEO `:42`); host bottom-right (24 px, `#65716b`, ellipsis). Default bundled font (no network). Headers `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow`, `X-Content-Type-Options: nosniff`. No remote assets.
 
 #### 6.2.8 Generate from template and prompt block
 
-- `src/lib/reports/generate.ts`: `startReportGeneration(ws: Workspace, i: { templateId: string }, deps?) → { sessionId, path }`: flags `reports`, `report_generate`, `assistant` (any off → 404 `feature_unavailable`); template must exist (404 `template_not_found`); F22 `createSession(admin, { brandKey, userId, kickoff: { kind: "generate_report", templateId } })` then `renameSession` to `("Report: " + name).slice(0, 80)`; `path = "/portal/assistant?s=" + sessionId`. Telemetry `report:generate_start {}`.
-- `src/lib/reports/kickoff.ts` (imported for side effect from F22's `src/lib/assistant/kickoffKinds.ts`): `registerKickoff("generate_report", build)`; `build` loads the template (missing → `AppError(409, "template_not_found", "This report template was deleted. Choose another one.")`) and returns `label = "Generate a report from “{name}”"` and `text` (exact):
+- `src/server/reports/generate.ts`: `startReportGeneration(ws: Workspace, i: { templateId: string }, deps?) → { sessionId, path }`: flags `reports`, `report_generate`, `assistant` (any off → 404 `feature_unavailable`); template must exist (404 `template_not_found`); F22 `createSession(admin, { brandKey, userId, kickoff: { kind: "generate_report", templateId } })` then `renameSession` to `("Report: " + name).slice(0, 80)`; `path = "/portal/assistant?s=" + sessionId`. Telemetry `report:generate_start {}`.
+- `src/server/reports/kickoff.ts` (imported for side effect from F22's `src/server/assistant/kickoffKinds.ts`): `registerKickoff("generate_report", build)`; `build` loads the template (missing → `AppError(409, "template_not_found", "This report template was deleted. Choose another one.")`) and returns `label = "Generate a report from “{name}”"` and `text` (exact):
   ```text
   Write a report using the report template “{name}” (id {id}). First call activate_skill with "seo-report". The template is the user's brief: follow its audience, sections, tone and sign-off.
   <report_template>
@@ -428,7 +428,7 @@ Rendered to a string with an `escapeHtml` helper (`&`, `<`, `>`, `"`, `'`) appli
   </report_template>
   Gather the data the template needs with your tools (paid lookups will ask the user first), then save the report with save_report, passing templateId "{id}". If something the template asks for is not available, say so in the report instead of inventing it.
   ```
-- `src/lib/reports/promptBlock.ts`: `buildTemplatesBlock(admin, brandKey): Promise<string | null>` → `null` when `reports` is off or there are no templates; else `"Report templates are the user's briefs for reports. Use one only when the user names it or asks for the kind of report it describes; pass its id to save_report as templateId.\n<report_templates>\n" + lines "- {name} (id {id}): {description}" + "\n</report_templates>"`. F22's `runAssistantTurn` passes it as `templatesBlock` (one-line edit in `turn.ts`), placed after `</workspace_memory>`.
+- `src/server/reports/promptBlock.ts`: `buildTemplatesBlock(admin, brandKey): Promise<string | null>` → `null` when `reports` is off or there are no templates; else `"Report templates are the user's briefs for reports. Use one only when the user names it or asks for the kind of report it describes; pass its id to save_report as templateId.\n<report_templates>\n" + lines "- {name} (id {id}): {description}" + "\n</report_templates>"`. F22's `runAssistantTurn` passes it as `templatesBlock` (one-line edit in `turn.ts`), placed after `</workspace_memory>`.
 
 #### 6.2.9 The `seo-report` skill — `src/assistant/skills/seo-report/SKILL.md` (PORT of `openseo:.agents/skills/seo-report/SKILL.md:1-264`)
 
@@ -448,7 +448,7 @@ Frontmatter: `name: seo-report`, `description: "Write and save a Perceev report 
 |---|---|---|---|
 | periodic `reports.retention` | `definePeriodic({ name: "reports.retention", everySeconds: 86400 })` → `enqueueSystemJob("reports.retention", {}, { dedupeKey: "reports.retention:" + YYYY-MM-DD })` | `prune-1`…`prune-20` (`DB_STEP`): `prune_report_share_views(today − 395 days, 5000)` while 5,000 deleted | `completed` `{ views }` |
 
-Registered in `src/lib/reports/jobs.ts`; `src/lib/jobs/kinds.ts` gains `import "../reports/jobs.ts";`.
+Registered in `src/server/reports/jobs.ts`; `src/server/jobs/kinds.ts` gains `import "../reports/jobs.ts";`.
 
 ### 6.4 Provider calls and cost
 
@@ -456,7 +456,7 @@ None in F23 code. Generating a report is one or more F22 assistant turns (`assis
 
 ### 6.5 API routes
 
-Customer routes: `src/app/api/customer/reports/**/route.ts`, `requireWorkspace`, `isFeatureEnabled("reports", brandKey)` false → 404 `feature_unavailable` "This page is not available for your workspace yet.", `toErrorResponse`, `Cache-Control: no-store`, contracts in `src/lib/reports/reports.contract.ts`. Members and owners have the same rights (OpenSEO parity).
+Customer routes: `src/app/api/customer/reports/**/route.ts`, `requireWorkspace`, `isFeatureEnabled("reports", brandKey)` false → 404 `feature_unavailable` "This page is not available for your workspace yet.", `toErrorResponse`, `Cache-Control: no-store`, contracts in `src/server/reports/reports.contract.ts`. Members and owners have the same rights (OpenSEO parity).
 
 **`GET /api/customer/reports?brand_key=&limit=`** query `z.strictObject({ brand_key?, limit: z.coerce.number().int().min(1).max(100).default(100) })` → 200
 ```json
@@ -482,7 +482,7 @@ Document routes (§6.2.5): `GET /r/[reportId]`, `GET /s/[token]`, `GET /s/[token
 
 ### 6.6 UI
 
-Pages `src/app/portal/reports/page.tsx`, `src/app/portal/reports/[reportId]/page.tsx`, `src/app/portal/reports/templates/page.tsx`; components in `src/components/portal/reports/`. Built from F04 (`PageHeader`, `BackLink`, `EmptyState`, `QueryError`, `ConfirmDialog`, `RowActionsMenu`, `SkeletonPage`, `SkeletonTableRows`, `Table`/`TableCard`, `Badge`, `Button`, `Dialog`, `Field`, `Input`, `Textarea`, `Switch`, `Select`, `Alert`, `DropdownMenu`, `Tooltip`) and F05 (`fetchJson`, `withBrand`, keys, `useWorkspace()`); forms with TanStack Form (as OpenSEO's `useAppForm`). Query keys added to `src/lib/query/keys.ts`: `reports: (brandKey) => ["reports", brandKey]`, `report: (reportId) => ["report", reportId]`, `reportTemplates: (brandKey) => ["reportTemplates", brandKey]`; `staleTime: 0` on all three (OpenSEO `shared.tsx:33-35`).
+Pages `src/app/portal/reports/page.tsx`, `src/app/portal/reports/[reportId]/page.tsx`, `src/app/portal/reports/templates/page.tsx`; components in `src/components/portal/reports/`. Built from F04 (`PageHeader`, `BackLink`, `EmptyState`, `QueryError`, `ConfirmDialog`, `RowActionsMenu`, `SkeletonPage`, `SkeletonTableRows`, `Table`/`TableCard`, `Badge`, `Button`, `Dialog`, `Field`, `Input`, `Textarea`, `Switch`, `Select`, `Alert`, `DropdownMenu`, `Tooltip`) and F05 (`fetchJson`, `withBrand`, keys, `useWorkspace()`); forms with TanStack Form (as OpenSEO's `useAppForm`). Query keys added to `src/shared/query/keys.ts`: `reports: (brandKey) => ["reports", brandKey]`, `report: (reportId) => ["report", reportId]`, `reportTemplates: (brandKey) => ["reportTemplates", brandKey]`; `staleTime: 0` on all three (OpenSEO `shared.tsx:33-35`).
 
 | File | Source |
 |---|---|
@@ -527,7 +527,7 @@ Pages `src/app/portal/reports/page.tsx`, `src/app/portal/reports/[reportId]/page
 
 **Accessibility:** iframe `title` = report title; full screen focuses Exit; the share switch has `aria-describedby`; menus have labels; no information conveyed by colour alone (Public badge has text).
 
-**Registrations:** `src/components/app/navigation/items.ts` group `tools`: `{ id: "reports", label: "Reports", href: "/portal/reports", icon: FileText, flag: "reports" }` (after Assistant). `src/lib/features/names.ts`: `reports: { spend: [] as const }`, `report_sharing: { spend: [] as const }`, `report_generate: { spend: ["assistant.turn"] as const }`; `src/lib/features/clientFeatures.ts` appends all three. `src/lib/theme/theme.ts` `APP_SURFACES` appends `{ prefix: "/r", theme: "light" }`. `src/shared/assistant-tools.ts` (F22) adds `TOOL_PRESENTATION` for the four tools (`list_reports` table: Title, Skill, Updated; `get_report` keyValue: Title, Skill, Size, Updated; `save_report` keyValue: Title, Created, Size, Changes on save; `list_report_templates` table: Name, Description). `src/lib/tools/names.ts`: move the four names into `TOOL_NAMES`; `PLANNED_TOOL_NAMES = [] as const`.
+**Registrations:** `src/components/app/navigation/items.ts` group `tools`: `{ id: "reports", label: "Reports", href: "/portal/reports", icon: FileText, flag: "reports" }` (after Assistant). `src/server/features/names.ts`: `reports: { spend: [] as const }`, `report_sharing: { spend: [] as const }`, `report_generate: { spend: ["assistant.turn"] as const }`; `src/server/features/clientFeatures.ts` appends all three. `src/shared/theme/theme.ts` `APP_SURFACES` appends `{ prefix: "/r", theme: "light" }`. `src/shared/assistant-tools.ts` (F22) adds `TOOL_PRESENTATION` for the four tools (`list_reports` table: Title, Skill, Updated; `get_report` keyValue: Title, Skill, Size, Updated; `save_report` keyValue: Title, Created, Size, Changes on save; `list_report_templates` table: Name, Description). `src/server/tools/names.ts`: move the four names into `TOOL_NAMES`; `PLANNED_TOOL_NAMES = [] as const`.
 
 ### 6.7 Permissions, privacy, observability, threat model
 
@@ -557,7 +557,7 @@ Pages `src/app/portal/reports/page.tsx`, `src/app/portal/reports/[reportId]/page
 
 **Privacy.** View counts store a per-link pseudonym, day and two counters only. Report HTML is customer content: it is never logged. Allowed log lines: `[reports] social image failed`, `[reports] view record failed { reportId }`, `[reports] resanitize failed { reportId }`.
 
-**Telemetry events** (names for F26; until then `src/lib/reports/telemetry.ts` (exports `setReportEventTracker(fn)`; no-op until F26 wires it, F26 §6.2.7) is a no-op sink):
+**Telemetry events** (names for F26; until then `src/server/reports/telemetry.ts` (exports `setReportEventTracker(fn)`; no-op until F26 wires it, F26 §6.2.7) is a no-op sink):
 
 | Event | Props |
 |---|---|
@@ -586,16 +586,16 @@ Pages `src/app/portal/reports/page.tsx`, `src/app/portal/reports/[reportId]/page
 | `openseo:src/types/schemas/reports.ts:5-70`, `report-templates.ts:5-26` | `src/shared/reports.ts` | PORT | Per-workspace caps (2,000 reports, 250 MB); input ceiling added. |
 | `openseo:src/shared/report-share.ts:5-20` | `src/shared/report-share.ts` | COPY | Adds `SHARE_TOKEN_PATTERN` (from `shareAccess.ts:23`) and `sharePseudonym` (from `raw.ts:44-53`). |
 | `openseo:src/shared/report-sandbox.ts:1-130`, `report-sandbox.test.ts:4-17` | `src/shared/report-sandbox.ts` (+ test) | COPY | Byte-identical constants; parity test. |
-| `openseo:src/server/features/reports/services/ReportService.ts:22-326` (+ `ReportService.test.ts` cases `:61-276`) | `src/lib/reports/service.ts` (+ test) | PORT | Sanitise before size; per-workspace caps; feature flag instead of hosted mode; ported test cases kept. |
-| `openseo:src/server/features/reports/repositories/ReportRepository.ts:1-276` (+ `ReportRepository.query.test.ts:75-178`) | `src/lib/reports/repository.ts`; SQL functions in 150 | PORT | Race-safe mint as a SQL function; DB group ports the two race cases. |
-| `openseo:src/server/features/reports/services/ReportTemplateService.ts:17-184`, `ReportTemplateRepository.ts:1-113` (+ `ReportTemplateService.test.ts:53-115`) | `src/lib/reports/templateService.ts`, `templateRepository.ts` (+ test) | PORT | Copy adjusted ("assistant" for "agent"). |
-| `openseo:src/server/features/reports/shareAccess.ts:8-23` | `src/lib/reports/documentRoutes.ts` | PORT | Per-workspace `report_sharing` flag after the token lookup. |
+| `openseo:src/server/features/reports/services/ReportService.ts:22-326` (+ `ReportService.test.ts` cases `:61-276`) | `src/server/reports/service.ts` (+ test) | PORT | Sanitise before size; per-workspace caps; feature flag instead of hosted mode; ported test cases kept. |
+| `openseo:src/server/features/reports/repositories/ReportRepository.ts:1-276` (+ `ReportRepository.query.test.ts:75-178`) | `src/server/reports/repository.ts`; SQL functions in 150 | PORT | Race-safe mint as a SQL function; DB group ports the two race cases. |
+| `openseo:src/server/features/reports/services/ReportTemplateService.ts:17-184`, `ReportTemplateRepository.ts:1-113` (+ `ReportTemplateService.test.ts:53-115`) | `src/server/reports/templateService.ts`, `templateRepository.ts` (+ test) | PORT | Copy adjusted ("assistant" for "agent"). |
+| `openseo:src/server/features/reports/shareAccess.ts:8-23` | `src/server/reports/documentRoutes.ts` | PORT | Per-workspace `report_sharing` flag after the token lookup. |
 | `openseo:src/routes/r/$reportId.ts:10-105` (+ `reportRoute.test.ts:48-172`) | `documentRoutes.ts` `handleReportRequest`, `src/app/r/[reportId]/route.ts` | PORT | Supabase session; `/login?next=`; noindex added. |
 | `openseo:src/routes/s/$token/raw.ts:12-132` (+ `shareRawRoute.test.ts:69-157`) | `handleSharedReportRequest`, `src/app/s/[token]/raw/route.ts` | PORT | View counts stored in Postgres as well as telemetry. |
-| `openseo:src/server/features/reports/sharePage.tsx:12-260` (+ `sharePage.test.ts:36-124`) | `src/lib/reports/sharePage.ts`, `src/app/s/[token]/route.ts` | PORT | String template with escaping instead of JSX; wrapper CSP and frame headers added; Perceev copy and colours. |
-| `openseo:src/routes/s/$token/og[.]png.ts:9-46`, `reportSocialImage.tsx:6-89` (+ `shareImageRoute.test.ts:33-99`) | `handleReportSocialImage`, `src/lib/reports/ogImage.tsx`, `src/app/s/[token]/og.png/route.tsx` | PORT | `next/og` `ImageResponse` instead of takumi-js; Perceev mark drawn with CSS; 500 instead of a marketing-card redirect. |
+| `openseo:src/server/features/reports/sharePage.tsx:12-260` (+ `sharePage.test.ts:36-124`) | `src/server/reports/sharePage.ts`, `src/app/s/[token]/route.ts` | PORT | String template with escaping instead of JSX; wrapper CSP and frame headers added; Perceev copy and colours. |
+| `openseo:src/routes/s/$token/og[.]png.ts:9-46`, `reportSocialImage.tsx:6-89` (+ `shareImageRoute.test.ts:33-99`) | `handleReportSocialImage`, `src/server/reports/ogImage.tsx`, `src/app/s/[token]/og.png/route.tsx` | PORT | `next/og` `ImageResponse` instead of takumi-js; Perceev mark drawn with CSS; 500 instead of a marketing-card redirect. |
 | `openseo:src/serverFunctions/reports.ts:20-136`, `reportTemplates.ts:7-69` | `src/app/api/customer/reports/**/route.ts` | PORT | Routes with `requireWorkspace`; written-by labels instead of user names. |
-| `openseo:src/server/mcp/tools/report-tools.ts:59-414`, `report-template-tools.ts:28-60` | `src/lib/reports/tools.ts` | PATTERN | No delete, no sharing, no template writes for the assistant; never returns tokens. |
+| `openseo:src/server/mcp/tools/report-tools.ts:59-414`, `report-template-tools.ts:28-60` | `src/server/reports/tools.ts` | PATTERN | No delete, no sharing, no template writes for the assistant; never returns tokens. |
 | `openseo:src/server/mcp/tools/report-sharing-tools.ts:19-84` | none | — | Deliberately not ported (sharing is UI-only). |
 | `openseo:src/client/features/reports/{ReportsList,ReportViewer,shared,ReportTemplateForm,ReportTemplatesList}.tsx` | `src/components/portal/reports/*` | PORT | Next routing; F04/F05 primitives; Perceev copy; views count. |
 | `openseo:src/routes/_app/p/$projectId/reports/{index,$reportId,templates}.tsx` | `src/app/portal/reports/**/page.tsx` | PORT | Generate button and dialog added. |
@@ -611,16 +611,16 @@ Branches `feat/f23-reports-and-sharing-p<n>`.
 
 - [ ] **P1.T1 Migrations**
   - [ ] **P1.T1.S1** *Files:* `supabase/migrations/150_f23_reports.sql`, `151_f23_report_share_views.sql` (§6.1 verbatim), `scripts/setup-supabase.mjs`. *Verify:* `node scripts/qa/check-f23-db.mjs --group schema` → passed (applies 001–151, reapplies 150–151).
-  - [ ] **P1.T1.S2** *Files:* `README.md` (rows `150_f23_reports` "Assistant-written HTML reports and report templates; race-safe share tokens." and `151_f23_report_share_views` "Anonymous daily view counts per public report link."), `docs/OPERATOR_LEDGER.md` § C ("apply 150 and 151 before deploying F23"), `docs/PROD_MIGRATIONS.md` (two bullets; pre-check `select to_regclass('public.reports')`). *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+  - [ ] **P1.T1.S2** *Files:* `README.md` (rows `150_f23_reports` "Assistant-written HTML reports and report templates; race-safe share tokens." and `151_f23_report_share_views` "Anonymous daily view counts per public report link."), `docs/OPERATOR_LEDGER.md` § C ("apply 150 and 151 before deploying F23"), `docs/PROD_MIGRATIONS.md` (two bullets; pre-check `select to_regclass('public.reports')`). *Verify:* `node --test src/server/docStatus.test.mjs src/server/migrationsRunner.test.mjs` → pass.
   - [ ] **P1.T1.S3** *Files:* `tests/customer-uat.sql`. *Do:* rows per workspace; isolation assertions. *Verify:* CI "customer database isolation" → green.
   - [ ] **P1.T1.S4** *Files:* `scripts/qa/check-f23-db.mjs`. *Do:* groups `reports` (title unique; size check constraint; content trigger bumps `updated_at`, share changes do not; attribution immutable), `sharing` (two concurrent `set_report_share_token` → same token, one `created`; clear then set → new token; foreign brand → `report_not_found`), `views` (increments by day and pseudonym; browser vs other), `retention` (prune before date), `rls`. *Verify:* `node scripts/qa/check-f23-db.mjs` → all passed (F23-AC-04, 05, 10, 12, 25 DB parts).
 - [ ] **P1.T2 Shared files and sanitiser**
   - [ ] **P1.T2.S1** *Files:* `src/shared/reports.ts`, `src/shared/report-share.ts` (COPY header), `src/shared/report-share.test.ts`, `src/shared/report-sandbox.ts` (COPY header), `src/shared/report-sandbox.test.ts`. *Do:* §6.2.1; tests: token 32 chars, alphabet, 1,000 tokens unique; pseudonym format and ≠ token; OpenSEO hash test; `reportCsp(false) === REPORT_CSP`; `reportCsp(true)` contains `allow-scripts allow-modals` and the hash; `withPrintScript` splice before `</body>`, before `</html>`, appended; dangling `<script src="x" ` document gives the tag no attributes. *Verify:* `node --test src/shared/report-share.test.ts src/shared/report-sandbox.test.ts` → pass (F23-AC-08, AC-10 unit).
-  - [ ] **P1.T2.S2** *Files:* `package.json` (`sanitize-html`, `htmlparser2`, `@types/sanitize-html`, exact versions), `src/lib/reports/sanitize.ts`, `src/lib/reports/sanitize.test.ts`, corpus `tests/fixtures/f23/sanitize/*.html` (40 cases: script tag, `onload`, `onerror` on img, `javascript:` href, `vbscript:`, `data:text/html` href, SVG with `<script>`, SVG `<foreignObject>`, SVG `<use href>`, `<animate onbegin>`, `<iframe>`, `<object>`, `<embed>`, `<form action>`, `<input>`, `<button formaction>`, `<base href>`, `<meta http-equiv=refresh>`, `<link rel=stylesheet>`, remote `<img src>`, `srcset`, data PNG image (kept), data SVG image (dropped), CSS `@import`, CSS remote `url()`, CSS data `url()` (kept), `expression()`, `behavior:`, `-moz-binding`, style attribute with remote url, `</style><script>` breakout, mixed-case `<ScRiPt>`, HTML comments with conditional comments, entity-encoded `javascript&colon;`, `target=_top` link (rewritten), fragment link (kept without target), `mailto:` (kept), the starter template from §6.2.9 (unchanged except doctype and link rel), a 450 KB document, idempotence on all). *Verify:* `node --test src/lib/reports/sanitize.test.ts` → pass (F23-AC-06).
+  - [ ] **P1.T2.S2** *Files:* `package.json` (`sanitize-html`, `htmlparser2`, `@types/sanitize-html`, exact versions), `src/server/reports/sanitize.ts`, `src/server/reports/sanitize.test.ts`, corpus `tests/fixtures/f23/sanitize/*.html` (40 cases: script tag, `onload`, `onerror` on img, `javascript:` href, `vbscript:`, `data:text/html` href, SVG with `<script>`, SVG `<foreignObject>`, SVG `<use href>`, `<animate onbegin>`, `<iframe>`, `<object>`, `<embed>`, `<form action>`, `<input>`, `<button formaction>`, `<base href>`, `<meta http-equiv=refresh>`, `<link rel=stylesheet>`, remote `<img src>`, `srcset`, data PNG image (kept), data SVG image (dropped), CSS `@import`, CSS remote `url()`, CSS data `url()` (kept), `expression()`, `behavior:`, `-moz-binding`, style attribute with remote url, `</style><script>` breakout, mixed-case `<ScRiPt>`, HTML comments with conditional comments, entity-encoded `javascript&colon;`, `target=_top` link (rewritten), fragment link (kept without target), `mailto:` (kept), the starter template from §6.2.9 (unchanged except doctype and link rel), a 450 KB document, idempotence on all). *Verify:* `node --test src/server/reports/sanitize.test.ts` → pass (F23-AC-06).
 - [ ] **P1.T3 Service**
-  - [ ] **P1.T3.S1** *Files:* `src/lib/reports/repository.ts`, `templateRepository.ts` (PORT headers), `service.ts`, `templateService.ts` (PORT headers), `memoryStore.ts` (in-memory repository for tests), `service.test.ts`, `templateService.test.ts`. *Do:* §6.2.3; port OpenSEO's service cases (`ReportService.test.ts:61-276`, `ReportTemplateService.test.ts:53-115`) plus: order of checks; sanitised size; input ceiling; `kbUp/kbDown` copy at 499,900 bytes; sharing off → 404. *Verify:* `node --test src/lib/reports/service.test.ts src/lib/reports/templateService.test.ts` → pass (F23-AC-01–05, 18).
-  - [ ] **P1.T3.S2** *Files:* `src/lib/reports/jobs.ts`, `src/lib/jobs/kinds.ts`, `src/lib/reports/telemetry.ts`, `jobs.test.ts`. *Verify:* `node --test src/lib/reports/jobs.test.ts` → pass.
-  - [ ] **P1.T3.S3** *Files:* `src/lib/features/names.ts` (three entries), `src/lib/features/clientFeatures.ts`. *Verify:* `node --test src/lib/features/` → pass.
+  - [ ] **P1.T3.S1** *Files:* `src/server/reports/repository.ts`, `templateRepository.ts` (PORT headers), `service.ts`, `templateService.ts` (PORT headers), `memoryStore.ts` (in-memory repository for tests), `service.test.ts`, `templateService.test.ts`. *Do:* §6.2.3; port OpenSEO's service cases (`ReportService.test.ts:61-276`, `ReportTemplateService.test.ts:53-115`) plus: order of checks; sanitised size; input ceiling; `kbUp/kbDown` copy at 499,900 bytes; sharing off → 404. *Verify:* `node --test src/server/reports/service.test.ts src/server/reports/templateService.test.ts` → pass (F23-AC-01–05, 18).
+  - [ ] **P1.T3.S2** *Files:* `src/server/reports/jobs.ts`, `src/server/jobs/kinds.ts`, `src/server/reports/telemetry.ts`, `jobs.test.ts`. *Verify:* `node --test src/server/reports/jobs.test.ts` → pass.
+  - [ ] **P1.T3.S3** *Files:* `src/server/features/names.ts` (three entries), `src/server/features/clientFeatures.ts`. *Verify:* `node --test src/server/features/` → pass.
 
 **Checkpoint:** `node scripts/qa/check-f23-db.mjs` → all passed; full suite → pass.
 
@@ -629,15 +629,15 @@ Branches `feat/f23-reports-and-sharing-p<n>`.
 **Goal:** `/r` and `/s` routes serve sanitised documents with the full header set, and search engines cannot index them.
 
 - [ ] **P2.T1 Handlers**
-  - [ ] **P2.T1.S1** *Files:* `src/lib/reports/documentRoutes.ts`, `documentRoutes.test.ts`. *Do:* §6.2.5; port `reportRoute.test.ts:48-172` and `shareRawRoute.test.ts:69-157` cases; add: flag off → 404; inactive workspace → 404; old `sanitizer_version` re-sanitised before serving; view recorded with pseudonym only; headers exact. *Verify:* `node --test src/lib/reports/documentRoutes.test.ts` → pass (F23-AC-07, 09, 11, 12).
-  - [ ] **P2.T1.S2** *Files:* `src/lib/reports/sharePage.ts`, `sharePage.test.ts`. *Do:* §6.2.6; port `sharePage.test.ts:36-124`; add escaping of `<script>` title and `"` in summary, wrapper CSP hash recomputed, `X-Frame-Options`, dead ends without title. *Verify:* `node --test src/lib/reports/sharePage.test.ts` → pass (F23-AC-13).
-  - [ ] **P2.T1.S3** *Files:* `src/lib/reports/ogImage.tsx`, `src/lib/reports/ogRoute.test.ts`. *Do:* handler tests with an injected renderer: access checks, failure → 500 text; port `shareImageRoute.test.ts:33-99` minus the marketing redirect. *Verify:* `node --test src/lib/reports/ogRoute.test.ts` → pass (F23-AC-14 unit).
+  - [ ] **P2.T1.S1** *Files:* `src/server/reports/documentRoutes.ts`, `documentRoutes.test.ts`. *Do:* §6.2.5; port `reportRoute.test.ts:48-172` and `shareRawRoute.test.ts:69-157` cases; add: flag off → 404; inactive workspace → 404; old `sanitizer_version` re-sanitised before serving; view recorded with pseudonym only; headers exact. *Verify:* `node --test src/server/reports/documentRoutes.test.ts` → pass (F23-AC-07, 09, 11, 12).
+  - [ ] **P2.T1.S2** *Files:* `src/server/reports/sharePage.ts`, `sharePage.test.ts`. *Do:* §6.2.6; port `sharePage.test.ts:36-124`; add escaping of `<script>` title and `"` in summary, wrapper CSP hash recomputed, `X-Frame-Options`, dead ends without title. *Verify:* `node --test src/server/reports/sharePage.test.ts` → pass (F23-AC-13).
+  - [ ] **P2.T1.S3** *Files:* `src/server/reports/ogImage.tsx`, `src/server/reports/ogRoute.test.ts`. *Do:* handler tests with an injected renderer: access checks, failure → 500 text; port `shareImageRoute.test.ts:33-99` minus the marketing redirect. *Verify:* `node --test src/server/reports/ogRoute.test.ts` → pass (F23-AC-14 unit).
 - [ ] **P2.T2 Route files**
   - [ ] **P2.T2.S1** *Files:* `src/app/r/[reportId]/route.ts`, `src/app/s/[token]/route.ts`, `src/app/s/[token]/raw/route.ts`, `src/app/s/[token]/og.png/route.tsx`. *Verify:* `npm run build` → exit 0 and the build output lists the four routes as dynamic.
 - [ ] **P2.T3 Indexing, headers, surfaces**
-  - [ ] **P2.T3.S1** *Files:* `src/lib/publicSite.js` (append `"/r"` to `PRIVATE_ROUTE_PREFIXES`; add `export const NOINDEX_ROUTE_PREFIXES = Object.freeze(["/s"])`; in `getRouteIndexingPolicy`, after the private check, return `{ index: false, follow: false, disallowRobots: false, isAuthentication: false, reason: "share_link" }` for those prefixes), `next.config.mjs` (headers: also map `NOINDEX_ROUTE_PREFIXES` to `X-Robots-Tag: noindex, nofollow`, in both preview and production branches), `src/lib/reports/indexing.test.mjs`. *Do:* tests: robots data disallows `/r/` and `/r$`, never `/s`; sitemap has no `/r` or `/s` URL; `getRouteIndexingPolicy("/s/abc")` as AC-15; `"/scan"` still private (prefix boundary); `next.config` headers include `/s/:path*`; `src/middleware.js` `config.matcher` deep-equals `["/api/:path*"]`. *Verify:* `node --test src/lib/reports/indexing.test.mjs src/lib/repairs/r20-public-site.test.mjs` → pass (F23-AC-15).
+  - [ ] **P2.T3.S1** *Files:* `src/server/publicSite.js` (append `"/r"` to `PRIVATE_ROUTE_PREFIXES`; add `export const NOINDEX_ROUTE_PREFIXES = Object.freeze(["/s"])`; in `getRouteIndexingPolicy`, after the private check, return `{ index: false, follow: false, disallowRobots: false, isAuthentication: false, reason: "share_link" }` for those prefixes), `next.config.mjs` (headers: also map `NOINDEX_ROUTE_PREFIXES` to `X-Robots-Tag: noindex, nofollow`, in both preview and production branches), `src/server/reports/indexing.test.mjs`. *Do:* tests: robots data disallows `/r/` and `/r$`, never `/s`; sitemap has no `/r` or `/s` URL; `getRouteIndexingPolicy("/s/abc")` as AC-15; `"/scan"` still private (prefix boundary); `next.config` headers include `/s/:path*`; `src/middleware.js` `config.matcher` deep-equals `["/api/:path*"]`. *Verify:* `node --test src/server/reports/indexing.test.mjs src/server/repairs/r20-public-site.test.mjs` → pass (F23-AC-15).
   - [ ] **P2.T3.S2** *Files:* `scripts/qa/check-public-site.mjs` (add `"/r/00000000-0000-0000-0000-000000000000"` and `"/s/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"` to the noindex path list). *Verify:* `node scripts/qa/check-public-site.mjs http://127.0.0.1:3328` against `npm run dev -- -p 3328` → "Public-site HTTP checks passed".
-  - [ ] **P2.T3.S3** *Files:* `src/lib/theme/theme.ts` (`APP_SURFACES` append `{ prefix: "/r", theme: "light" }`), `src/lib/theme/theme.test.ts` (case). *Verify:* `node --test src/lib/theme/theme.test.ts` → pass (F23-AC-24).
+  - [ ] **P2.T3.S3** *Files:* `src/shared/theme/theme.ts` (`APP_SURFACES` append `{ prefix: "/r", theme: "light" }`), `src/shared/theme/theme.test.ts` (case). *Verify:* `node --test src/shared/theme/theme.test.ts` → pass (F23-AC-24).
 
 **Checkpoint:** full suite and build green. Completes F23-AC-07–15, 24.
 
@@ -646,13 +646,13 @@ Branches `feat/f23-reports-and-sharing-p<n>`.
 **Goal:** the assistant can save and read reports; customers can manage templates and start a generation.
 
 - [ ] **P3.T1 Routes**
-  - [ ] **P3.T1.S1** *Files:* `src/app/api/customer/reports/route.ts`, `reports/[reportId]/route.ts` (GET, DELETE), `reports/[reportId]/share/route.ts`, `reports/templates/route.ts` (GET, POST), `reports/templates/[templateId]/route.ts` (PUT, DELETE), `reports/generate/route.ts`, `src/lib/reports/reports.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [ ] **P3.T1.S2** *Files:* `src/lib/reports/reports.route.test.mjs` (customer hook pattern). *Do:* AC-21 and AC-19 route cases; another workspace's ids → 404; sharing off → 404 `feature_unavailable`. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/reports/reports.route.test.mjs` → pass.
+  - [ ] **P3.T1.S1** *Files:* `src/app/api/customer/reports/route.ts`, `reports/[reportId]/route.ts` (GET, DELETE), `reports/[reportId]/share/route.ts`, `reports/templates/route.ts` (GET, POST), `reports/templates/[templateId]/route.ts` (PUT, DELETE), `reports/generate/route.ts`, `src/server/reports/reports.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass.
+  - [ ] **P3.T1.S2** *Files:* `src/server/reports/reports.route.test.mjs` (customer hook pattern). *Do:* AC-21 and AC-19 route cases; another workspace's ids → 404; sharing off → 404 `feature_unavailable`. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/server/reports/reports.route.test.mjs` → pass.
 - [ ] **P3.T2 Tools and registry**
-  - [ ] **P3.T2.S1** *Files:* `src/lib/reports/tools.ts`, `tools.test.ts`, `src/lib/tools/catalog/reports.ts`, `src/lib/tools/names.ts` (move names; `PLANNED_TOOL_NAMES = [] as const`), `src/shared/assistant-tools.ts` (presentation entries). *Do:* §6.2.4. *Verify:* `node --test src/lib/reports/tools.test.ts src/lib/tools/ src/shared/assistant-tools.test.ts` → pass (F23-AC-16, AC-17 registry part).
+  - [ ] **P3.T2.S1** *Files:* `src/server/reports/tools.ts`, `tools.test.ts`, `src/server/tools/catalog/reports.ts`, `src/server/tools/names.ts` (move names; `PLANNED_TOOL_NAMES = [] as const`), `src/shared/assistant-tools.ts` (presentation entries). *Do:* §6.2.4. *Verify:* `node --test src/server/reports/tools.test.ts src/server/tools/ src/shared/assistant-tools.test.ts` → pass (F23-AC-16, AC-17 registry part).
 - [ ] **P3.T3 Skill, kickoff, prompt block**
   - [ ] **P3.T3.S1** *Files:* `src/assistant/skills/seo-report/SKILL.md` (§6.2.9), `src/assistant/skills/skills.test.ts` (expected list gains `"seo-report"`: 15 names), `src/assistant/skills/skillLint.test.ts` (heading list for `seo-report`), `THIRD_PARTY_NOTICES.md` (append `.agents/skills/seo-report/SKILL.md`). *Verify:* `npm run skills:build && node --test src/assistant/skills/` → pass (F23-AC-17).
-  - [ ] **P3.T3.S2** *Files:* `src/lib/reports/generate.ts`, `generate.test.ts`, `src/lib/reports/kickoff.ts`, `src/lib/assistant/kickoffKinds.ts` (add `import "../reports/kickoff.ts";`), `src/lib/reports/promptBlock.ts`, `promptBlock.test.ts`, `src/lib/assistant/turn.ts` (pass `templatesBlock`). *Do:* §6.2.8; kickoff text exact; deleted template → 409; block null when off or empty. *Verify:* `node --test src/lib/reports/generate.test.ts src/lib/reports/promptBlock.test.ts src/lib/assistant/turn.test.ts` → pass (F23-AC-19, 20).
+  - [ ] **P3.T3.S2** *Files:* `src/server/reports/generate.ts`, `generate.test.ts`, `src/server/reports/kickoff.ts`, `src/server/assistant/kickoffKinds.ts` (add `import "../reports/kickoff.ts";`), `src/server/reports/promptBlock.ts`, `promptBlock.test.ts`, `src/server/assistant/turn.ts` (pass `templatesBlock`). *Do:* §6.2.8; kickoff text exact; deleted template → 409; block null when off or empty. *Verify:* `node --test src/server/reports/generate.test.ts src/server/reports/promptBlock.test.ts src/server/assistant/turn.test.ts` → pass (F23-AC-19, 20).
 
 **Checkpoint:** full suite and build green.
 
@@ -661,7 +661,7 @@ Branches `feat/f23-reports-and-sharing-p<n>`.
 **Goal:** Reports, report detail and Templates pages with share, delete and generate flows.
 
 - [ ] **P4.T1.S1** *Files:* `src/components/portal/reports/{formatWrittenBy.ts,formatWrittenBy.test.ts}`. *Verify:* `node --test src/components/portal/reports/formatWrittenBy.test.ts` → pass.
-- [ ] **P4.T1.S2** *Files:* `src/components/portal/reports/{ReportsList,ReportViewer,ShareReportDialog,DeleteReportDialog,FullScreenReport,ReportTemplatesList,ReportTemplateForm,GenerateReportDialog}.tsx`, `hooks/useReports.ts` (PORT headers where §7 says PORT), `src/app/portal/reports/page.tsx`, `[reportId]/page.tsx`, `templates/page.tsx`, `src/lib/query/keys.ts`, `src/components/app/navigation/items.ts`. *Do:* §6.6. *Verify:* `npm run build` → exit 0; `node --test src/lib/query/keys.test.ts src/components/app/navigation/navModel.test.ts` → pass.
+- [ ] **P4.T1.S2** *Files:* `src/components/portal/reports/{ReportsList,ReportViewer,ShareReportDialog,DeleteReportDialog,FullScreenReport,ReportTemplatesList,ReportTemplateForm,GenerateReportDialog}.tsx`, `hooks/useReports.ts` (PORT headers where §7 says PORT), `src/app/portal/reports/page.tsx`, `[reportId]/page.tsx`, `templates/page.tsx`, `src/shared/query/keys.ts`, `src/components/app/navigation/items.ts`. *Do:* §6.6. *Verify:* `npm run build` → exit 0; `node --test src/shared/query/keys.test.ts src/components/app/navigation/navModel.test.ts` → pass.
 
 **Checkpoint:** build green.
 
@@ -682,18 +682,18 @@ Branches `feat/f23-reports-and-sharing-p<n>`.
 | Test file | Cases | ACs |
 |---|---|---|
 | `src/shared/report-share.test.ts`, `report-sandbox.test.ts` | token, pseudonym, CSP, print script, splice | 07, 08, 10 |
-| `src/lib/reports/sanitize.test.ts` (+ 40-file corpus) | allowlist, URLs, CSS, idempotence | 06 |
-| `src/lib/reports/service.test.ts`, `templateService.test.ts` | ported OpenSEO cases + ours | 01–05, 18 |
-| `src/lib/reports/documentRoutes.test.ts` | `/r`, raw, views, headers | 07, 09, 11, 12 |
-| `src/lib/reports/sharePage.test.ts` | escaping, meta, CSP hash, dead ends | 13 |
-| `src/lib/reports/ogRoute.test.ts` | access, failure | 14 |
-| `src/lib/reports/indexing.test.mjs` + R20 tests | robots, sitemap, policy, middleware matcher | 15 |
-| `src/lib/reports/tools.test.ts` + F22 contract tests | tool shapes, no tokens, untrusted paths, confirm on replace | 16, 17 |
+| `src/server/reports/sanitize.test.ts` (+ 40-file corpus) | allowlist, URLs, CSS, idempotence | 06 |
+| `src/server/reports/service.test.ts`, `templateService.test.ts` | ported OpenSEO cases + ours | 01–05, 18 |
+| `src/server/reports/documentRoutes.test.ts` | `/r`, raw, views, headers | 07, 09, 11, 12 |
+| `src/server/reports/sharePage.test.ts` | escaping, meta, CSP hash, dead ends | 13 |
+| `src/server/reports/ogRoute.test.ts` | access, failure | 14 |
+| `src/server/reports/indexing.test.mjs` + R20 tests | robots, sitemap, policy, middleware matcher | 15 |
+| `src/server/reports/tools.test.ts` + F22 contract tests | tool shapes, no tokens, untrusted paths, confirm on replace | 16, 17 |
 | `src/assistant/skills/*.test.ts` | `seo-report` served; 15 names; references clean | 17 |
-| `src/lib/reports/{generate,promptBlock}.test.ts` | kickoff text, flags, block | 19, 20 |
-| `src/lib/reports/reports.route.test.mjs` | customer routes | 18, 19, 21 |
-| `src/lib/reports/jobs.test.ts`, `scripts/qa/check-f23-db.mjs` | retention, races, RLS | 04, 05, 10, 12, 25 |
-| `src/lib/theme/theme.test.ts` | `/r` surface | 24 |
+| `src/server/reports/{generate,promptBlock}.test.ts` | kickoff text, flags, block | 19, 20 |
+| `src/server/reports/reports.route.test.mjs` | customer routes | 18, 19, 21 |
+| `src/server/reports/jobs.test.ts`, `scripts/qa/check-f23-db.mjs` | retention, races, RLS | 04, 05, 10, 12, 25 |
+| `src/shared/theme/theme.test.ts` | `/r` surface | 24 |
 | `scripts/qa/check-f23-browser.mjs` | UI and hostile document in a real browser | 14, 22, 23 |
 | `scripts/qa/check-f23-public.mjs` | hosted header and indexing check | 11, 13, 15 (hosted) |
 

@@ -1,9 +1,9 @@
-import { AppError } from "../../../../../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../../../../../lib/http/errors.ts";
-import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../../../../../../lib/features/flags.ts";
-import { requireWorkspace as defaultRequireWorkspace } from "../../../../../../../../../lib/workspace/requireWorkspace.ts";
+import { AppError } from "../../../../../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../../../../../shared/http/errors.ts";
+import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../../../../../../server/features/flags.ts";
+import { requireWorkspace as defaultRequireWorkspace } from "../../../../../../../../../server/workspace/requireWorkspace.ts";
 import { z } from "zod";
-import { trackKeywordAsAiQuestion as defaultTrackKeywordAsAiQuestion } from "../../../../../../../../../lib/rank-tracking/aiQuestions.ts";
+import { trackKeywordAsAiQuestion as defaultTrackKeywordAsAiQuestion } from "../../../../../../../../../shared/rank-tracking/aiQuestions.ts";
 
 export const dynamic = "force-dynamic";
 

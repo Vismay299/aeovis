@@ -17,7 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUsd } from "@/shared/pricing";
 import type { PriceQuote } from "@/shared/pricing";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 
 export type CostReviewDialogProps = {
   open: boolean;

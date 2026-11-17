@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { NavTabs } from "@/components/app/NavTabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 import { BusinessPicker } from "./BusinessPicker";
 import { ProfileTab } from "./ProfileTab";
 import { ReviewsTab } from "./ReviewsTab";

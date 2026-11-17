@@ -30,8 +30,8 @@ import {
   useSelectionAnchor,
 } from "@/components/app/table/DataTable";
 import { SortableHeader } from "@/components/app/table/SortableHeader";
-import { applyShiftRangeSelection } from "@/lib/table/tableSelection";
-import { fetchJson, isApiError } from "@/lib/query/fetchJson";
+import { applyShiftRangeSelection } from "@/shared/table/tableSelection";
+import { fetchJson, isApiError } from "@/shared/query/fetchJson";
 import { isLabsLocationCode } from "@/shared/keyword-locations";
 import {
   devicesLabel,

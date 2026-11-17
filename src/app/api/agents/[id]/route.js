@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAgent, updateAgent, deleteAgent } from "@/lib/db/content";
-import { normalizeAgent } from "@/lib/content/agents/model";
+import { getAgent, updateAgent, deleteAgent } from "@/server/db/content";
+import { normalizeAgent } from "@/shared/content/agents/model";
 
 export const dynamic = "force-dynamic";
 

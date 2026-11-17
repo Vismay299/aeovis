@@ -38,7 +38,7 @@ import {
   overviewQueryOptions,
   panelQueryOptions,
   gscQueryOptions,
-} from "../../../lib/query/portalQueries.ts";
+} from "../../../shared/query/portalQueries.ts";
 
 export const NAV_GROUPS: readonly NavGroup[] = [
   {

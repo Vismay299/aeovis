@@ -228,6 +228,6 @@ test("skipReasonMessage covers every reason and has the specified fallback", () 
 
 test("shared schedule module has no server-library imports", async () => {
   const source = await readFile(new URL("./schedule.ts", import.meta.url), "utf8");
-  assert.equal(source.includes("../lib/"), false);
-  assert.equal(source.includes("@/lib/"), false);
+  assert.equal(source.includes("../server/"), false);
+  assert.equal(source.includes("@/server/"), false);
 });

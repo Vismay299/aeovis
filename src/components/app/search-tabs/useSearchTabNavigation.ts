@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { tabInputKey, type SearchTab } from "@/lib/query/searchTabsState";
+import { tabInputKey, type SearchTab } from "@/shared/query/searchTabsState";
 import { useSearchTabs } from "./useSearchTabs";
 
 export type UseSearchTabNavigationArgs<I> = {

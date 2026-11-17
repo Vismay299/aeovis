@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCitationsForBrand, getResultBrandsForBrand } from "@/lib/db/analytics";
-import { joinCitationsWithResultBrands, computeDomainGaps, computeUrlGaps } from "@/lib/analytics/gaps";
+import { getCitationsForBrand, getResultBrandsForBrand } from "@/server/db/analytics";
+import { joinCitationsWithResultBrands, computeDomainGaps, computeUrlGaps } from "@/shared/analytics/gaps";
 
 // Same rationale as the sibling metrics/citations routes (P0.4): a new scan
 // can change the gap table, so never statically cache.
@@ -30,7 +30,7 @@ function parseLevelParam(raw) {
  * No from/to here (unlike .../citations): gap analysis reads the brand's
  * FULL citation + result_brands history — a domain that only ever showed a
  * rival-not-you pattern three months ago is still a real, actionable gap;
- * see src/lib/analytics/gaps.js for the full gap_score formula.
+ * see src/shared/analytics/gaps.js for the full gap_score formula.
  *
  * Query params: level — "domain" (default) or "url" granularity.
  *

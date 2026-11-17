@@ -13,16 +13,16 @@ worker-host ADR. Root cause of R3.1.1 and R3.3.2, which each treat a symptom.
 **Status:** accepted; the code shipped in `53995fa`, this record in the commit
 that closes R3.1.5.
 **Scope:** the Vercel-hosted API pipeline only — `src/app/api/**` and
-`src/lib/workers/scanWorker.js`. It does **not** touch `worker/`, the probe
+`src/server/workers/scanWorker.js`. It does **not** touch `worker/`, the probe
 fleet, whose host is decided by [the worker-host ADR](./2026-09-05-worker-host.md).
 **Citation baseline:** every `file:line` below was read in the working tree at
 `f733716`. Two files were dirty in the tree at the time of writing
-(`src/lib/workers/scanWorker.js`, `src/lib/db.js`, under another task's
+(`src/server/workers/scanWorker.js`, `src/server/db.js`, under another task's
 sabotage) and were therefore read with `git show HEAD:<path>`; their line
 numbers are the committed ones. To find out whether the numbers have gone stale:
 
 ```bash
-git log --oneline f733716..HEAD -- src/lib/keepAlive.js src/app/api/scan src/app/api/content src/lib/workers/scanWorker.js src/lib/db.js package.json vercel.json
+git log --oneline f733716..HEAD -- src/server/keepAlive.js src/app/api/scan src/app/api/content src/server/workers/scanWorker.js src/server/db.js package.json vercel.json
 ```
 
 ---
@@ -61,8 +61,8 @@ Concretely:
    that exists at this version. If the app moves to Next 15+, see *Reversal
    conditions*.
 
-2. **Exactly one helper: `src/lib/keepAlive.js`.** No route imports `waitUntil`
-   directly. `keepAlive(work, { label, maxMs })` (`src/lib/keepAlive.js:36`):
+2. **Exactly one helper: `src/server/keepAlive.js`.** No route imports `waitUntil`
+   directly. `keepAlive(work, { label, maxMs })` (`src/server/keepAlive.js:36`):
    - resolves `work` (promise or thunk) inside a `try`, so a synchronous throw
      in the thunk becomes a handled rejection rather than a 500 on the response
      path (`:41-45`);
@@ -79,7 +79,7 @@ Concretely:
 
 3. **Applied at all post-response sites**, and only those (nine when this was
    written; ten as recounted under R3.1.14, which added the tenth caller and
-   found `src/lib/selfContinue.js` — R3.1.10's helper, landed the same day as
+   found `src/server/selfContinue.js` — R3.1.10's helper, landed the same day as
    this record — missing from the list):
    `src/app/api/scan/route.js:142` · `src/app/api/scan/[job_id]/status/route.js:640`
    · `src/app/api/scan/worker/_lib/sweepExecution.js:69` ·
@@ -87,20 +87,20 @@ Concretely:
    `startContentJob`, but since **R3.1.14** its only caller is the `?job_id=`
    direct-resume branch — the cron sweep and the daily batch no longer run a job in
    their own invocation, they fire one request per job through
-   `src/lib/selfContinue.js:169`, which registers that fetch with `keepAlive`
+   `src/server/selfContinue.js:169`, which registers that fetch with `keepAlive`
    under the same 5 s cap as §4 — the same helper contentWorker's hand-off has
    used since R3.1.10) · `src/app/api/content/route.js:110` ·
    `src/app/api/content-items/[id]/decision/route.js:119` (learn) and `:138`
-   (revise) · `src/lib/workers/scanWorker.js:3203` (scheduler `kickChunk`) and
+   (revise) · `src/server/workers/scanWorker.js:3203` (scheduler `kickChunk`) and
    `:1227` (self-continue). The one remaining bare `.catch` in
-   that scope — the in-chunk heartbeat at `src/lib/workers/scanWorker.js:574`,
+   that scope — the in-chunk heartbeat at `src/server/workers/scanWorker.js:574`,
    inside `startChunkHeartbeat` (`:568`) — is deliberately **not** wrapped: it
    runs inside a chunk the platform is already holding and its interval handle is
    `unref`'d on purpose (`:582`, *"Never hold a serverless invocation open for a
    heartbeat"*), so it is not post-response work.
 
 4. **The self-continue hold is capped** at `SELF_CONTINUE_HOLD_MS = 5000`
-   (`src/lib/workers/scanWorker.js:1173`, passed at `:1230`). The self-continue
+   (`src/server/workers/scanWorker.js:1173`, passed at `:1230`). The self-continue
    is a `fetch` to the next chunk; waiting for its *response* would hold the
    current invocation open for the whole of the next chunk and bill it twice.
    Five seconds is enough to get the request out on the wire, which is the only
@@ -125,7 +125,7 @@ API calls that already fit inside `maxDuration = 300` and already checkpoint
 between chunks (`CHUNK_TIME_BUDGET_MS`, `reason: "checkpointed"`). Moving the
 API pipeline to the fleet would mean duplicating the whole chunk/checkpoint/lease
 stack across the `src/` ↔ `worker/` isolation boundary that
-`src/lib/workerIsolation.test.mjs` enforces, to solve a problem one import and
+`src/server/workerIsolation.test.mjs` enforces, to solve a problem one import and
 nine call sites solve. This ADR is scoped to the pipeline; the fleet decision
 stands unchanged.
 
@@ -136,7 +136,7 @@ They are now the backstop rather than the only guarantee, which is the whole
 point:
 
 - **Heartbeat staleness** — `HEARTBEAT_STALE_MS = 3 * 60 * 1000`
-  (`src/lib/db.js:804`), consumed as `decideRescue`'s `staleAfterMs` default
+  (`src/server/db.js:804`), consumed as `decideRescue`'s `staleAfterMs` default
   (`src/app/api/scan/[job_id]/status/route.js:457`).
 - **The poll-driven rescue** — `src/app/api/scan/[job_id]/status/route.js:638-640`:
   `decideRescue(...)` and, when it says rescue, `keepAlive(() => runScanChunk(job.id), …)`.
@@ -171,11 +171,11 @@ catches what the platform dropped".
   work they register is held for that default and no longer. This is
   `production-plan.md` §C1.6 left part-done; it is not claimed by R3.1.5 and
   has no task yet.
-- **The guard has a known blind spot.** `src/lib/keepAlive.test.mjs:69` git-greps
+- **The guard has a known blind spot.** `src/server/keepAlive.test.mjs:69` git-greps
   a fixed allowlist of function names
   (`runScanChunk|scanChunk|startContentJob|reviseContentItem|runLearn|kickChunk|start`)
-  scoped to `src/app` plus `src/lib/workers/scanWorker.js`. A new fire-and-forget
-  under a new name, or anywhere in `src/lib/content/`, passes it. It catches
+  scoped to `src/app` plus `src/server/workers/scanWorker.js`. A new fire-and-forget
+  under a new name, or anywhere in `src/shared/content/`, passes it. It catches
   regressions of the exact shapes this task replaced; it does not catch the next
   shape. Worth widening in a later task.
 
@@ -198,10 +198,10 @@ catches what the platform dropped".
 
 ## Evidence
 
-- `src/lib/keepAlive.js` — the helper: `:22` (the import), `:36` (signature),
+- `src/server/keepAlive.js` — the helper: `:22` (the import), `:36` (signature),
   `:41-45` (thunk throw), `:47-52` (rejection handled before the cap),
   `:55-63` (`Promise.race` + `clearTimeout`), `:65-71` (registration guarded).
-- `src/lib/keepAlive.test.mjs` — 7 tests including `:69`, the GUARD that fails if
+- `src/server/keepAlive.test.mjs` — 7 tests including `:69`, the GUARD that fails if
   any route or the scan worker kicks background work with a bare `.catch`. Its
   teeth were checked by reverting `src/app/api/content/route.js:110` to
   `startContentJob(job.id).catch(...)` (guard failed) and by disabling the

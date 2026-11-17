@@ -15,7 +15,7 @@
 Source: `github.com/paperclipai/paperclip` (default branch `master`, TypeScript monorepo:
 `server/` + `ui/` + `cli/` + `packages/shared/`). Read directly via the GitHub contents API —
 `docs/agents-runtime.md`, `docs/pipelines-tutorial.md`, `DESIGN.md`, `adapter-plugin.md`,
-`server/src/services/{pipelines,issues,agent-start-lock}.ts`, and the full `server/src/services/`
+`server/src/shared/{pipelines,issues,agent-start-lock}.ts`, and the full `server/src/shared/`
 inventory (~200 modules).
 
 Paperclip's self-description: *"If OpenClaw is an employee, Paperclip is the company."* It is an
@@ -116,7 +116,7 @@ and a declarative stage machine).
 ## 4. Live defects this work fixes
 
 **D1 — content job double-run / double-spend.** `listResumableContentJobs()`
-(`src/lib/db/content.js`) re-picks any running job whose **`created_at`** is older than 5 minutes.
+(`src/server/db/content.js`) re-picks any running job whose **`created_at`** is older than 5 minutes.
 But `content_jobs.heartbeat_at` exists (migration 005) and is stamped on every
 `updateContentJob()`, and the file's own `isContentJobFresh()` reads it. The resume path does not.
 So a job that has been healthily running for 6 minutes, writing progress after every block, is
@@ -157,7 +157,7 @@ NULL OR lease_expires_at < now()) RETURNING *`. Postgres re-evaluates the qual a
 lock (EvalPlanQual), so of two racing callers exactly one matches — same atomicity argument as
 `claimJobStatus()`'s doc comment.
 
-**L2 — The lease primitive is table-agnostic.** It lands in `src/lib/jobLease.js` keyed by table
+**L2 — The lease primitive is table-agnostic.** It lands in `src/server/jobLease.js` keyed by table
 name, so `scan_jobs` can adopt it later without a second implementation. Content uses it now; scan
 keeps its existing heartbeat + status-CAS single-flight (changing the most expensive path is out of
 scope — see §7).
@@ -189,23 +189,23 @@ convention so `npm run test:scoring` and local dev without Supabase behave exact
 
 ### T1 — Lease-based single-flight + cron auth (fixes D1, D2, D3)
 
-- **`src/lib/jobLease.js`** (new): `acquireLease`, `renewLease`, `releaseLease`,
+- **`src/server/jobLease.js`** (new): `acquireLease`, `renewLease`, `releaseLease`,
   `LEASE_TTL_MS`, `newLeaseOwner()`. Table-agnostic, memory-mode aware, `deps.client` injectable.
-- **`src/lib/db/content.js`**: export `CONTENT_HEARTBEAT_STALE_MS`, `isContentJobAlive()`,
+- **`src/server/db/content.js`**: export `CONTENT_HEARTBEAT_STALE_MS`, `isContentJobAlive()`,
   `shouldRescueContentJob()`; rewrite `listResumableContentJobs()` to select all running jobs and
   filter on **heartbeat** staleness (mirroring `/api/scan/worker`'s approach) instead of the
   `created_at` 5-minute window.
 - **`src/app/api/content/worker/route.js`**: `isAuthorized()` `CRON_SECRET` gate mirroring the scan
   worker exactly (Bearer / `x-cron-secret` / `?secret=` / `x-vercel-cron`, warn-once when unset);
   `maxDuration = 300`; acquire the lease *before* dispatch and skip jobs we lose.
-- **`src/lib/content/contentWorker.js`**: accept an optional pre-acquired lease owner, acquire one
+- **`src/shared/content/contentWorker.js`**: accept an optional pre-acquired lease owner, acquire one
   if absent, renew on every `writeJob()`, release on terminal (success and failure).
 - **`supabase/migrations/006_agent_control_plane.sql`**: lease columns + `content_jobs.heartbeat_at`
   index.
 
 ### T2 — Declarative stage machine (fixes D5)
 
-- **`src/lib/content/stages.js`** (new): `JOB_STAGES` and `ITEM_STAGES` keyed by status, each with
+- **`src/shared/content/stages.js`** (new): `JOB_STAGES` and `ITEM_STAGES` keyed by status, each with
   `kind` (`open`|`working`|`review`|`done`|`cancelled`), `terminal`, `next`, and — on review stages —
   `approveTo` / `rejectTo` / `requestChangesTo` / `reviewerKind`, following Paperclip's
   `PipelineStageConfig` shape. Plus `stageForBlock()`, `isLegalTransition()`, `decideItemStatus()`,
@@ -220,7 +220,7 @@ convention so `npm run test:scoring` and local dev without Supabase behave exact
 
 - **Migration 006**: `content_runs` (job_id, brand, block, cycle, status, started_at, ended_at,
   duration_ms, cost, tokens, error) + indexes.
-- **`src/lib/db/content.js`**: `insertContentRun()`, `finishContentRun()`, `listContentRunsForJob()`.
+- **`src/server/db/content.js`**: `insertContentRun()`, `finishContentRun()`, `listContentRunsForJob()`.
 - **`contentWorker.js`**: one ledger row per block execution, cost captured as the `stats.cost`
   delta across the block, `failed` written with the error when a block throws.
 - **`/api/content/[job_id]/status`**: expose `runs` so Studio can show per-block spend.
@@ -231,7 +231,7 @@ Gaps are computed pure (`analytics/gaps.js`, `dailyBatch.selectGapsForBatch`) �
 persisted gap rows to advance. The equivalent is a **derived** rollup over the stable join key that
 already exists: `content_jobs.input.query` ↔ `content_items.target_queries`.
 
-- **`src/lib/content/coverage.js`** (new): pure `rollupCoverage({ queries, jobs, items })` →
+- **`src/shared/content/coverage.js`** (new): pure `rollupCoverage({ queries, jobs, items })` →
   per-query state `covered` | `awaiting_approval` | `in_progress` | `rejected` | `uncovered`, with
   precedence resolved highest-first, plus `summarizeCoverage()` totals.
 - **`/api/brands/[brand]/coverage`** (new route): gap queries from the latest scan joined against
@@ -240,9 +240,9 @@ already exists: `content_jobs.input.query` ↔ `content_items.target_queries`.
 ### Test plan
 
 New `.test.mjs` files colocated per house convention (`node:test` + `assert/strict`, run by
-`npm run test:scoring`): `src/lib/jobLease.test.mjs`, `src/lib/content/stages.test.mjs`,
-`src/lib/content/coverage.test.mjs`, plus content-job lease/staleness cases appended to the
-existing `src/lib/dbContent.test.mjs`.
+`npm run test:scoring`): `src/server/jobLease.test.mjs`, `src/shared/content/stages.test.mjs`,
+`src/shared/content/coverage.test.mjs`, plus content-job lease/staleness cases appended to the
+existing `src/server/dbContent.test.mjs`.
 
 ---
 

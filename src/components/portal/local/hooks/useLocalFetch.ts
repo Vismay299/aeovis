@@ -2,10 +2,10 @@
 
 import { useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { keys } from "@/lib/query/keys";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { keys } from "@/shared/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import { useServerPacedQuery } from "@/components/app/hooks/useServerPacedQuery";
-import type { FetchKind, FetchSummary, FetchView } from "@/lib/local/fetches";
+import type { FetchKind, FetchSummary, FetchView } from "@/server/local/fetches";
 import { trackLocalEvent } from "../telemetry";
 
 export type { FetchKind, FetchSummary, FetchView };

@@ -8,7 +8,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
-import type { SearchTab } from "@/lib/query/searchTabsState";
+import type { SearchTab } from "@/shared/query/searchTabsState";
 
 export type SearchTabQueryConfig = {
   queryKey: readonly unknown[];

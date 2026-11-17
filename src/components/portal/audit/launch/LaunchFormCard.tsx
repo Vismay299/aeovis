@@ -15,8 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { LIGHTHOUSE_LIVE_USD } from "@/lib/pricing/dataforseo";
-import { firecrawlScrapeUsd } from "@/lib/pricing/firecrawl";
+import { LIGHTHOUSE_LIVE_USD } from "@/shared/pricing/dataforseo";
+import { firecrawlScrapeUsd } from "@/shared/pricing/firecrawl";
 import type { LaunchController } from "./useLaunchController";
 
 export function LaunchFormCard({

@@ -1,21 +1,21 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requireUser, type RequireUserDeps } from "../../../../../lib/auth/requireUser.ts";
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { readEmailConfig, type EmailConfig } from "../../../../../lib/email/config.ts";
+import { requireUser, type RequireUserDeps } from "../../../../../server/auth/requireUser.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { readEmailConfig, type EmailConfig } from "../../../../../server/email/config.ts";
 import {
   readPreferences,
   savePreferences,
   setProductUpdates,
   type UserEmailPreferences,
-} from "../../../../../lib/email/preferences.ts";
-import { trackEmailEvent } from "../../../../../lib/email/telemetry.ts";
-import type { LoopsDeps } from "../../../../../lib/providers/loops/client.ts";
+} from "../../../../../server/email/preferences.ts";
+import { trackEmailEvent } from "../../../../../server/email/telemetry.ts";
+import type { LoopsDeps } from "../../../../../shared/providers/loops/client.ts";
 import {
   emailPreferencesPutRequest,
   emailPreferencesQuery,
-} from "../../../../../lib/email/email.contract.ts";
+} from "../../../../../server/email/email.contract.ts";
 
 export const dynamic = "force-dynamic";
 

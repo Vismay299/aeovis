@@ -8,10 +8,10 @@
  */
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AppError, jsonOk, toErrorResponse } from "../../../../lib/http/errors.ts";
-import { getSupabaseAdmin } from "../../../../lib/supabase/admin.js";
-import { getOperatorCosts } from "../../../../lib/costs/ops.ts";
-import { opsCostsQuery } from "../../../../lib/costs/ops.contract.ts";
+import { AppError, jsonOk, toErrorResponse } from "../../../../shared/http/errors.ts";
+import { getSupabaseAdmin } from "../../../../shared/supabase/admin.js";
+import { getOperatorCosts } from "../../../../server/costs/ops.ts";
+import { opsCostsQuery } from "../../../../server/costs/ops.contract.ts";
 
 export const dynamic = "force-dynamic";
 

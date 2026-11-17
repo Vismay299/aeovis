@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { isCronAuthorized } from "@/lib/cronAuth";
-import { runGscIngest } from "@/lib/gsc/ingest";
+import { isCronAuthorized } from "@/server/cronAuth";
+import { runGscIngest } from "@/server/gsc/ingest";
 
 // Side-effectful (calls Google, writes gsc_daily) — never at build time.
 export const dynamic = "force-dynamic";
@@ -24,8 +24,8 @@ export function gscCronStatus(report) {
 /**
  * GET /api/gsc/worker — R4.1.1 weekly GSC ingest (vercel.json cron).
  * Same perimeter as the scan and content workers: the CRON_SECRET bearer is
- * the only credential (src/lib/cronAuth.js), and this path is SELF_GATED in
- * src/lib/operatorPerimeter.js so the middleware does not double-gate it.
+ * the only credential (src/server/cronAuth.js), and this path is SELF_GATED in
+ * src/server/operatorPerimeter.js so the middleware does not double-gate it.
  */
 export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
   const deps =

@@ -2,17 +2,17 @@
 //   src/serverFunctions/serp-locations.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../lib/workspace/requireWorkspace.ts";
+} from "../../../../../server/workspace/requireWorkspace.ts";
 import {
   fetchSerpLocationsForCountry,
   type FetchSerpLocationsDeps,
-} from "../../../../../lib/providers/dataforseo/serp-locations.ts";
+} from "../../../../../shared/providers/dataforseo/serp-locations.ts";
 import { rankSerpLocations } from "../../../../../shared/serp-location-search.ts";
 
 export const dynamic = "force-dynamic";

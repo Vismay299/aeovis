@@ -23,8 +23,8 @@ import { RecentSearches } from "@/components/app/RecentSearches";
 import { QueryError } from "@/components/app/QueryState";
 import { SearchTabStrip } from "@/components/app/search-tabs/SearchTabStrip";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
-import { buildSearch } from "@/lib/query/urlState";
-import { keys, stableStringify } from "@/lib/query/keys";
+import { buildSearch } from "@/shared/query/urlState";
+import { keys, stableStringify } from "@/shared/query/keys";
 import {
   RESEARCH_SCOPE_LABELS,
   defaultScopeForPath,

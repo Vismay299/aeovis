@@ -32,7 +32,7 @@ returns a plausible-looking default, you are writing the next entry in this file
 **Mechanism:** the prompt set, not the scoring maths.
 
 Three hypotheses were tested against live data; two were wrong. The weights in
-`src/lib/scoring/computeVisibilityScore.js` looked harsh enough to explain it,
+`src/shared/scoring/computeVisibilityScore.js` looked harsh enough to explain it,
 but that module is dead code — only `probe.js` imports it, and the live headline
 comes from `enginePipeline.summarizeEngineSlice`. Bright Data was fine: answer
 yield on the Italica scan was 93.3%.
@@ -151,15 +151,15 @@ Status values: `open` · `closed <task>` · `does not reproduce`.
 
 | # | Mechanism | Anchor | Verified | Status |
 |---|---|---|---|---|
-| A1 | Per-engine summaries carry no `state`/`state_reason`, so an engine that returned nothing is indistinguishable from one that measured zero. | `src/lib/scoring/enginePipeline.js:298-308` | anchor only | open — R2.1.1 |
+| A1 | Per-engine summaries carry no `state`/`state_reason`, so an engine that returned nothing is indistinguishable from one that measured zero. | `src/shared/scoring/enginePipeline.js:298-308` | anchor only | open — R2.1.1 |
 | A2 | A fully-errored engine contributes to the blend instead of rendering `failed`, so a dead engine drags the headline as if it had measured 0%. | `src/components/dashboard/DashboardShell.jsx:299-301` | anchor only | open — R2.1.4 |
 | A3 | No UI vocabulary for did-not-report / not-assessed / small-sample; `engines_counted` is never rendered, so the reader cannot tell how many engines are behind a number. | `src/components/dashboard/DashboardShell.jsx:616-621` | anchor only | open — R2.1.3 |
 | A4 | An engine gauge with zero rows renders a gauge rather than "no data". | `src/components/dashboard/interlocking.js:98-113` **moved** (audit said `src/lib/scoring/interlocking.js`) | anchor only | open — R2.8.2 |
 | A5 | Studio and Opportunities render recommendations without gating on whether the underlying scan had usable data. | `src/components/studio/OpportunitiesPanel.jsx:20-28` | anchor only | open — R2.8.1 |
-| A6 | Hero, history, sidebar and homepage each select the headline score differently, so the same scan reads as four different numbers. | `src/lib/db.js:242-286`; `src/components/perceev/Sidebar.jsx:138-143` **moved** (audit said `src/components/dashboard/Sidebar.jsx`) | anchor only | open — R2.4.2 |
-| A7 | Those selectors do not honour the data-quality gate, so a gated scan still publishes a headline. | `src/lib/db.js:242-286`; `src/components/dashboard/DashboardShell.jsx:570-597` | anchor only | open — R2.4.2 |
-| A8 | `generateContent` returned `{ text: "" }` on a missing key or exhausted retries, so a total LLM outage was indistinguishable from an empty answer — the origin of the false 100% Share of Voice. | `src/lib/openrouter.js:22-25`, `:124-125` | **read** | **closed R0.3.1** |
-| A9 | With no rivals extracted the roster is `[self]`, so share of voice computes self ÷ self = 100% and the Rivals view asserts "no rival brands were co-mentioned" — a positive claim about answers nobody looked at. | `src/components/perceev/charts/Donut.jsx:29-44` **moved** (audit said `src/components/charts/Donut.jsx`); `src/components/dashboard/RivalsView.jsx:44-46`; `src/components/dashboard/VisibilityVerdictPanel.jsx:51-58`; `src/lib/workers/scanWorker.js:692-698` | **read** | **closed R0.3.2, R0.3.3** |
+| A6 | Hero, history, sidebar and homepage each select the headline score differently, so the same scan reads as four different numbers. | `src/server/db.js:242-286`; `src/components/perceev/Sidebar.jsx:138-143` **moved** (audit said `src/components/dashboard/Sidebar.jsx`) | anchor only | open — R2.4.2 |
+| A7 | Those selectors do not honour the data-quality gate, so a gated scan still publishes a headline. | `src/server/db.js:242-286`; `src/components/dashboard/DashboardShell.jsx:570-597` | anchor only | open — R2.4.2 |
+| A8 | `generateContent` returned `{ text: "" }` on a missing key or exhausted retries, so a total LLM outage was indistinguishable from an empty answer — the origin of the false 100% Share of Voice. | `src/server/openrouter.js:22-25`, `:124-125` | **read** | **closed R0.3.1** |
+| A9 | With no rivals extracted the roster is `[self]`, so share of voice computes self ÷ self = 100% and the Rivals view asserts "no rival brands were co-mentioned" — a positive claim about answers nobody looked at. | `src/components/perceev/charts/Donut.jsx:29-44` **moved** (audit said `src/components/charts/Donut.jsx`); `src/components/dashboard/RivalsView.jsx:44-46`; `src/components/dashboard/VisibilityVerdictPanel.jsx:51-58`; `src/server/workers/scanWorker.js:692-698` | **read** | **closed R0.3.2, R0.3.3** |
 | A10 | SourcesView reads pre-v9 field names, so multi-engine scans render empty sources rather than an error. | `src/components/dashboard/SourcesView.jsx:12-15` | anchor only | open — R2.7.2 |
 | A11 | An unknown job status rewinds the progress bar to 0% instead of reading "reconnecting". | `src/app/api/scan/[job_id]/status/route.js:28-33` | anchor only | open — R2.8.3 |
 | A12 | A database outage renders as "no scans yet" — an empty state indistinguishable from a healthy new account. | `src/app/dashboard/[brand]/page.js:52-57` | anchor only | open — R2.8.4 |
@@ -168,24 +168,24 @@ Status values: `open` · `closed <task>` · `does not reproduce`.
 
 | # | Mechanism | Anchor | Verified | Status |
 |---|---|---|---|---|
-| B1 | The Perplexity extractor is not a pure, fixture-tested function, so extraction regressions surface as plausible data rather than as test failures. | `src/lib/scoring/enginePipeline.js:154-157` | anchor only | open — R2.2.1 |
-| B2 | A failed Perplexity citation leg leaves citations looking complete instead of marking them unverified. | `src/lib/engines/perplexity.js:147-160` | anchor only | open — R2.2.2 |
-| B3 | Finalize had no roster continuity: an unavailable extractor produced an empty roster that read as "no rivals exist", and `scans.competitors` was never written despite the column existing since migration 001. | `src/lib/workers/scanWorker.js:653`, `:868-914` | **read** | **closed R0.3.3** |
-| B4 | Top-level scan fields are single-engine values on a multi-engine scan, so the headline silently describes one engine. | `src/lib/scoring/enginePipeline.js:583-613` | anchor only | open — R2.4.1 |
-| B5 | `upsertPrompts` returns `{ error }` instead of throwing; callers treat the envelope as a value. A fail-soft create is how a write that never happened reads as one that did. | `src/lib/db/prompts.js:96-100` | anchor only | open — R2.2.3 |
-| B6 | Same defect as A8, from the pipeline side: missing key and exhausted retries both returned empty text. | `src/lib/openrouter.js:22-25`, `:124-125` | **read** | **closed R0.3.1** |
-| B7 | A new brand with no LLM silently fell back to the hardcoded per-industry prompt pack, and the resulting scan published as if the questions had been generated for that brand. | `src/lib/scoring/promptGen.js` (industry-pack top-up); `src/lib/workers/scanWorker.js` sourcing | **read** | **closed R0.3.4** |
-| B8 | "No engines enabled!" runs one anyway: when every requested engine is skipped as unconfigured, the resolver warns and returns `aio` regardless — an engine the operator did not ask for, whose configuredness is the hardcoded constant `isConfigured: () => true`, so an aio run with no Bright Data key resolves as "enabled" and every query lands in `probeAio`'s catch as a complete zero-valued row. | `src/lib/scoring/enginePipeline.js:510-514` (audit said `:510-515`; `:515` is the blank line closing the block); the constant at `:450`; the swallowing catch at `:98-101` — **all three stale at `1a5ed81`; anchor on `resolveEnabledEngines`, the `aio` entry in `ENGINE_REGISTRY`, and `probeAio`** | **read** at `5d51aa3`; **re-derived 2026-09-05** | open — no task; **partly recorded since** — see *Correction to B8* and *Since, on B8* below |
-| B9 | The frozen engine set can be silently replaced mid-run. Sourcing freezes the resolved engine names onto the checkpoint precisely so a resume cannot re-resolve them, then probing discards that freeze: if no frozen name matches the live registry, `engineDefs` falls back to whatever is enabled today, with no warning and nothing recorded on the scan. | `src/lib/workers/scanWorker.js:472-479` **moved** (audit said `:432-439`, which was exact at `5111219`); the freeze contract it voids is stated at `:364-370` — **both stale at `1a5ed81`; anchor on `runProbingPhase` and the `frozenNames`/`filtered` pair** | **read** at `5d51aa3`; **re-derived 2026-09-05** | **does not reproduce as written** — see *B9 no longer runs silently* below |
-| B10 | `insertScan` has a three-tier column-drop cascade: an insert that fails silently retries with fewer columns, so a scan can persist with fields quietly missing. | `src/lib/db.js:122-167` | **read** | open — R2.2.4 |
-| B11 | `hasActiveScanForBrand` fails open on any DB error and leaves a TOCTOU window, so two concurrent requests could each start a full-budget duplicate scan. | `src/lib/db.js:403-408` | **read** | **closed R0.1.5** |
-| B12 | No Supabase env gives a memory mode that "works": the client is null, so scan jobs live only in a per-instance `global.memoryJobs` map, `insertScan` logs "Skipping database insert" and returns, and every read returns empty. The scan completes and reports success, nothing persists, the dashboard is permanently empty rather than erroring, and two serverless instances disagree about the same job. | `src/lib/db.js:11-15` **moved** (audit said `:5-8`) and `:298` **moved** (audit said `:289`); the silent skip at `:62-65`; empty reads at `:180-182` and `:252` — **of these five, only `:11-15` still resolves to what it claims at `1a5ed81`; anchor on `insertScan`, `resolveClient` and `global.memoryJobs`** | **read** at `5d51aa3`; **re-derived 2026-09-05** | **partly fixed** — the silent-skip half is gone (R2.8.6) and the accept-the-scan half is gone (R0.1.21); the memory-store code survives but no route can reach it at `8e6ecc6`. See *B12: the silent skip is gone, the memory store is not* below, including the 2026-09-12 update |
+| B1 | The Perplexity extractor is not a pure, fixture-tested function, so extraction regressions surface as plausible data rather than as test failures. | `src/shared/scoring/enginePipeline.js:154-157` | anchor only | open — R2.2.1 |
+| B2 | A failed Perplexity citation leg leaves citations looking complete instead of marking them unverified. | `src/shared/engines/perplexity.js:147-160` | anchor only | open — R2.2.2 |
+| B3 | Finalize had no roster continuity: an unavailable extractor produced an empty roster that read as "no rivals exist", and `scans.competitors` was never written despite the column existing since migration 001. | `src/server/workers/scanWorker.js:653`, `:868-914` | **read** | **closed R0.3.3** |
+| B4 | Top-level scan fields are single-engine values on a multi-engine scan, so the headline silently describes one engine. | `src/shared/scoring/enginePipeline.js:583-613` | anchor only | open — R2.4.1 |
+| B5 | `upsertPrompts` returns `{ error }` instead of throwing; callers treat the envelope as a value. A fail-soft create is how a write that never happened reads as one that did. | `src/server/db/prompts.js:96-100` | anchor only | open — R2.2.3 |
+| B6 | Same defect as A8, from the pipeline side: missing key and exhausted retries both returned empty text. | `src/server/openrouter.js:22-25`, `:124-125` | **read** | **closed R0.3.1** |
+| B7 | A new brand with no LLM silently fell back to the hardcoded per-industry prompt pack, and the resulting scan published as if the questions had been generated for that brand. | `src/shared/scoring/promptGen.js` (industry-pack top-up); `src/server/workers/scanWorker.js` sourcing | **read** | **closed R0.3.4** |
+| B8 | "No engines enabled!" runs one anyway: when every requested engine is skipped as unconfigured, the resolver warns and returns `aio` regardless — an engine the operator did not ask for, whose configuredness is the hardcoded constant `isConfigured: () => true`, so an aio run with no Bright Data key resolves as "enabled" and every query lands in `probeAio`'s catch as a complete zero-valued row. | `src/shared/scoring/enginePipeline.js:510-514` (audit said `:510-515`; `:515` is the blank line closing the block); the constant at `:450`; the swallowing catch at `:98-101` — **all three stale at `1a5ed81`; anchor on `resolveEnabledEngines`, the `aio` entry in `ENGINE_REGISTRY`, and `probeAio`** | **read** at `5d51aa3`; **re-derived 2026-09-05** | open — no task; **partly recorded since** — see *Correction to B8* and *Since, on B8* below |
+| B9 | The frozen engine set can be silently replaced mid-run. Sourcing freezes the resolved engine names onto the checkpoint precisely so a resume cannot re-resolve them, then probing discards that freeze: if no frozen name matches the live registry, `engineDefs` falls back to whatever is enabled today, with no warning and nothing recorded on the scan. | `src/server/workers/scanWorker.js:472-479` **moved** (audit said `:432-439`, which was exact at `5111219`); the freeze contract it voids is stated at `:364-370` — **both stale at `1a5ed81`; anchor on `runProbingPhase` and the `frozenNames`/`filtered` pair** | **read** at `5d51aa3`; **re-derived 2026-09-05** | **does not reproduce as written** — see *B9 no longer runs silently* below |
+| B10 | `insertScan` has a three-tier column-drop cascade: an insert that fails silently retries with fewer columns, so a scan can persist with fields quietly missing. | `src/server/db.js:122-167` | **read** | open — R2.2.4 |
+| B11 | `hasActiveScanForBrand` fails open on any DB error and leaves a TOCTOU window, so two concurrent requests could each start a full-budget duplicate scan. | `src/server/db.js:403-408` | **read** | **closed R0.1.5** |
+| B12 | No Supabase env gives a memory mode that "works": the client is null, so scan jobs live only in a per-instance `global.memoryJobs` map, `insertScan` logs "Skipping database insert" and returns, and every read returns empty. The scan completes and reports success, nothing persists, the dashboard is permanently empty rather than erroring, and two serverless instances disagree about the same job. | `src/server/db.js:11-15` **moved** (audit said `:5-8`) and `:298` **moved** (audit said `:289`); the silent skip at `:62-65`; empty reads at `:180-182` and `:252` — **of these five, only `:11-15` still resolves to what it claims at `1a5ed81`; anchor on `insertScan`, `resolveClient` and `global.memoryJobs`** | **read** at `5d51aa3`; **re-derived 2026-09-05** | **partly fixed** — the silent-skip half is gone (R2.8.6) and the accept-the-scan half is gone (R0.1.21); the memory-store code survives but no route can reach it at `8e6ecc6`. See *B12: the silent skip is gone, the memory store is not* below, including the 2026-09-12 update |
 | B13 | A fabricated `studio.perceev.app` URL is presented to the user as a real published location. | `src/app/api/content-items/[id]/decision/route.js:19-27` | **read** — anchors still exact at `4323f78` | **partly fixed** — R5.2.1 deleted the synthesizer and the approval-time `content_events` write, and made the decision response say `published: false, url: null, reason: "approved_not_published"`; `GET /api/content-events` now nulls the lift on any surviving fabricated-host row (`fabricated_url: true`) instead of serving a number computed against a page that never existed. Rows written before the deletion are **not** migrated away. Open: R5.2.2 (real, verified publish URL) and R5.2.3 (lift copy) |
 
 **Liveness of B8 and B9 (standing rule 10).** *Line numbers in the next two
 paragraphs are a snapshot of `5d51aa3` (2026-08-30). Re-derived at `1a5ed81` on
 2026-09-05: of the seventeen, only three still land on what they name —
-`src/app/api/scan/route.js:13` and `:62`, and `src/lib/engines/types.js:47`.*
+`src/app/api/scan/route.js:13` and `:62`, and `src/shared/engines/types.js:47`.*
 
 > **Correction — the liveness trace below was incomplete when it was made.**
 > *(2026-09-05, R6.3.3, after a verifier rejected the first version of this
@@ -199,7 +199,7 @@ paragraphs are a snapshot of `5d51aa3` (2026-08-30). Re-derived at `1a5ed81` on
 > import on `:3` and `runScanChunk(job.id)` on `:57`, inside the exported `GET`
 > handler (`:8`), gated by `shouldRescueJob` — real logic at
 > `scanWorker.js:317-321` at that commit, not a stub — on a route the client
-> polls in a loop (`src/services/api.js:778` at `5d51aa3`). It has dispatched
+> polls in a loop (`src/shared/api.js:778` at `5d51aa3`). It has dispatched
 > `runScanChunk` since `9580782` (2026-07-24), which
 > `git merge-base --is-ancestor 9580782 5d51aa3` confirms is an ancestor of the
 > declared commit. Reproduce with
@@ -249,7 +249,7 @@ The fourth call site is **dead**: `runMultiEngineScan`
 `src/` — `docs/plans/production-plan.md` E1.4 already lists it as a dead export
 to delete. It sits nineteen lines below B8's anchor and reads like the obvious
 consumer, and it is not. This is the same trap as the `adapter.js`/`probe.js`
-pair (`src/lib/engines/types.js:47` computes engine availability from
+pair (`src/shared/engines/types.js:47` computes engine availability from
 `BRIGHTDATA_API_KEY`, but its only consumer is `src/lib/scoring/probe.js`,
 which nothing live imports). Do not cite the dead consumer as proof either
 finding runs; cite the worker chain above.
@@ -262,8 +262,8 @@ dated correction re-points it at code that did not exist when it was made. Every
 mechanism it describes was re-derived by symbol at `8e6ecc6` and all of them
 still hold: `aio`'s `isConfigured: () => true` inside `ENGINE_REGISTRY`,
 `brightDataSearch` throwing `"Bright Data SERP is not configured (set
-BRIGHTDATA_API_KEY)."` in `src/lib/engines/brightdata.js`, and `probeAio`'s
-`catch` logging ``[aio] Query failed`` in `src/lib/scoring/enginePipeline.js`.
+BRIGHTDATA_API_KEY)."` in `src/shared/engines/brightdata.js`, and `probeAio`'s
+`catch` logging ``[aio] Query failed`` in `src/shared/scoring/enginePipeline.js`.
 Follow those names, not the numbers below.*
 
 The companion artifact says the resolver
@@ -278,7 +278,7 @@ the scan then publishes as an aio scan with no record that the requested
 engines never ran. Second, and worse, because aio's configuredness is a
 constant rather than a credential check, a deployment with no
 `BRIGHTDATA_API_KEY` still resolves aio as "enabled"; `brightDataSearch` throws
-"Bright Data SERP is not configured" (`src/lib/engines/brightdata.js:139-140`),
+"Bright Data SERP is not configured" (`src/shared/engines/brightdata.js:139-140`),
 `probeAio` catches it per query (`enginePipeline.js:98-101`), and each query
 returns a fully-populated row with `answer_present: false`, `visible: false`
 and `cost: 0`. A completely unconfigured engine therefore produces a full set
@@ -318,7 +318,7 @@ symbol:
   `git grep -n createScanJob 8e6ecc6 -- src/ | grep -v test.mjs` and discard
   the comment mentions and the `export function` line itself; what remains is
   `src/app/api/scan/route.js` and `runSchedulerTick`'s `deps.createScanJob ||
-  createScanJob` in `src/lib/workers/scanWorker.js`.
+  createScanJob` in `src/server/workers/scanWorker.js`.
 - **The reads refuse instead of coming back empty.** `getScansForBrand` and
   `getScansByDomain` both throw `ScansUnavailableError` with
   `code: "db_not_configured"` when there is no client — the second one's message
@@ -329,7 +329,7 @@ symbol:
   the screen, and that is not B12's clause — it is the layer above it.**
   `listRecentScans` still ends `catch { console.warn(...); return []; }`, which
   covers a *query* error rather than the unconfigured case, and its own contract
-  comment in `src/lib/db.js` records — as a measurement, not an assumption —
+  comment in `src/server/db.js` records — as a measurement, not an assumption —
   that `GET /api/history`'s catch turns the refusal into a `200
   { scans: [], runs: [], activeJobs: [], counts: {} }`, so the log tells the
   truth and the workspace still renders empty. **`R2.8.16` is `in_verification`
@@ -341,8 +341,8 @@ symbol:
   the job store DB-authoritative, so a transient DB error on a **configured**
   deployment throws instead of tipping the job into `global.memoryJobs`. The
   mechanism is written up in the doc comment above `resolveClient` in
-  `src/lib/db.js` (headed *"Scan job store — DB-authoritative, fail-loud"*);
-  it was cited here as `src/lib/db.js:300-318`, which at `8e6ecc6` resolves to
+  `src/server/db.js` (headed *"Scan job store — DB-authoritative, fail-loud"*);
+  it was cited here as `src/server/db.js:300-318`, which at `8e6ecc6` resolves to
   `isSchemaMismatch`'s JSDoc instead — the same rot this entry is about.
 
 **What still exists, and why that is not the same as reproducing.** The memory
@@ -357,7 +357,7 @@ the branch survives and is exercised by the test suite and by injected
 `deps.client`, and is no longer reachable from a route.
 
 **`/api/health` is still a report, not a gate.** Supabase is declared
-`required: true` — but in `src/lib/vendorRegistry.js`, not in `src/lib/health.js`
+`required: true` — but in `src/server/vendorRegistry.js`, not in `src/server/health.js`
 where this note cited it: **R0.1.16** moved the one vendor list there and
 `health.js` now re-exports `VENDORS` from it. The report is consumed only by
 `src/app/api/health/route.js` and by `health.test.mjs`/`envTruth.test.mjs`/
@@ -401,7 +401,7 @@ longer true. `6fc5b61` (**R2.8.6**) replaced it with
 `throw new ScanWriteError(..., { code: "db_not_configured" })`, and the string
 survives only in the past tense inside `insertScan`'s own contract comment —
 which is why `git grep "Skipping database insert"` still finds a hit in
-`src/lib/db.js` and why that hit proves the opposite of what it looks like. The
+`src/server/db.js` and why that hit proves the opposite of what it looks like. The
 `:62-65` anchor in the row now resolves to `ScanWriteError`'s JSDoc: the fix,
 sitting where the defect used to be, reading as though nothing changed.
 `R2.8.7` closed the mirror of it inside the old cascade.
@@ -451,15 +451,15 @@ yields a full set of measured-looking zeroes. Anchor by symbol:
 
 | # | Mechanism | Anchor | Verified | Status |
 |---|---|---|---|---|
-| C1 | A `new Date()` fallback for a missing timestamp makes "we do not know when this was collected" render as "collected just now". | `src/services/api.js:550` | anchor only | open — R2.7.3 |
-| C2 | The collection window is neither persisted nor rendered, so a reader cannot tell what period a number covers. | `src/lib/workers/scanWorker.js:411` | anchor only | open — R2.7.4 |
-| C3 | The weekly report is not metered per brand per day. | `src/lib/content/weeklyReport.js:22-40` | anchor only | open — R3.6.3 |
-| C4 | An unpriced model id costs $0 rather than failing loud, so spend under-reports silently. | `src/lib/openrouter.js:28-29`, `:101` | anchor only | open — R3.6.1 |
-| C5 | A skipped scheduled scan does not bump `next_run_at` and writes no skip row, so a schedule that never fires looks the same as one with nothing due. | `src/lib/workers/scanWorker.js:1059-1062` | anchor only | open — R3.4.2 |
-| C6 | The worker ignores per-brand `prompt_target`, `engines` and `geo`, so the configuration a user set is not the configuration that ran. | `src/lib/workers/scanWorker.js:91-95` | anchor only | open — R3.4.4 |
-| C7 | `display_name` is not written, so a scheduled scan and a manual scan of the same brand become two identities. | `src/lib/workers/scanWorker.js:1061` | anchor only | open — R3.4.3 |
+| C1 | A `new Date()` fallback for a missing timestamp makes "we do not know when this was collected" render as "collected just now". | `src/shared/api.js:550` | anchor only | open — R2.7.3 |
+| C2 | The collection window is neither persisted nor rendered, so a reader cannot tell what period a number covers. | `src/server/workers/scanWorker.js:411` | anchor only | open — R2.7.4 |
+| C3 | The weekly report is not metered per brand per day. | `src/shared/content/weeklyReport.js:22-40` | anchor only | open — R3.6.3 |
+| C4 | An unpriced model id costs $0 rather than failing loud, so spend under-reports silently. | `src/server/openrouter.js:28-29`, `:101` | anchor only | open — R3.6.1 |
+| C5 | A skipped scheduled scan does not bump `next_run_at` and writes no skip row, so a schedule that never fires looks the same as one with nothing due. | `src/server/workers/scanWorker.js:1059-1062` | anchor only | open — R3.4.2 |
+| C6 | The worker ignores per-brand `prompt_target`, `engines` and `geo`, so the configuration a user set is not the configuration that ran. | `src/server/workers/scanWorker.js:91-95` | anchor only | open — R3.4.4 |
+| C7 | `display_name` is not written, so a scheduled scan and a manual scan of the same brand become two identities. | `src/server/workers/scanWorker.js:1061` | anchor only | open — R3.4.3 |
 | C8 | The `?batch=1` cron entry is missing, so the daily content batch never runs and nothing reports that it did not. | `vercel.json` | anchor only | open — R3.1.2 |
-| C9 | Both worker gates failed open when `CRON_SECRET` was unset: a warning was logged once and the request allowed, leaving two budget-spending endpoints unauthenticated in production. | `src/app/api/scan/worker/route.js:29-47`; `src/app/api/content/worker/route.js:25-52` | **read** | **fixed, task blocked R0.1.1** — code landed, fail-closed in production; the task stays open until `CRON_SECRET` is set in Vercel and a live 401 is observed. **Residual half closed by R0.1.8**: the forgeable `x-vercel-cron` branch (`src/lib/cronAuth.js:49-56`, plus the `OK_VERCEL_CRON` reason) is deleted, so with the secret configured a caller presenting only that client-settable header is now refused (`DENY_BAD_SECRET`). The production cron entries in `vercel.json` therefore authenticate **only** via `CRON_SECRET` — Vercel attaches `Authorization: Bearer <CRON_SECRET>` when the variable is set on the project. Operator precondition: if `CRON_SECRET` is not set in the deployment, scheduled scans 401 rather than run. |
+| C9 | Both worker gates failed open when `CRON_SECRET` was unset: a warning was logged once and the request allowed, leaving two budget-spending endpoints unauthenticated in production. | `src/app/api/scan/worker/route.js:29-47`; `src/app/api/content/worker/route.js:25-52` | **read** | **fixed, task blocked R0.1.1** — code landed, fail-closed in production; the task stays open until `CRON_SECRET` is set in Vercel and a live 401 is observed. **Residual half closed by R0.1.8**: the forgeable `x-vercel-cron` branch (`src/server/cronAuth.js:49-56`, plus the `OK_VERCEL_CRON` reason) is deleted, so with the secret configured a caller presenting only that client-settable header is now refused (`DENY_BAD_SECRET`). The production cron entries in `vercel.json` therefore authenticate **only** via `CRON_SECRET` — Vercel attaches `Authorization: Bearer <CRON_SECRET>` when the variable is set on the project. Operator precondition: if `CRON_SECRET` is not set in the deployment, scheduled scans 401 rather than run. |
 | C10 | `setup-supabase.mjs` has no migrations ledger and no transaction per file, so a partially-applied migration leaves an unknown schema. | `scripts/setup-supabase.mjs:52-96` | anchor only | open — R6.1.1 |
 | C11 | The landing page presents fabricated figures as measurements. | `src/components/landing/AnswerSheet.jsx:63-65`; `src/app/page.js:126-129` | anchor only | open — R2.10.1 |
 | C12 | `/chart-preview` self-described as "not a product route" and shipped a named third-party brand's real visibility trend on a public, un-noindexed page. | `src/app/chart-preview/page.js:17-30` — **file deleted**, see below | **read** | **closed R0.1.2** |
@@ -559,10 +559,10 @@ companion artifact (2026-08-30), three more had moved — **eleven in total**:
 | A4 | `src/lib/scoring/interlocking.js:98-113` | `src/components/dashboard/interlocking.js` |
 | A6, A7 | `src/components/dashboard/Sidebar.jsx:138-143` | `src/components/perceev/Sidebar.jsx` |
 | A8, A9 | `src/components/charts/Donut.jsx:29-44` | `src/components/perceev/charts/Donut.jsx` |
-| B1 | `worker/` | no such directory; the extractor lives in `src/lib/engines/perplexity.js` |
-| B9 | `src/lib/workers/scanWorker.js:432-439` | `:472-479` — the old range still resolves, to unrelated code |
-| B12 | `src/lib/db.js:5-8` | `:11-15` (shifted by `4f7b6b6`) |
-| B12 | `src/lib/db.js:289` | `:298` |
+| B1 | `worker/` | no such directory; the extractor lives in `src/shared/engines/perplexity.js` |
+| B9 | `src/server/workers/scanWorker.js:432-439` | `:472-479` — the old range still resolves, to unrelated code |
+| B12 | `src/server/db.js:5-8` | `:11-15` (shifted by `4f7b6b6`) |
+| B12 | `src/server/db.js:289` | `:298` |
 | C4 | `docs/vendors/` | did not exist on 2026-08-30; created by R5.1.1 and populated since — nine files at `8e6ecc6`, `README.md` plus one per vendor. *(Corrected 2026-09-12, R6.3.6: this cell read "does not exist yet".)* |
 | C12 | `src/app/chart-preview/page.js` | deleted by R0.1.2 |
 
@@ -573,7 +573,7 @@ companion artifact (2026-08-30), three more had moved — **eleven in total**:
 `src/lib/engines/adapter.js` and `src/lib/scoring/probe.js` are deleted.
 
 They were a second, parallel engine registry, superseded by
-`src/lib/scoring/enginePipeline.js`. `adapter.js:3` imported `probeOpenAI` from
+`src/shared/scoring/enginePipeline.js`. `adapter.js:3` imported `probeOpenAI` from
 `./openai.js`, which has never exported it — `git grep probeOpenAI 8e6ecc6 -- src/`
 returns nothing, and that is the durable form of the claim. *(This sentence read
 "`openai.js` exports exactly `isChatGptConfigured` and `probeChatGpt`". That was
@@ -677,8 +677,8 @@ The corrections R6.3.3 added afterwards are excluded from the count.
 exist" passes 95% of a document that is 22% accurate. That gap is the finding.
 
 The cause is not neglect, it is velocity. Between `5d51aa3` (2026-08-30) and
-`1a5ed81` (2026-09-05), `src/lib/scoring/enginePipeline.js` went 625 → 1,132
-lines and `src/lib/workers/scanWorker.js` 1,181 → 2,545. Six days. Nothing
+`1a5ed81` (2026-09-05), `src/shared/scoring/enginePipeline.js` went 625 → 1,132
+lines and `src/server/workers/scanWorker.js` 1,181 → 2,545. Six days. Nothing
 short of a symbol anchor survives a file doubling.
 
 ## What was wrong when written, and what merely expired
@@ -820,11 +820,11 @@ The doc-to-source staleness tripwire is a separate task and is not built here.
     same sentence, and when it is inside quotation marks or backticks; otherwise it fires on
     every paragraph arguing for itself and gets muted.
 - **Source comments drift too, and nothing watches them, and this bullet proves
-  it twice.** `src/lib/engines/deployedEngines.js` cites
+  it twice.** `src/shared/engines/deployedEngines.js` cites
   `enginePipeline.js:527` for `resolveEnabledEngines`, in the doc comment
   paragraph beginning *"WHAT THIS FILE CANNOT DO"*. The source comment's number
   was already stale when this bullet was written and is still stale; at
-  `8e6ecc6` the symbol is declared in `src/lib/scoring/enginePipeline.js` at
+  `8e6ecc6` the symbol is declared in `src/shared/scoring/enginePipeline.js` at
   `:1393`. The tripwire's input should be `file:line` citations *in code
   comments*, not only in `docs/`.
   - **And this bullet's own correction rotted before it was verified.** It
@@ -833,7 +833,7 @@ The doc-to-source staleness tripwire is a separate task and is not built here.
     carried R6.3.3's corrected journal into the branch, i.e. the commit that
     added this very bullet** — it was already at `:1383`. Reproduce the whole
     slide with
-    `for c in 1a5ed81 ea165ed 6bb211c 8e6ecc6; do git grep -n '^export function resolveEnabledEngines' $c -- src/lib/scoring/enginePipeline.js; done`.
+    `for c in 1a5ed81 ea165ed 6bb211c 8e6ecc6; do git grep -n '^export function resolveEnabledEngines' $c -- src/shared/scoring/enginePipeline.js; done`.
     It did not fail verification, because the sentence carries the
     symbol next to the number and resolving the symbol still lands you in the
     right place. That is the whole argument for the rule in one bullet: at
@@ -846,19 +846,19 @@ The doc-to-source staleness tripwire is a separate task and is not built here.
     not being replaced with a fresh one: `:1393` above is pinned to `8e6ecc6`
     and the durable anchor is the symbol.
 - **The tree moves under the checker.** While this sweep ran,
-  `src/lib/db.js`, `src/lib/workers/scanWorker.js` and `src/middleware.js` were
+  `src/server/db.js`, `src/server/workers/scanWorker.js` and `src/middleware.js` were
   all modified uncommitted by other agents; `insertScan` sat at `:126` in
   `1a5ed81` and `:149` in the working tree, a 23-line divergence inside one
   session. The tripwire must resolve against a commit, never the worktree, or it
   will report failures that belong to somebody else's unfinished edit.
 - **It kept moving after the sweep, which is the argument for symbols, again.**
   Between `1a5ed81` and `ea165ed`, `insertScan` moved `:126` → `:152` in
-  `src/lib/db.js`; R2.8.12 replaced `getScansByDomain`'s `if (!client) return []`
+  `src/server/db.js`; R2.8.12 replaced `getScansByDomain`'s `if (!client) return []`
   with a `ScansUnavailableError` throw (`git grep -c ScansUnavailableError
-  ea165ed -- src/lib/db.js` → 9); and R0.1.20 withdrew the `trusted: true`
+  ea165ed -- src/server/db.js` → 9); and R0.1.20 withdrew the `trusted: true`
   label from the rate limiter, renaming `TRUSTED_IP_HEADER` to
   `PLATFORM_IP_HEADER` (`git grep -l PLATFORM_IP_HEADER ea165ed -- src/` →
-  `src/lib/rateLimit.js`, `src/lib/rateLimit.test.mjs`). Neither document cites
+  `src/server/rateLimit.js`, `src/server/rateLimit.test.mjs`). Neither document cites
   those symbols, so nothing here broke — but note that a **rename** defeats
   symbol anchoring exactly as a line move defeats numbers. The anchor is more
   durable, not durable. Cite a symbol *and* the commit where it had that name.

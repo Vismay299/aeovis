@@ -1,7 +1,7 @@
 /**
  * The probe-fleet ingest credential (R1.2.4). Fail closed, everywhere.
  *
- * WHY THIS IS NOT src/lib/cronAuth.js
+ * WHY THIS IS NOT src/server/cronAuth.js
  * `isCronAuthorized` deliberately ALLOWS a missing secret outside production
  * ("so local dev and the self-continue fetch work out of the box") and only
  * denies when the resolved environment is production. That trade exists because

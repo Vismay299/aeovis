@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { SiteNav } from "@/components/landing/SiteNav";
 import { SiteFooter } from "@/components/landing/SiteFooter";
-import { LEGAL_CONTACT_EMAIL, LEGAL_LAST_UPDATED } from "@/lib/legal";
+import { LEGAL_CONTACT_EMAIL, LEGAL_LAST_UPDATED } from "@/server/legal";
 
 /** The one place the contact address is turned into a mailto link. */
 export function LegalContact() {

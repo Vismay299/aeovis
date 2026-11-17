@@ -10,8 +10,8 @@ import { QueryError } from "@/components/app/QueryState";
 import { SkeletonPage } from "@/components/app/SkeletonPresets";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { usePortal } from "@/components/portal/PortalShell";
-import { ApiError, fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { ApiError, fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 import type { IssueSeverity } from "@/shared/audit-issues";
 import { SeverityBadge, formatAuditDate } from "../shared";
 

@@ -12,7 +12,7 @@ acceptance scenario or certify a production deployment.
 
 | Scope | Executing code / effect | Verification |
 |---|---|---|
-| R01 readiness | `src/lib/db/probeDispatch.js`, `/api/health`, `scripts/ops/provider-canary.mjs`: stored canary reads, separate deliberate canary dispatch, configuration rotation and expiry, fixed Gemini/OpenRouter selection. | Offline runtime tests; SQL concurrent canary claim, request ceiling and shared budget mismatch checks. |
+| R01 readiness | `src/server/db/probeDispatch.js`, `/api/health`, `scripts/ops/provider-canary.mjs`: stored canary reads, separate deliberate canary dispatch, configuration rotation and expiry, fixed Gemini/OpenRouter selection. | Offline runtime tests; SQL concurrent canary claim, request ceiling and shared budget mismatch checks. |
 | R02 observations/attempts | Migration 027 and `workers/durableProbing.js`: frozen identities, append-only settled attempts, fenced claims/renewals, typed due retries, atomic result projection and preserved legacy attempts. | Actual PostgreSQL claims, failed-pair resume and child termination before result commit; worker restart after result commit. |
 | R02 circuits/spend | Account/provider circuit shared across engines/workers, one half-open recovery canary, atomic scan/day reservations, request units, retained unknown charges, global pause and audited reconciliation. | Actual SQL races, dependent-provider refusal, independent provider continuation, cost uncertainty, role denials and pause behavior. |
 | R03/R04 | Frozen missing work remains in the outcome plan; request/body deadlines and durable dispatch envelope stop nested adapter retries. Failed Google requests keep unknown billing. | Worker/adapter/Google parser regressions and full existing suite. Dedicated finalizer/evidence-store/browser acceptance is still separate. |
@@ -50,7 +50,7 @@ fenced result. This establishes our uncertainty/reconciliation behavior; it
 does not establish real vendor idempotency or exactly-once billing.
 
 Offline runtime tests live in
-`src/lib/repairs/r02-dispatch-integration.test.mjs`; existing R01–R05 tests remain
+`src/server/repairs/r02-dispatch-integration.test.mjs`; existing R01–R05 tests remain
 collected. The generic `run-repair.mjs` database/release mode still reports
 unverified where its complete suite/evidence package is missing. This dedicated
 job must not be presented as all 404 cases or all P0 database acceptance passing.

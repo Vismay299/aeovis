@@ -3,7 +3,7 @@
  * library (src/components/perceev/charts/*). Kept separate from the React
  * components so it's unit-testable with `node --test` (see
  * chartMath.test.mjs) without a DOM/JSX transform — mirrors the
- * src/lib/brandAnalyticsApi.js convention of pulling pure helpers out of
+ * src/shared/brandAnalyticsApi.js convention of pulling pure helpers out of
  * their consumers.
  *
  * Nothing in this file touches color VALUES — ramp helpers return

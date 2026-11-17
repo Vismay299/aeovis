@@ -5,11 +5,11 @@
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, jsonOk, AppError, readJsonBody } from "../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../lib/features/flags.ts";
-import { createServerExport } from "../../../../lib/export/serverExport.ts";
-import { exportRequest } from "../../../../lib/export/exports.contract.ts";
+} from "../../../../server/workspace/requireWorkspace.ts";
+import { toErrorResponse, jsonOk, AppError, readJsonBody } from "../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../server/features/flags.ts";
+import { createServerExport } from "../../../../shared/export/serverExport.ts";
+import { exportRequest } from "../../../../shared/export/exports.contract.ts";
 
 export const maxDuration = 60;
 export const dynamic = "force-dynamic";

@@ -32,7 +32,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { usePortal } from "@/components/portal/PortalShell";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 import { SETUP_STEPS, type SetupStep } from "@/shared/setup-steps";
 import {
   useDismissSetupStep,

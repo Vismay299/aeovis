@@ -1,10 +1,10 @@
-import { requireUser as defaultRequireUser, type RequireUserDeps } from "../../../../lib/auth/requireUser.ts";
-import { toErrorResponse } from "../../../../lib/http/errors.ts";
-import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../lib/features/flags.ts";
+import { requireUser as defaultRequireUser, type RequireUserDeps } from "../../../../server/auth/requireUser.ts";
+import { toErrorResponse } from "../../../../shared/http/errors.ts";
+import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../server/features/flags.ts";
 import {
   getOnboardingState as defaultGetOnboardingState,
   type OnboardingStateDeps,
-} from "../../../../lib/onboarding/state.ts";
+} from "../../../../server/onboarding/state.ts";
 import { normalizeScanId, normalizeHandoffDomain } from "../../../../shared/auth-redirect.ts";
 
 export const dynamic = "force-dynamic";

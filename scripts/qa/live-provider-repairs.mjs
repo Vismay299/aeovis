@@ -26,15 +26,15 @@ for (const key of [
   delete process.env[key];
 const { dispatchCanaries } = await import("../ops/provider-canary.mjs");
 const { createProbeDispatchStore, readProviderReadiness } = await import(
-  "../../src/lib/db/probeDispatch.js"
+  "../../src/server/db/probeDispatch.js"
 );
 const { createMeasurementEvidenceStore } = await import(
-  "../../src/lib/db/measurementEvidence.js"
+  "../../src/server/db/measurementEvidence.js"
 );
 const { resolveEnabledEngines } = await import(
-  "../../src/lib/scoring/enginePipeline.js"
+  "../../src/shared/scoring/enginePipeline.js"
 );
-const { getLlmBaseUrl } = await import("../../src/lib/llmConfig.js");
+const { getLlmBaseUrl } = await import("../../src/shared/llmConfig.js");
 const pool = new pg.Pool();
 const q = (s, v = []) => pool.query(s, v);
 const directory = "/tmp/aeovis-provider-live-repairs";

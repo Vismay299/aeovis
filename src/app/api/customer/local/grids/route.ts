@@ -1,7 +1,7 @@
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { listGrids, startGrid } from "../../../../../lib/local/grid.ts";
-import { gridsQuery, startGridBody } from "../../../../../lib/local/local.contract.ts";
-import { approve, gate, jsonOk, parseBody, parseQuery, respond, type LocalRouteDeps } from "../../../../../lib/local/routeKit.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { listGrids, startGrid } from "../../../../../server/local/grid.ts";
+import { gridsQuery, startGridBody } from "../../../../../server/local/local.contract.ts";
+import { approve, gate, jsonOk, parseBody, parseQuery, respond, type LocalRouteDeps } from "../../../../../server/local/routeKit.ts";
 
 export const dynamic = "force-dynamic";
 // A grid collects its map searches inline for up to 20 seconds.

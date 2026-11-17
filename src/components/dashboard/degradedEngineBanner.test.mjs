@@ -11,13 +11,13 @@ import {
   describeScanDataSourceIssue,
   summarizeEngineSlice,
   computeHeadline,
-} from "../../lib/scoring/enginePipeline.js";
-import * as apiClient from "../../services/api.js";
-import * as formatModule from "../../utils/format.js";
-import * as aliasesModule from "../../lib/scoring/aliases.js";
-import * as brandKeyModule from "../../lib/scoring/brandKey.js";
-import * as aioConstantsModule from "../../lib/scoring/aioConstants.js";
-import * as enginePipelineModule from "../../lib/scoring/enginePipeline.js";
+} from "../../shared/scoring/enginePipeline.js";
+import * as apiClient from "../../shared/api.js";
+import * as formatModule from "../../shared/format.js";
+import * as aliasesModule from "../../shared/scoring/aliases.js";
+import * as brandKeyModule from "../../shared/scoring/brandKey.js";
+import * as aioConstantsModule from "../../shared/scoring/aioConstants.js";
+import * as enginePipelineModule from "../../shared/scoring/enginePipeline.js";
 
 /**
  * R2.2.6 (finding B3) — the dashboard half of "say which engine degraded".
@@ -442,7 +442,7 @@ test("R2.2.7 GUARD — the comment stripper keeps the code and drops the comment
 test("R2.2.6 GUARD — DashboardShell derives its degradation state from the pipeline", () => {
   assert.match(
     SHELL,
-    /import \{ describeScanDataSourceIssue \} from "@\/lib\/scoring\/enginePipeline"/,
+    /import \{ describeScanDataSourceIssue \} from "@\/shared\/scoring\/enginePipeline"/,
     "the component must import the one derivation, not reimplement it"
   );
   assert.match(
@@ -727,17 +727,17 @@ async function renderDashboardShell(props) {
       },
     ],
     ["@/components/dashboard/ScoreBand", scoreBandModule],
-    ["@/services/api", apiStub],
-    ["@/utils/format", formatModule],
-    ["@/lib/scoring/aliases", aliasesModule],
-    ["@/lib/scoring/brandKey", brandKeyModule],
-    ["@/lib/scoring/aioConstants", aioConstantsModule],
-    ["@/lib/scoring/enginePipeline", enginePipelineModule],
+    ["@/shared/api", apiStub],
+    ["@/shared/format", formatModule],
+    ["@/shared/scoring/aliases", aliasesModule],
+    ["@/shared/scoring/brandKey", brandKeyModule],
+    ["@/shared/scoring/aioConstants", aioConstantsModule],
+    ["@/shared/scoring/enginePipeline", enginePipelineModule],
   ]);
 
   const requireShim = (specifier) => {
     if (modules.has(specifier)) return modules.get(specifier);
-    if (specifier.startsWith("@/components/") || specifier.startsWith("@/lib/")) {
+    if (specifier.startsWith("@/components/") || specifier.startsWith("@/server/") || specifier.startsWith("@/shared/")) {
       return anyNamedExport;
     }
     throw new Error(

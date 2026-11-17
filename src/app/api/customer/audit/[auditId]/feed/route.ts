@@ -1,10 +1,10 @@
 import { ZodError } from "zod";
-import { requireWorkspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../../lib/workspace/requireWorkspace.ts";
-import { AppError, toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
-import { feedQuery } from "../../../../../../lib/audit/siteAudit.contract.ts";
-import { getAuditFeed } from "../../../../../../lib/audit/results.ts";
+import { requireWorkspace } from "../../../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../../../server/workspace/requireWorkspace.ts";
+import { AppError, toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../../server/features/flags.ts";
+import { feedQuery } from "../../../../../../server/audit/siteAudit.contract.ts";
+import { getAuditFeed } from "../../../../../../server/audit/results.ts";
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ auditId: string }> | { auditId: string } };
 export type AuditFeedRouteDeps = RequireWorkspaceDeps & { requireWorkspace?: typeof requireWorkspace; isFeatureEnabled?: typeof isFeatureEnabled; getAuditFeed?: typeof getAuditFeed };

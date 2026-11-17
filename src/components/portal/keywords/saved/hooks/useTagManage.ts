@@ -7,8 +7,8 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { fetchJson, isApiError, withBrand } from "@/lib/query/fetchJson";
-import { describeError } from "@/lib/query/errors";
+import { fetchJson, isApiError, withBrand } from "@/shared/query/fetchJson";
+import { describeError } from "@/shared/query/errors";
 import type { SavedKeywordTag } from "@/shared/keywords";
 
 const TAG_DELETE_FALLBACK =

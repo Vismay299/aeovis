@@ -34,7 +34,7 @@ const fixtureScan = JSON.parse(
   fs.readFileSync(path.join(ROOT, "tests/fixtures/f27/free-scan-row.json"), "utf8"),
 );
 
-const { importFreeScanQuestions } = await import("../../src/lib/onboarding/freeScanHandoff.ts");
+const { importFreeScanQuestions } = await import("../../src/server/onboarding/freeScanHandoff.ts");
 
 /**
  * Minimal service-role Supabase stand-in over one pg client: the

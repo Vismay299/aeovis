@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
-import { ApiError } from "@/lib/query/fetchJson";
+import { ApiError } from "@/shared/query/fetchJson";
 import { usePortal } from "@/components/portal/PortalShell";
 import type { QuestionsState } from "./hooks/useQuestions";
 import { useQuestionMutations, isRevisionConflict } from "./hooks/useQuestionMutations";

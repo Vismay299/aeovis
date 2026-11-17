@@ -6,7 +6,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import { trackRankEvent } from "../telemetry";
 
 export function useMetricsRefresh(brandKey: string, configId: string) {

@@ -25,7 +25,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { ExportFormat } from "@/lib/export/exportRows";
+import type { ExportFormat } from "@/shared/export/exportRows";
 
 /** Every `exportRows()` format, plus a plain list copy (one item per line). */
 export type ExportAction = ExportFormat | "copy-list";

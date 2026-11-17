@@ -62,9 +62,9 @@ export const FLEET_ENGINES = Object.freeze(["perplexity", "chatgpt"]);
  * WHY ONLY TWO OF §3.2's FIVE ROWS ARE HERE. The other three rows
  * (`api.perplexity.ai`, `api.openai.com`, Bright Data → Google SERP) are driven
  * by `src/`, not by this fleet, and their concurrency ALREADY has a code
- * representation: `AIO_CONCURRENCY` in `src/lib/scoring/aioConstants.js` and
+ * representation: `AIO_CONCURRENCY` in `src/shared/scoring/aioConstants.js` and
  * `CHATGPT_CONCURRENCY` / `PERPLEXITY_CONCURRENCY` in
- * `src/lib/scoring/enginePipeline.js`. Copying them here would give those
+ * `src/shared/scoring/enginePipeline.js`. Copying them here would give those
  * numbers TWO representations that nothing keeps in step — which is the defect
  * this table exists to prevent, not a fix for it. Those three constants are
  * still hard-coded, still unreadable from the environment, and the contract's
@@ -514,7 +514,7 @@ function describeFallback(field) {
  * same server but carry different pathnames (the API path vs the database
  * name). Including the pathname would make them never match.
  *
- * Shape derived from src/lib/liveDbGate.js:dbTarget per worker isolation
+ * Shape derived from src/server/liveDbGate.js:dbTarget per worker isolation
  * (R1.2.1), narrowed to hostname-only for the cross-protocol case.
  */
 function dbTarget(value) {
@@ -528,7 +528,7 @@ function dbTarget(value) {
 
 /**
  * Compare two database targets by host and path (ignoring credentials, query params, etc.).
- * Shape copied from src/lib/liveDbGate.js:namesSameTarget.
+ * Shape copied from src/server/liveDbGate.js:namesSameTarget.
  */
 function namesSameTarget(value, real) {
   if (value === real) return true;

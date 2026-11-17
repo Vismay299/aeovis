@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { fetchJson } from "@/shared/query/fetchJson";
 
 /** Starts Google's consent flow and leaves the page for the returned URL. */
 export function useStartGa4Link(brandKey: string, returnTo: string) {

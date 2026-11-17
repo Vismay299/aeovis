@@ -8,7 +8,7 @@
 import { useEffect, useState } from "react";
 import { Globe, Link2 } from "lucide-react";
 import { Badge, Banner, Button, Card, EmptyState, SkeletonRows } from "../ui";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 
 const PERMISSION_LABELS = {
   siteOwner: "Owner",

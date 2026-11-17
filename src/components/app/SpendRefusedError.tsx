@@ -5,8 +5,8 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import Link from "next/link";
-import type { ApiError } from "@/lib/query/fetchJson";
-import { spendRefusedView, type SpendRefusalCode } from "@/lib/query/errors";
+import type { ApiError } from "@/shared/query/fetchJson";
+import { spendRefusedView, type SpendRefusalCode } from "@/shared/query/errors";
 import { ErrorState } from "@/components/app/ErrorState";
 import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
 import { Button } from "@/components/ui/button";

@@ -11,7 +11,7 @@ import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
 import { BackButton, PageHeader } from "@/components/app/PageHeader";
 import { EmptyState } from "@/components/app/EmptyState";
 import { SearchTabStrip } from "@/components/app/search-tabs/SearchTabStrip";
-import { keys, stableStringify } from "@/lib/query/keys";
+import { keys, stableStringify } from "@/shared/query/keys";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import {
   BACKLINKS_DEFAULT_SORT,

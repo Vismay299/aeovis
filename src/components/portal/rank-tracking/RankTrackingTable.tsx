@@ -17,8 +17,8 @@ import {
   TableBulkActionButton,
   TableBulkExportMenu,
 } from "@/components/app/table/TableBulkActionBar";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 import type { RankTrackingRow } from "@/shared/rank-tracking";
 import {
   PINNED_COLUMN_ID,
@@ -32,7 +32,7 @@ import {
   type KeywordTrendTarget,
 } from "./KeywordTrendModal";
 import { TrackAiQuestionDialog } from "./TrackAiQuestionDialog";
-import type { SelectionAnchor } from "@/lib/table/tableSelection";
+import type { SelectionAnchor } from "@/shared/table/tableSelection";
 
 export function RankTrackingTable({
   totalCount,

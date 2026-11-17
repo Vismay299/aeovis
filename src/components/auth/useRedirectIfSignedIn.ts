@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSupabaseBrowserClient } from "../../lib/supabase/browser.js";
+import { getSupabaseBrowserClient } from "../../shared/supabase/browser.js";
 import { DEFAULT_AFTER_SIGN_IN, normalizeAuthRedirect } from "../../shared/auth-redirect.ts";
 
 export function useRedirectIfSignedIn(next?: string | null) {

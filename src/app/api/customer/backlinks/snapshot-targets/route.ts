@@ -1,19 +1,19 @@
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { requireApprovedPrice, recordApproval } from "../../../../../lib/pricing/pricedActions.ts";
-import "../../../../../lib/pricing/actions/index.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { requireApprovedPrice, recordApproval } from "../../../../../shared/pricing/pricedActions.ts";
+import "../../../../../shared/pricing/actions/index.ts";
 import {
   snapshotTargetCreateRequestBody,
   snapshotTargetsQuery,
-} from "../../../../../lib/backlinks/backlinks.contract.ts";
+} from "../../../../../server/backlinks/backlinks.contract.ts";
 import {
   createSnapshotTarget,
   listSnapshotTargets,
   snapshotSkipMessage,
-} from "../../../../../lib/backlinks/snapshots.ts";
-import { normalizeBacklinksTarget } from "../../../../../lib/providers/dataforseo/backlinksTarget.ts";
+} from "../../../../../server/backlinks/snapshots.ts";
+import { normalizeBacklinksTarget } from "../../../../../shared/providers/dataforseo/backlinksTarget.ts";
 import { computeNextRunAt } from "../../../../../shared/schedule.ts";
 
 export const dynamic = "force-dynamic";

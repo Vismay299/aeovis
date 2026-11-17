@@ -4,7 +4,7 @@
  *
  * WHY THIS EXISTS, AND WHAT IT REFUSES TO DO.
  *
- * The backlog declares 404 acceptance scenarios (`src/lib/repairs/caseInventory.mjs`)
+ * The backlog declares 404 acceptance scenarios (`src/server/repairs/caseInventory.mjs`)
  * and none of them was implemented. The failure this runner is built against is
  * not a red test but a green run that proved nothing: a glob that collected no
  * files, a case id with no test behind it, a suite that was skipped and then
@@ -16,7 +16,7 @@
  *     identity or a provider credential is configured in the environment: an
  *     offline suite that can reach production is not offline. Every child it
  *     does dispatch carries the repository's own default-deny write guard
- *     (`--import ./src/lib/liveWriteGuardAuto.mjs`) and has the credential
+ *     (`--import ./src/server/liveWriteGuardAuto.mjs`) and has the credential
  *     variables deleted, because a test process that inherits them is one
  *     forgotten stub away from a production write.
  *   - A suite the environment is not allowlisted for is refused, and
@@ -31,7 +31,7 @@
  *     passes, so absence of evidence can never read as evidence.
  *
  * WHAT IT DISPATCHES, AND WHAT IT DOES NOT.
- * `offline` is dispatched: the runner runs the collected `src/lib/repairs/*.test.mjs`
+ * `offline` is dispatched: the runner runs the collected `src/server/repairs/*.test.mjs`
  * files filtered to the selected case ids by test name, parses the TAP the child
  * emits, and maps each result back to its case id. D/B/L/S are not dispatched
  * here — they need a real database, a browser, a funded provider, or elapsed
@@ -72,18 +72,18 @@ import {
   repairOf,
   suitesForRepair,
   validateInventory,
-} from "../../src/lib/repairs/caseInventory.mjs";
+} from "../../src/server/repairs/caseInventory.mjs";
 
-import { loadReleaseEvidence, sha256 } from "../../src/lib/repairs/releaseEvidence.mjs";
+import { loadReleaseEvidence, sha256 } from "../../src/server/repairs/releaseEvidence.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, "../..");
 
 /** The files the offline suite may dispatch. Anything else needs a manifest. */
-const COLLECTED_DIR = "src/lib/repairs";
-const COLLECTED_GLOB = "src/lib/repairs/*.test.mjs";
+const COLLECTED_DIR = "src/server/repairs";
+const COLLECTED_GLOB = "src/server/repairs/*.test.mjs";
 /** The repository's default-deny write guard, preloaded into every child. */
-const GUARD_PRELOAD = "./src/lib/liveWriteGuardAuto.mjs";
+const GUARD_PRELOAD = "./src/server/liveWriteGuardAuto.mjs";
 const DEFAULT_MANIFEST = "tests/fixtures/repairs/manifest.json";
 const REPORT_ROOT = "test_reports/repairs";
 const CASE_ID = /\bR\d{2}-\d{2}\b/g;
@@ -548,7 +548,7 @@ async function readManifest(relPath, collected) {
 // ---------------------------------------------------------------------------
 
 async function resolveInventory(relPath) {
-  if (!relPath) return { report: validateInventory(), source: "src/lib/repairs/caseInventory.mjs" };
+  if (!relPath) return { report: validateInventory(), source: "src/server/repairs/caseInventory.mjs" };
   let raw;
   try {
     raw = await readFile(path.resolve(REPO, relPath), "utf8");

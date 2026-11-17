@@ -28,13 +28,13 @@ The user needs a lean, credible AIO-only visibility tracker before Sunday's VC p
 Next.js 14 App Router
 ├── src/app/api/scan/route.js               # POST /api/scan — creates job, launches async worker
 ├── src/app/api/scan/[job_id]/status/route.js  # GET status + full run_record (no-cache)
-├── src/lib/workers/scanWorker.js           # AIO-only scan pipeline entry point
-├── src/lib/scoring/aioPipeline.js          # Probe each query via BrightData AIO + score
+├── src/server/workers/scanWorker.js           # AIO-only scan pipeline entry point
+├── src/shared/scoring/aioPipeline.js          # Probe each query via BrightData AIO + score
 ├── src/lib/scoring/aioPrompts.js           # Category seeds -> PAA + Autocomplete
-├── src/lib/engines/brightdata.js           # BrightData SERP client + AIO extractor (FIXED)
-├── src/lib/scoring/aliases.js              # Brand alias detection (branded-query guardrail)
-├── src/lib/scoring/citations.js            # Domain normalisation & classification
-├── src/services/api.js                     # Frontend normalizeResult / runScan
+├── src/shared/engines/brightdata.js           # BrightData SERP client + AIO extractor (FIXED)
+├── src/shared/scoring/aliases.js              # Brand alias detection (branded-query guardrail)
+├── src/shared/scoring/citations.js            # Domain normalisation & classification
+├── src/shared/api.js                     # Frontend normalizeResult / runScan
 └── src/components/dashboard/
     ├── KpiCard.jsx                         # Hero score + KPI cards
     ├── AioEvidence.jsx                     # Per-query AIO text + citations viewer (NEW)

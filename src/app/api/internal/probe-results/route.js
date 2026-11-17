@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/db";
-import { upsertPromptResults } from "@/lib/db/analytics";
-import { resolveNodeEnv } from "@/lib/operatorPerimeter";
+import { supabase } from "@/server/db";
+import { upsertPromptResults } from "@/server/db/analytics";
+import { resolveNodeEnv } from "@/server/operatorPerimeter";
 import { checkIngestAuth, INGEST_AUTH } from "../_lib/ingestAuth";
 import {
   toPromptResultRow,
@@ -19,7 +19,7 @@ import {
  *   1. AUTHENTICATED, FAIL CLOSED. Every request without the fleet's token is
  *      401, including when `PROBE_INGEST_TOKEN` is absent from the environment
  *      entirely — see `../_lib/ingestAuth.js` for why this gate is stricter
- *      than `src/lib/cronAuth.js` rather than a reuse of it.
+ *      than `src/server/cronAuth.js` rather than a reuse of it.
  *   2. CONTRACT-VALIDATED, 422, NEVER REPAIRED. `docs/contracts/probe-result.md`
  *      §5: "It must not repair, default, or coerce. A rejected probe result is
  *      not written and the task is left for retry." The validator is

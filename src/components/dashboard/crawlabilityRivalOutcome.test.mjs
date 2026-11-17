@@ -22,7 +22,7 @@
  *      three outcomes come back distinguishable — different kind, different
  *      label, different detail.
  *   3. R6.4.11 — the RENDERED surface. The shared render harness
- *      (src/lib/renderHarness.mjs) compiles CrawlabilityView.jsx with sucrase,
+ *      (src/server/renderHarness.mjs) compiles CrawlabilityView.jsx with sucrase,
  *      evaluates it, and renders RivalCrawlRow to static markup. An inverted
  *      ternary that swaps the refusal branch and the meter branch is caught by
  *      the rendered HTML: a refused row would show the open meter instead of
@@ -45,7 +45,7 @@ import {
   passThrough,
   passThroughExports,
   anyNamedExport,
-} from "../../lib/renderHarness.mjs";
+} from "../../server/renderHarness.mjs";
 
 import {
   MAX_COMPARE_DOMAINS,
@@ -53,11 +53,11 @@ import {
   describeCompareBudget,
   describePrimaryCrawlOutcome,
   describeRivalCrawlOutcome,
-} from "../../lib/crawlabilityOutcome.js";
-import * as crawlabilityOutcomeModule from "../../lib/crawlabilityOutcome.js";
-import { extractBrandDomain } from "../../lib/scoring/citations.js";
+} from "../../shared/crawlabilityOutcome.js";
+import * as crawlabilityOutcomeModule from "../../shared/crawlabilityOutcome.js";
+import { extractBrandDomain } from "../../shared/scoring/citations.js";
 
-register("../../lib/cronAuth.route.hooks.mjs", import.meta.url);
+register("../../server/cronAuth.route.hooks.mjs", import.meta.url);
 
 let importError = null;
 let GET = null;
@@ -84,8 +84,8 @@ const ROUTE = readFileSync(
 const viewModule = await compileJsx(VIEW_PATH, {
   modules: new Map([
     ["react", { ...React, __esModule: true, default: React }],
-    ["@/lib/crawlabilityOutcome", crawlabilityOutcomeModule],
-    ["@/lib/scoring/citations", { extractBrandDomain, __esModule: true }],
+    ["@/shared/crawlabilityOutcome", crawlabilityOutcomeModule],
+    ["@/shared/scoring/citations", { extractBrandDomain, __esModule: true }],
     ["./SectionStrap", { SectionStrap: passThrough, __esModule: true }],
   ]),
   autoStub: ["@/components/perceev/", "lucide-react"],
@@ -747,7 +747,7 @@ test("R3.7.8 — an unexplained failure admits it instead of guessing", () => {
 });
 
 test("R3.7.8 GUARD — CrawlabilityView renders the derived primary outcome", () => {
-  const importBlock = /import \{([^}]*)\} from "@\/lib\/crawlabilityOutcome"/.exec(VIEW);
+  const importBlock = /import \{([^}]*)\} from "@\/shared\/crawlabilityOutcome"/.exec(VIEW);
   assert.ok(importBlock, "the component imports the shared derivation");
   assert.match(importBlock[1], /\bdescribePrimaryCrawlOutcome\b/, "including the primary banner's wording");
 

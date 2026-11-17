@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { LOCATION_OPTIONS, getKeywordDataProvider } from "@/shared/keyword-locations";
 import { MAX_KEYWORDS_PER_SUBMIT } from "@/shared/keywords";
-import { stableStringify } from "@/lib/query/keys";
+import { stableStringify } from "@/shared/query/keys";
 import type { PriceQuote } from "@/shared/pricing";
 import { KeywordSearchOptions, type SearchOptions } from "./KeywordSearchOptions";
 import { KeywordAreaField, LocalVolumeCostNote } from "./KeywordAreaField";

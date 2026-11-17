@@ -6,7 +6,7 @@
 
 import { useEffect, useRef } from "react";
 import { PageHeader } from "@/components/app/PageHeader";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 import type { ProjectContext } from "@/shared/project-context";
 import { BrandIdentityCard } from "./BrandIdentityCard";
 import { CompetitorsSection } from "./CompetitorsSection";

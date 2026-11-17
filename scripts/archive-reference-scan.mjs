@@ -52,7 +52,7 @@ function hostOf(url) {
  * a refusal that described the summary shape, not the scan.
  */
 async function scansByBrandName(name) {
-  const { listRecentScans, getScansByDomain } = await import("../src/lib/db.js");
+  const { listRecentScans, getScansByDomain } = await import("../src/server/db.js");
   const wanted = String(name || "").trim().toLowerCase();
   if (!wanted) return [];
   const recent = await listRecentScans(200);
@@ -76,8 +76,8 @@ async function main() {
     );
   }
 
-  const { listRecentScans, getScansByDomain } = await import("../src/lib/db.js");
-  const { getPromptResultsForScan } = await import("../src/lib/db/analytics.js");
+  const { listRecentScans, getScansByDomain } = await import("../src/server/db.js");
+  const { getPromptResultsForScan } = await import("../src/server/db/analytics.js");
 
   if (wantsList) {
     // R6.4.6 — print the value the lookup below actually accepts.

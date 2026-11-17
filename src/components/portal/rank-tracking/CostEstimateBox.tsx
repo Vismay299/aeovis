@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
-import { stableStringify } from "@/lib/query/keys";
+import { stableStringify } from "@/shared/query/keys";
 import { formatUsd } from "@/shared/pricing";
 import type { Devices, RankSchedule } from "@/shared/rank-tracking";
 

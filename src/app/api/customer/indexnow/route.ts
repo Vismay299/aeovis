@@ -1,9 +1,9 @@
-import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, AppError } from "../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../lib/features/flags.ts";
-import { getSetup } from "../../../../lib/indexnow/keys.ts";
-import { fetchIndexNowUsage, readIndexNowLimits } from "../../../../lib/indexnow/limits.ts";
-import { getIndexNowQuery } from "../../../../lib/indexnow/indexnow.contract.ts";
+import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../server/workspace/requireWorkspace.ts";
+import { toErrorResponse, AppError } from "../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../server/features/flags.ts";
+import { getSetup } from "../../../../server/indexnow/keys.ts";
+import { fetchIndexNowUsage, readIndexNowLimits } from "../../../../server/indexnow/limits.ts";
+import { getIndexNowQuery } from "../../../../server/indexnow/indexnow.contract.ts";
 
 export const dynamic = "force-dynamic";
 

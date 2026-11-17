@@ -10,7 +10,7 @@
 > best write-up of the problem — but every number below is a SerpAPI number and
 > describes nothing we run.
 >
-> **SerpAPI is not gone from the code.** `src/lib/engines/serp.js:15` still falls
+> **SerpAPI is not gone from the code.** `src/shared/engines/serp.js:15` still falls
 > through to it when no Bright Data key is present, and one of its call sites is
 > live and billable. Read the superseding ADR's evidence section before planning
 > any deletion; do not infer from this header that the path is dead.

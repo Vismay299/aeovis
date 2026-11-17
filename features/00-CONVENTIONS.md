@@ -50,7 +50,7 @@ F01 adds `THIRD_PARTY_NOTICES.md` at the repo root with OpenSEO's full MIT licen
 | TypeScript | Allowed for new and ported code. Add `tsconfig.json` with `allowJs: true`, `strict: true`, `noEmit: true`, `paths: {"@/*": ["./src/*"]}`. Existing `.js/.jsx/.mjs` stay as they are. | F01 |
 | TS in tests | Server modules in `.ts` must use **erasable syntax only** (no `enum`, `namespace`, parameter properties, `import =`), so Node 22.22's built-in type stripping runs them under `node --test`. Unit tests may be `*.test.ts` or `*.test.mjs`; F01 widens the test glob. `.tsx` is compiled by Next only and is tested through the browser harness. | F01 |
 | Validation | `zod` v4 for API request/response schemas, provider payloads, LLM structured output, cache reads. | F01 |
-| LLM calls | Vercel `ai` SDK v6 with `@openrouter/ai-sdk-provider`, through the F01 helper `src/lib/llm/` (metered). Existing `src/lib/gemini.js`/OpenRouter paths keep working; new features use the helper. | F01 |
+| LLM calls | Vercel `ai` SDK v6 with `@openrouter/ai-sdk-provider`, through the F01 helper `src/server/llm/` (metered). Existing `src/shared/gemini.js`/OpenRouter paths keep working; new features use the helper. | F01 |
 | Styling | Tailwind CSS v4 + shadcn `base-nova` style on `@base-ui/react`, `tw-animate-css`, `lucide-react`, `sonner`. | F04 |
 | Charts | Recharts 3. | F04 |
 | Tables | TanStack Table 8. | F06 |
@@ -66,9 +66,9 @@ F01 adds `THIRD_PARTY_NOTICES.md` at the repo root with OpenSEO's full MIT licen
 | OpenSEO | Perceev equivalent | Notes |
 |---|---|---|
 | Cloudflare Worker request handler / `createServerFn` | Next.js route handler `src/app/api/customer/<feature>/.../route.(js\|ts)` | Server functions become JSON routes; the client calls them through F05 hooks. |
-| `requireProjectContext` (org + project) | `getCustomerContext()` + `findCustomerBrand()` from `src/lib/supabase/customer.js`, wrapped by F01's `requireWorkspace()` | Their **project** = our **workspace** = `customer_brands.brand_key`. Their **organization** has no equivalent; membership is per workspace. |
+| `requireProjectContext` (org + project) | `getCustomerContext()` + `findCustomerBrand()` from `src/shared/supabase/customer.js`, wrapped by F01's `requireWorkspace()` | Their **project** = our **workspace** = `customer_brands.brand_key`. Their **organization** has no equivalent; membership is per workspace. |
 | D1 / Drizzle schemas, Postgres mirror | Supabase Postgres SQL migrations in `supabase/migrations/NNN_<name>.sql` | Port each Drizzle table to SQL by hand. Use the migration numbers reserved for the feature in `README.md`. |
-| Cloudflare Workflows (`step.do`, `step.sleep`) | F01 durable job runner `src/lib/jobs/` (tables `jobs`, `job_steps`) | Same semantics: named idempotent steps, per-step timeout and retry budget, billed steps run once. |
+| Cloudflare Workflows (`step.do`, `step.sleep`) | F01 durable job runner `src/server/jobs/` (tables `jobs`, `job_steps`) | Same semantics: named idempotent steps, per-step timeout and retry budget, billed steps run once. |
 | Cron triggers (`*/5`, daily) | `/api/jobs/tick` called every minute by Supabase `pg_cron` + `pg_net` (F01); existing Vercel daily crons stay | Vercel's current crons are daily only; do not rely on them for sub-daily work. |
 | Durable Objects (audit scratchpad, chat sessions, rate limits) | Postgres tables keyed by job or session id | Keep their idempotent `ON CONFLICT DO NOTHING/UPDATE` semantics. |
 | R2 caches / exports | F01 provider cache (`provider_cache` table; payloads over 256 KB in Storage bucket `provider-cache`) and Storage bucket `exports` with signed URLs | Signed export links expire after 1 hour, as theirs do. |
@@ -77,24 +77,24 @@ F01 adds `THIRD_PARTY_NOTICES.md` at the repo root with OpenSEO's full MIT licen
 | Better Auth | Supabase Auth | Google sign-in and captcha are Supabase Auth features (F24). |
 | Autumn / Stripe | **Not built.** Use F01 spend holds. | |
 | PostHog, Loops | Same vendors | F25, F26. |
-| `waitUntil` | `keepAlive()` from `src/lib/keepAlive.js` / `@vercel/functions` `waitUntil` | |
-| OpenRouter via `ai` SDK | Same, via `src/lib/llm/` | |
+| `waitUntil` | `keepAlive()` from `src/server/keepAlive.js` / `@vercel/functions` `waitUntil` | |
+| OpenRouter via `ai` SDK | Same, via `src/server/llm/` | |
 
 ## 5. Shared foundation APIs (defined by F01, used by everyone)
 
 Dependent specs code against these names. F01 must implement exactly these signatures; if F01 has to change one, it updates this section in the same PR.
 
 ```ts
-// src/lib/workspace/requireWorkspace.ts
+// src/server/workspace/requireWorkspace.ts
 export async function requireWorkspace(request: Request, opts?: { brandKey?: string; role?: "owner" | "member" }):
   Promise<{ user: { id: string; email: string }; brandKey: string; brand: CustomerBrand; role: "owner" | "member"; admin: SupabaseClient }>;
 // Throws WorkspaceError { status: 401 | 403 | 404 | 503, code, message }; routes convert it with toErrorResponse().
 
-// src/lib/http/errors.ts
+// src/shared/http/errors.ts
 export function toErrorResponse(err: unknown): Response;      // {error, code, recovery?} + correct status, Cache-Control: no-store
 export class AppError extends Error { status: number; code: string; recovery?: string }
 
-// src/lib/jobs/ (tables: jobs, job_steps)
+// src/server/jobs/ (tables: jobs, job_steps)
 export function defineJob<P>(kind: string, handler: (ctx: JobContext<P>) => Promise<JobResult>): void;
 export async function enqueueJob<P>(kind: string, payload: P, opts: { brandKey: string; dedupeKey?: string; runAt?: Date; trigger?: "manual" | "scheduled" | "baseline" }): Promise<{ jobId: string; deduped: boolean }>;
 export async function getJobStatus(jobId: string): Promise<{ status: JobStatus; progress?: { done: number; total: number; label?: string }; pollAfterSeconds: number | null; result?: unknown; error?: { code: string; message: string } }>;
@@ -111,7 +111,7 @@ interface JobContext<P> {
 }
 // Rule: billed === true forces retries = 0. A step's return value must be JSON and < 64 KB; put bulk data in tables.
 
-// src/lib/spend/ (tables: spend_holds, spend_ledger, workspace_spend_limits, paid_feature_controls)
+// src/shared/spend/ (tables: spend_holds, spend_ledger, workspace_spend_limits, paid_feature_controls)
 export async function reserveSpend(i: { brandKey: string; feature: SpendFeature; estimateUsd: number; maxUsd?: number; jobId?: string; idempotencyKey: string }):
   Promise<{ holdId: string; existing: boolean }>;                 // throws SpendRefused { code: "feature_disabled" | "workspace_cap" | "daily_cap" | "over_approved_max" }
 // existing === true means the same (brandKey, idempotencyKey) is still held; metered() refuses it with 409 duplicate_paid_call.
@@ -121,16 +121,16 @@ export async function metered<T>(i: { brandKey: string; feature: SpendFeature; e
   call: () => Promise<{ value: T; actualUsd: number | null; provider: string; endpoint: string; billed: boolean }>): Promise<T>;
 // metered(): reserve → call → settle (or release if billed === false). Settles even if the caller's response is gone (keepAlive).
 
-// src/lib/cache/providerCache.ts
+// src/server/cache/providerCache.ts
 export async function cached<T>(i: { namespace: string; version: number; keyParts: unknown[]; ttlSeconds: number; schema: ZodType<T>; scope: "workspace" | "global"; brandKey?: string },
   fetcher: () => Promise<T>): Promise<{ value: T; hit: boolean; fetchedAt: string }>;
 // Key = sha256(namespace, version, stable-sorted keyParts, scope === "workspace" ? brandKey : ""). Soft TTL; schema-validated on read; invalid entries are refetched.
 
-// src/lib/llm/index.ts
+// src/server/llm/index.ts
 export async function llmObject<T>(i: { brandKey: string; feature: SpendFeature; schema: ZodType<T>; system: string; prompt: string; model?: string; maxUsd?: number; idempotencyKey: string }): Promise<{ object: T; usd: number | null; model: string }>;
 export async function llmText(i: { brandKey: string; feature: SpendFeature; system: string; prompt: string; model?: string; maxUsd?: number; idempotencyKey: string }): Promise<{ text: string; usd: number | null; model: string }>;
 
-// src/lib/features/flags.ts
+// src/server/features/flags.ts
 export function isFeatureEnabled(name: FeatureName, brandKey?: string): Promise<boolean>; // env FEATURE_<NAME>=on|off|allowlist + paid_feature_controls
 ```
 
@@ -146,7 +146,7 @@ export async function enqueueSystemJob(kind, payload, opts?: { dedupeKey?; singl
 defineJob(kind, handler, opts?: { payloadSchema?: ZodType; pollAfterSeconds?: number; deadlineSeconds?: number; maxInvocations?: number })
 export function definePeriodic(i: { name: string; everySeconds: number; run: (now: Date) => Promise<void> }): void; // advances next-run before running
 export function jobStepKey(ctx: { jobId: string }, stepName: string): string; // idempotencyKey for a paid call inside a job: `job:${ctx.jobId}:${stepName}`
-export const STEP: { SINGLE_ATTEMPT; READ_STEP; DB_STEP; LONG_PAID_STEP }; // `as const`; re-exported by src/lib/jobs/index.ts
+export const STEP: { SINGLE_ATTEMPT; READ_STEP; DB_STEP; LONG_PAID_STEP }; // `as const`; re-exported by src/server/jobs/index.ts
 // STEP presets: SINGLE_ATTEMPT = { retries: 0, timeoutMs: 120_000, billed: true }, READ_STEP = { retries: 2, timeoutMs: 120_000 },
 // DB_STEP = { retries: 3, timeoutMs: 60_000 }, LONG_PAID_STEP = { retries: 0, timeoutMs: 220_000, billed: true }.
 
@@ -157,7 +157,7 @@ export async function settleSpendBatch(holdId: string, costs: Array<{ actualUsd:
 
 // Errors
 new AppError(status, code, message, { recovery?, details?, cause? })   // error JSON may include "details"
-// src/lib/spend/errors.ts — provider-call outcome classes extend plain Error (not AppError):
+// src/shared/spend/errors.ts — provider-call outcome classes extend plain Error (not AppError):
 export class SpendRefused extends AppError { reason: "feature_disabled" | "workspace_cap" | "daily_cap" | "over_approved_max"; scope?: "feature" | "workspace"; limitUsd?: number }
 export class ChargedCallError extends Error { actualUsd: number; provider: string; endpoint: string; status?; code?; details? } // billed, then failed
 export class UnbilledCallError extends Error { status?; code?; details? }   // rejected before billing (validation)
@@ -168,9 +168,9 @@ export class AmbiguousCallError extends Error { status?; code?; details? }  // s
 
 ### 5.2 Additions fixed by the F02 spec
 
-- **Answer-engine fetchers** (ChatGPT/Gemini `llm_scraper`, AI Overview SERP, `llm_responses`) live only in `src/lib/providers/dataforseo/answers.ts`. They are called only from the claim path (`claim_probe_dispatch`), are **never** wrapped in `metered()`, and an import-guard test forbids other importers. Everything else in `src/lib/providers/dataforseo/` (labs, SERP, backlinks, on-page, business data) goes through `metered()` with F03's estimators.
+- **Answer-engine fetchers** (ChatGPT/Gemini `llm_scraper`, AI Overview SERP, `llm_responses`) live only in `src/shared/providers/dataforseo/answers.ts`. They are called only from the claim path (`claim_probe_dispatch`), are **never** wrapped in `metered()`, and an import-guard test forbids other importers. Everything else in `src/shared/providers/dataforseo/` (labs, SERP, backlinks, on-page, business data) goes through `metered()` with F03's estimators.
 - `dispatchIdentity`, `configVersion` and `circuitIdentity` accept an optional `{ route, model }`. Engine routing order comes from `ANSWER_ENGINE_ROUTES` (for example `dataforseo>openrouter`), chosen once per scan.
-- `withLeaseRenewal` is exported from `src/lib/db/probeDispatch.js`.
+- `withLeaseRenewal` is exported from `src/server/db/probeDispatch.js`.
 - DataForSEO costs are recorded with `cost_source: "gateway"`.
 - Claude is **not** an engine for now (owner decision, 25 October 2026). Do not add `claude` to any engine list, route, label, model picker or event enum. Ported OpenSEO code that only knows the `claude` slug stays verbatim and unused.
 
@@ -179,19 +179,19 @@ export class AmbiguousCallError extends Error { status?; code?; details? }  // s
 - SQL function `public.normalize_question_text(p text) RETURNS text` = `lower(btrim(regexp_replace(p, '\s+', ' ', 'g')))` (collapse whitespace, then trim, then lowercase). `workspace_questions.text_normalized` is a generated column using it.
 - `workspace_questions` also has `cohort text NOT NULL DEFAULT 'core' CHECK (cohort IN ('core'))`, the hook for the future locked-core + rolling model. Question text is immutable (trigger); edits archive and re-add.
 - Each prompt in a frozen panel snapshot carries its `question_id`.
-- `addWorkspaceQuestion(admin, { brandKey, text, origin, createdBy, status?, topic?, sourceRef?: { kind, id } }) → { question, created, revived }`, exported from `src/lib/questions/workspaceQuestions.ts` (import from there, not from `service.ts`). Accepts `origin 'import'` with `status 'archived'` for backfills. There is no `explore` origin; F11 uses `manual` with `sourceRef { kind: "explore_run", id }`.
+- `addWorkspaceQuestion(admin, { brandKey, text, origin, createdBy, status?, topic?, sourceRef?: { kind, id } }) → { question, created, revived }`, exported from `src/server/questions/workspaceQuestions.ts` (import from there, not from `service.ts`). Accepts `origin 'import'` with `status 'archived'` for backfills. There is no `explore` origin; F11 uses `manual` with `sourceRef { kind: "explore_run", id }`.
 - `<QuestionHistoryLink questionId>` lives at F12's path. F08 ships it first with `QUESTION_HISTORY_AVAILABLE = false`; F12 flips the constant to `true` without changing the file otherwise. It is rendered in question rows (F08) and the scan report.
 
 ### 5.5 Shared service modules (fixed by F07, F08, F10)
 
 | Module | Exports | Owner | Used by |
 |---|---|---|---|
-| `src/lib/projectContext/service.ts` | `appendResearch(admin, { brandKey, kind, researchKey?, summary, … })`, `findRecentResearch(admin, { brandKey, kind, researchKey, days? })` (90-day repeat-purchase check), `declaredCompetitors(admin, brandKey)`, `applyResolvedOps(admin, brand, ops, author, actorUserId)` (validates hand-built ops), `applyContextUpdates(admin, brand, updates, author, actorUserId)`, `getProjectContext(admin, brand)` / `getProjectContextByKey(admin, brandKey)`, `renderProjectContextMarkdown(context)` | F07 | F08, F13–F17 (log research purchases; F14 also writes competitors), F22 (digest + tools) |
-| `src/lib/projectContext/tools.ts`, `src/lib/questions/tools.ts` | Tool definitions for the F22 registry | F07, F08 | F22 |
+| `src/server/projectContext/service.ts` | `appendResearch(admin, { brandKey, kind, researchKey?, summary, … })`, `findRecentResearch(admin, { brandKey, kind, researchKey, days? })` (90-day repeat-purchase check), `declaredCompetitors(admin, brandKey)`, `applyResolvedOps(admin, brand, ops, author, actorUserId)` (validates hand-built ops), `applyContextUpdates(admin, brand, updates, author, actorUserId)`, `getProjectContext(admin, brand)` / `getProjectContextByKey(admin, brandKey)`, `renderProjectContextMarkdown(context)` | F07 | F08, F13–F17 (log research purchases; F14 also writes competitors), F22 (digest + tools) |
+| `src/server/projectContext/tools.ts`, `src/server/questions/tools.ts` | Tool definitions for the F22 registry | F07, F08 | F22 |
 | `src/shared/schedule.ts` | Schedule maths (intervals, next-run computation) | F10 | F15 |
-| `src/lib/schedules/runDue.ts` | Generic due-schedule runner on F01 `definePeriodic`; always advances, records skip reasons | F10 | F15 |
+| `src/server/schedules/runDue.ts` | Generic due-schedule runner on F01 `definePeriodic`; always advances, records skip reasons | F10 | F15 |
 | `ScheduleField` component (F10) | Schedule picker; optional props `allowManual`, `dailyNote` (needed by F15) | F10 | F15 |
-| `src/lib/pricing/firecrawl.ts` | `firecrawlScrapeUsd()` | F08 | F07, F18 |
+| `src/shared/pricing/firecrawl.ts` | `firecrawlScrapeUsd()` | F08 | F07, F18 |
 
 - Research purchases are logged with `appendResearch` using the spend-feature key as `kind` (for example `keywords.research`). The `kind` is validated against the `SpendFeature` union plus `"note"`, not free text, because a typo would silently miss `findRecentResearch` and the workspace would buy the same research twice.
 - The memory service is **not** gated on `project_memory`; only F07's page, routes and assistant tools are. Features log and read research history whatever the flag says (F07 §6.7).
@@ -200,11 +200,11 @@ export class AmbiguousCallError extends Error { status?; code?; details? }  // s
 
 | Module | Exports | Owner |
 |---|---|---|
-| `src/lib/tools/types.ts` | `ToolDefinition`, `ToolHandlerContext`, `ToolRegistration` (the contract every per-feature `tools.ts` implements) | F22 |
-| `src/lib/tools/names.ts` | `TOOL_NAMES`, `SKILL_TERMS` (declared tool vocabulary; F22 test asserts registry = names) | F21 |
-| `src/lib/tools/catalog*.ts` | Registration metadata per tool: gate, effect, approval/quote mapping, annotations, summary, deep link, untrusted paths, progress wait, test example | F22 |
-| `src/lib/tools/mcp.ts` | `toCallToolResult()` (text + `structuredContent` + meta), `toMcpToolDescriptors()`; no server | F22 |
-| `src/lib/assistant/kickoffKinds.ts` | `registerKickoff()` (start an assistant run from a button, e.g. "Generate report") | F22 |
+| `src/server/tools/types.ts` | `ToolDefinition`, `ToolHandlerContext`, `ToolRegistration` (the contract every per-feature `tools.ts` implements) | F22 |
+| `src/server/tools/names.ts` | `TOOL_NAMES`, `SKILL_TERMS` (declared tool vocabulary; F22 test asserts registry = names) | F21 |
+| `src/server/tools/catalog*.ts` | Registration metadata per tool: gate, effect, approval/quote mapping, annotations, summary, deep link, untrusted paths, progress wait, test example | F22 |
+| `src/server/tools/mcp.ts` | `toCallToolResult()` (text + `structuredContent` + meta), `toMcpToolDescriptors()`; no server | F22 |
+| `src/server/assistant/kickoffKinds.ts` | `registerKickoff()` (start an assistant run from a button, e.g. "Generate report") | F22 |
 | `src/assistant/skills/<name>/SKILL.md` + `manifest.generated.ts` | Skills with frontmatter `version`, `source`, `tools`, `optional_tools`, `requires_flags`, `internal`; manifest built and checked at `prebuild` | F21 |
 
 - **Paid or external tools never run inside the model loop.** They create an `assistant_approvals` row priced with an F09 quote; the customer approves in the chat; the server re-quotes, claims the row and runs once.
@@ -216,9 +216,9 @@ export class AmbiguousCallError extends Error { status?; code?; details? }  // s
 
 | Module | Exports | Owner |
 |---|---|---|
-| `src/lib/auth/requireUser.ts` | Signed-in user without a workspace (shared by F25 and F26; whichever PR lands second keeps it unchanged) | F25/F26 |
-| `src/lib/telemetry/events.ts` | Typed registry of every product event; names use `area:action` (e.g. `prompt_explorer:run`); a test refuses free-text properties | F26 |
-| `src/lib/telemetry/context.ts` | Server-event identity; called by `requireWorkspace` and the F01 job runner | F26 |
+| `src/server/auth/requireUser.ts` | Signed-in user without a workspace (shared by F25 and F26; whichever PR lands second keeps it unchanged) | F25/F26 |
+| `src/shared/telemetry/events.ts` | Typed registry of every product event; names use `area:action` (e.g. `prompt_explorer:run`); a test refuses free-text properties | F26 |
+| `src/shared/telemetry/context.ts` | Server-event identity; called by `requireWorkspace` and the F01 job runner | F26 |
 | Email outbox + Loops client | Every email is an outbox row with a unique key, delivered by an F01 job | F25 |
 
 - Disposable-email blocking is a Supabase "Before User Created" Auth hook (migration 155), not a route check. Captcha is Supabase's built-in Turnstile.
@@ -230,9 +230,9 @@ export class AmbiguousCallError extends Error { status?; code?; details? }  // s
 
 | Module | Exports |
 |---|---|
-| `src/lib/research/cache.ts` | `peekCached()` (cache-only read), `cachedIf()` (write only when there is data) |
-| `src/lib/research/providerErrors.ts` | `toResearchError()` |
-| `src/lib/providers/dataforseo/{labs,google-ads,keyword-metrics,filters,researchScopeFilters,serp-locations,backlinks,backlinksTarget}.ts` | Ported DataForSEO section modules (non-answer endpoints, all through `metered()`) |
+| `src/server/research/cache.ts` | `peekCached()` (cache-only read), `cachedIf()` (write only when there is data) |
+| `src/server/research/providerErrors.ts` | `toResearchError()` |
+| `src/shared/providers/dataforseo/{labs,google-ads,keyword-metrics,filters,researchScopeFilters,serp-locations,backlinks,backlinksTarget}.ts` | Ported DataForSEO section modules (non-answer endpoints, all through `metered()`) |
 | `src/shared/keyword-locations.ts`, route `GET /api/customer/keywords/locations` (gated on `keyword_research` OR `rank_tracking` OR `local_seo`) | Location option lists for `CountryCombobox` / `LocationSelect`; F15 and F17 import these instead of re-porting |
 | `src/components/app/cost/PricedActionButton.tsx` | Button that shows the price and approves inline |
 | `buildDomainResearchHref({ domain, preset })` | Deep link into Domain overview (F14); preset `striking_distance` = ranks 4–20 by volume (used by F27) |
@@ -255,11 +255,11 @@ Rules:
 
 | Module | Exports | Owner |
 |---|---|---|
-| `src/lib/features/clientFeatures.ts` | `CLIENT_FEATURES`, `readClientFeatures()`; route `GET /api/customer/features?brand_key=` → `{ brandKey, features }` | F04 |
-| `src/lib/theme/theme.ts` | `APP_SURFACES` (append-only registry of app paths that use the app theme and dark mode), `surfaceForPath()`, `buildThemeInitScript()` | F04 |
-| `src/lib/query/keys.ts` | Query-key factories. Rule: workspace data `[domain, brandKey, …]`; id-addressed records `[domain, id]` | F05 |
-| `src/lib/query/fetchJson.ts` | `fetchJson()`, `ApiError`, `withBrand()`, `setUnauthorizedHandler()` | F05 |
-| `src/lib/query/errors.ts` | `describeError()`, `isSpendRefused()` | F05 |
+| `src/server/features/clientFeatures.ts` | `CLIENT_FEATURES`, `readClientFeatures()`; route `GET /api/customer/features?brand_key=` → `{ brandKey, features }` | F04 |
+| `src/shared/theme/theme.ts` | `APP_SURFACES` (append-only registry of app paths that use the app theme and dark mode), `surfaceForPath()`, `buildThemeInitScript()` | F04 |
+| `src/shared/query/keys.ts` | Query-key factories. Rule: workspace data `[domain, brandKey, …]`; id-addressed records `[domain, id]` | F05 |
+| `src/shared/query/fetchJson.ts` | `fetchJson()`, `ApiError`, `withBrand()`, `setUnauthorizedHandler()` | F05 |
+| `src/shared/query/errors.ts` | `describeError()`, `isSpendRefused()` | F05 |
 | `src/components/app/workspace/WorkspaceContext.tsx` | `useWorkspace()` | F05 |
 | `src/components/app/` | `PageHeader`, `QueryState`, `EmptyState`, `ErrorState`, `Markdown` (+ `MARKDOWN_COMPONENTS`), `ExpandableList`, `CountryCombobox`/`LocationSelect` (take `options` as a required prop) | F04 |
 | `src/components/ui/` | shadcn base-nova primitives incl. `card`, `button`, `badge`, `skeleton`, `progress`, `table`, `tooltip`, `select`, `alert`, `dialog` (`DialogContent fullScreenOnMobile`), `sheet`, `chart`, `sidebar` | F04 |
@@ -270,10 +270,10 @@ Rules:
 - Feature visibility in the client comes from `/api/customer/features`, not from extra fields on other routes.
 - Existing portal pages stay `.jsx`; `ui.jsx` is re-skinned with the same exports (F04 parity test).
 
-- Feature flag names are registered in `src/lib/features/names.ts`, each with its linked spend features.
-- Price estimators live in `src/lib/pricing/<provider>.ts` (F03). Provider clients bind to them; they do not define their own prices.
-- Modules under `src/lib/**` use **relative imports with explicit file extensions**, never the `@/` alias, so `node --test` can load them. `@/` is fine in `src/app/**` and `src/components/**`.
-- Route contracts live in `src/lib/<feature>/*.contract.ts`: requests use `z.strictObject`, responses `z.looseObject`, and export `contracts: RouteContract[]`.
+- Feature flag names are registered in `src/server/features/names.ts`, each with its linked spend features.
+- Price estimators live in `src/shared/pricing/<provider>.ts` (F03). Provider clients bind to them; they do not define their own prices.
+- Modules under `src/server/**` and `src/shared/**` use **relative imports with explicit file extensions**, never the `@/` alias, so `node --test` can load them. `@/` is fine in `src/app/**` and `src/components/**`.
+- Route contracts live in `src/server/<feature>/*.contract.ts`: requests use `z.strictObject`, responses `z.looseObject`, and export `contracts: RouteContract[]`.
 - Priced actions register with F09's registry (F09 §6.2.5) so the estimate → confirm → run dialog and the `409 price_changed` refusal work the same everywhere.
 - Every provider result carries `provenance.gateway` (which provider actually served it).
 
@@ -287,7 +287,7 @@ Rules:
 6. **Secrets hygiene from `CLAUDE.md`.** Add new variable *names* to `.env.example` only; never print values; exclude `.env*` from recursive searches.
 7. **SSRF.** Any server-side fetch of a customer-supplied URL uses F01's `safeFetch()` (ported from `openseo:src/server/lib/url-policy.ts`): blocks private ranges and cloud metadata hosts, resolves DNS before connecting, caps redirects and body size.
 8. **Tenant isolation.** Every customer table has `brand_key text NOT NULL REFERENCES public.customer_brands(brand_key) ON DELETE CASCADE`, RLS enabled, and a read policy `USING (public.customer_can_access_brand(brand_key))`. Writes go through routes using the service-role client after `requireWorkspace()`. Workers use the service role and always filter by `brand_key`.
-9. **Privacy.** Raw provider payloads containing answer text follow the existing evidence rules (`src/lib/evidenceRedaction.js`, private Storage, signed URLs). Do not log answer bodies, cookies or headers.
+9. **Privacy.** Raw provider payloads containing answer text follow the existing evidence rules (`src/server/evidenceRedaction.js`, private Storage, signed URLs). Do not log answer bodies, cookies or headers.
 10. **Honest numbers.** Show "x of y" denominators, keep measured zero distinct from unknown, and never draw missing data as zero. These are existing Perceev rules and match OpenSEO's.
 
 ## 7. Repository layout for new code
@@ -297,12 +297,12 @@ Rules:
 | Customer API routes | `src/app/api/customer/<feature>/.../route.ts` |
 | Cron / tick routes | `src/app/api/jobs/tick/route.ts` (F01); feature crons register job kinds instead of new routes |
 | Portal pages | `src/app/portal/<area>/.../page.tsx` |
-| Server logic | `src/lib/<feature>/` (services, repositories, provider adapters) |
-| Provider clients | `src/lib/providers/<provider>/` |
+| Server logic | `src/server/<feature>/` (services, repositories, provider adapters) |
+| Provider clients | `src/shared/providers/<provider>/` |
 | UI primitives (shadcn base-nova) | `src/components/ui/` |
 | Shared app components | `src/components/app/` (PageHeader, EmptyState, QueryState, ExportMenu, …) |
 | Feature UI | `src/components/portal/<feature>/` |
-| Client hooks / query keys | `src/components/portal/<feature>/hooks/` and `src/lib/query/keys.ts` |
+| Client hooks / query keys | `src/components/portal/<feature>/hooks/` and `src/shared/query/keys.ts` |
 | Shared types and pure logic used by client and server | `src/shared/<feature>.ts` |
 | Fixtures | `tests/fixtures/<feature>/` |
 | Live QA scripts | `scripts/qa/check-<feature>.mjs` |
@@ -329,13 +329,13 @@ Rules:
 
 | Layer | Tool | Location |
 |---|---|---|
-| Pure logic, adapters, services | `node --test` with `--import ./src/lib/liveWriteGuardAuto.mjs` | Next to the module: `*.test.mjs` / `*.test.ts` |
-| Route handlers | Existing hook pattern (`src/lib/customerRoutes.test.hooks.mjs`) | `src/lib/<feature>/*.route.test.mjs` |
+| Pure logic, adapters, services | `node --test` with `--import ./src/server/liveWriteGuardAuto.mjs` | Next to the module: `*.test.mjs` / `*.test.ts` |
+| Route handlers | Existing hook pattern (`src/server/customerRoutes.test.hooks.mjs`) | `src/server/<feature>/*.route.test.mjs` |
 | SQL, RLS, jobs | Real disposable Postgres via `scripts/qa/check-repair-workflows.mjs` pattern (loopback, DB name ending `_qa`) | `scripts/qa/check-<feature>-db.mjs` or a new group in the existing harness |
 | UI | Playwright from `worker/node_modules/playwright` against a locally started app with fixture APIs | `scripts/qa/check-<feature>-browser.mjs` |
 | Live provider | Bounded, owner-approved only | `scripts/qa/check-<feature>-live.mjs` |
 
-Full suite command: `node --import ./src/lib/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'` (glob widened by F01). Build: `npm run build`.
+Full suite command: `node --import ./src/server/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'` (glob widened by F01). Build: `npm run build`.
 
 ## 11. PR rules
 
@@ -383,7 +383,7 @@ F04 builds the sidebar from a registry in `src/components/app/navigation/items.t
 
 Registry entries support `flag`, `ownerOnly`, `badge`, `activePrefixes` and `prefetch`. Settings sections register in `src/components/portal/settings/tabs.ts`. `/ops/*` pages sit outside the customer sidebar and use app tokens in light mode only. The portal has its own `not-found` and `error` pages (F04).
 
-Each feature also registers its PostHog events in `src/lib/telemetry/events.ts` (F26; `src/lib/analytics/` already holds visibility metrics, so product analytics lives under `telemetry/`) and its job kinds in `src/lib/jobs/kinds.ts` (F01).
+Each feature also registers its PostHog events in `src/shared/telemetry/events.ts` (F26; `src/shared/analytics/` already holds visibility metrics, so product analytics lives under `telemetry/`) and its job kinds in `src/server/jobs/kinds.ts` (F01).
 
 ## 13. Glossary
 

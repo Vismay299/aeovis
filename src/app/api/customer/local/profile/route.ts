@@ -1,6 +1,6 @@
-import { profileBody } from "../../../../../lib/local/local.contract.ts";
-import { lookupBusinessProfile } from "../../../../../lib/local/profile.ts";
-import { approve, gate, jsonOk, parseBody, respond, type LocalRouteDeps } from "../../../../../lib/local/routeKit.ts";
+import { profileBody } from "../../../../../server/local/local.contract.ts";
+import { lookupBusinessProfile } from "../../../../../server/local/profile.ts";
+import { approve, gate, jsonOk, parseBody, respond, type LocalRouteDeps } from "../../../../../server/local/routeKit.ts";
 
 export const dynamic = "force-dynamic";
 

@@ -12,7 +12,7 @@ import { EmptyState } from "@/components/app/EmptyState";
 import { PageFrame } from "@/components/app/PageFrame";
 import { QueryError } from "@/components/app/QueryState";
 import { copyList } from "@/components/app/export/useExportRows";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import type { SavedKeywordRow } from "@/shared/keywords";
 import { SavedKeywordsBulkActionBar } from "./SavedKeywordsBulkActionBar";
 import { GroupTopicsDialog } from "./GroupTopicsDialog";

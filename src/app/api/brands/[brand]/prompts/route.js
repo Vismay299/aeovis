@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getPromptsForBrand, upsertPrompts } from "@/lib/db/prompts";
-import { normalizeTopic } from "@/lib/scoring/topics";
+import { getPromptsForBrand, upsertPrompts } from "@/server/db/prompts";
+import { normalizeTopic } from "@/shared/scoring/topics";
 
 export async function GET(request, { params }) {
   params = await params;

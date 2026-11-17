@@ -4,8 +4,8 @@ import { useEffect, useId, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { Banner, Button, Card } from "../ui";
 import { PLAYBOOK_OPTIONS, contentRequest, cx } from "./shared";
-import { FORMATS } from "@/lib/content/agents/formats";
-import { trackEvent } from "@/lib/telemetry/client";
+import { FORMATS } from "@/shared/content/agents/formats";
+import { trackEvent } from "@/shared/telemetry/client";
 
 const TOPIC_MAX = 300;
 const BRIEF_MAX = 8000;

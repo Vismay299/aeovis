@@ -1,11 +1,11 @@
-import { AppError } from "../../../../../../lib/http/appError.ts";
-import { jsonOk, toErrorResponse } from "../../../../../../lib/http/errors.ts";
+import { AppError } from "../../../../../../shared/http/appError.ts";
+import { jsonOk, toErrorResponse } from "../../../../../../shared/http/errors.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../../lib/workspace/requireWorkspace.ts";
-import { getQuestionHistory, type HistoryDeps } from "../../../../../../lib/questions/history/history.ts";
-import { historyParams, historyQuery } from "../../../../../../lib/questions/history/history.contract.ts";
+} from "../../../../../../server/workspace/requireWorkspace.ts";
+import { getQuestionHistory, type HistoryDeps } from "../../../../../../server/questions/history/history.ts";
+import { historyParams, historyQuery } from "../../../../../../server/questions/history/history.contract.ts";
 
 export const dynamic = "force-dynamic";
 

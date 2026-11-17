@@ -43,7 +43,7 @@ say so plainly wherever it is relevant, and do not soften it.
 idiom for every search tool, what is safe to read, and what to do if a secret
 appears anyway — lives in `CLAUDE.md` § "Secrets hygiene", which every session
 and every agent in this project loads. It binds you exactly as if it were
-written here. `src/lib/agentSecretsGuard.test.mjs` fails if this pointer or
+written here. `src/server/agentSecretsGuard.test.mjs` fails if this pointer or
 that section goes missing.
 
 ## The artifacts

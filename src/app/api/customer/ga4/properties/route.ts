@@ -1,10 +1,10 @@
-import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { listPropertiesForUser } from "../../../../../lib/ga4/connection.ts";
-import { getConnection } from "../../../../../lib/ga4/connection.ts";
-import { ga4PropertiesQuery } from "../../../../../lib/ga4/ga4.contract.ts";
+import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { listPropertiesForUser } from "../../../../../server/ga4/connection.ts";
+import { getConnection } from "../../../../../server/ga4/connection.ts";
+import { ga4PropertiesQuery } from "../../../../../server/ga4/ga4.contract.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

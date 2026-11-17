@@ -18,7 +18,7 @@
 | Allowed types | `image/png`, `application/gzip`, `text/html` |
 | Access | anon-key policies on `storage.objects` scoped to this bucket: insert, select, delete |
 | Retention | **90 days**, by cron `GET /api/evidence/retention` daily 03:00 UTC |
-| Code | `src/lib/evidenceRetention.js`, `src/app/api/evidence/retention/route.js` |
+| Code | `src/server/evidenceRetention.js`, `src/app/api/evidence/retention/route.js` |
 
 ### Object layout (convention for R1.5.2 writers)
 
@@ -40,7 +40,7 @@ that `prompt_results` row, or a plain-text refusal. `kind` is one of
 
 | | |
 |---|---|
-| Expiry | **120 s** — `EVIDENCE_SIGNED_URL_TTL_SECONDS`, `src/lib/evidenceSignedUrl.js`, the only place the number is written |
+| Expiry | **120 s** — `EVIDENCE_SIGNED_URL_TTL_SECONDS`, `src/server/evidenceSignedUrl.js`, the only place the number is written |
 | Route | `src/app/api/scan/[job_id]/evidence/route.js` |
 | UI | "View evidence" in `src/components/dashboard/AnswersView.jsx` (`evidenceScreenshotHref`) |
 
@@ -65,7 +65,7 @@ Refusals, all plain text, never a fabricated URL:
 | Supabase not configured on the deployment | 503 |
 
 **Perimeter:** the same one `GET /api/scan/<job_id>/status` has. It is on the
-anonymous free-scan allowlist in `src/lib/operatorPerimeter.js` (GET only), next
+anonymous free-scan allowlist in `src/server/operatorPerimeter.js` (GET only), next
 to the status poll and the `/api/scans/...` reads, because the dashboard that
 renders the link is anonymous and can already fetch the TEXT of the answer this
 is a screenshot of. The entry cost is knowing the brand, not holding a job

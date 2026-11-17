@@ -89,7 +89,7 @@ That was the locked pragmatism call and it stands.
    No new infra.
 7. **Agent prompts are authored as skill-style markdown files, not inline strings.**
    Pattern taken from the Claude skills ecosystem (claude-seo pack / Amadora
-   playbook): each step×playbook gets `src/lib/content/skills/<step>.<playbook>.md`
+   playbook): each step×playbook gets `src/shared/content/skills/<step>.<playbook>.md`
    with YAML frontmatter (name, playbook, inputs, output JSON schema) and a body
    containing the workflow, a **weighted rubric with strong/weak signal lists and
    hard thresholds**, and 1–2 worked examples. The runtime loads + interpolates
@@ -189,7 +189,7 @@ the rest of the app — auth is a later, separate workstream).
 
 ## 3. Phases
 
-### Phase 1 — Pipeline engine (`src/lib/content/`)
+### Phase 1 — Pipeline engine (`src/shared/content/`)
 
 - `contentWorker.js` — `startContentJob(jobId)`, fire-and-forget, status writes,
   identical shape to `scanWorker.js`. Steps run sequentially; every step's output

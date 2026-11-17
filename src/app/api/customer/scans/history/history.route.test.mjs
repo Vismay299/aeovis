@@ -8,7 +8,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { register } from "node:module";
 
-register(new URL("../../../../../lib/customerRoutes.test.hooks.mjs", import.meta.url));
+register(new URL("../../../../../server/customerRoutes.test.hooks.mjs", import.meta.url));
 
 const ROUTE = await import(new URL("./route.ts", import.meta.url).href);
 

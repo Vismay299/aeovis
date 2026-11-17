@@ -41,7 +41,7 @@ Explored via list_dir, read_file (all major files), grep, sqlite inspection, red
 - `/scan` page: form (brand, website, industry select from `/api/industries`). Progress stages during run. Validates + calls API. Recent sample buttons.
 - `/api/scan` (POST): 
   - Takes brand/url/industry + (ignored) competitors.
-  - Pulls **3 static prompts** from `src/data/industries.js` (SaaS/Ecom/Finance only; e.g. "best project management software...").
+  - Pulls **3 static prompts** from `src/shared/industries.js` (SaaS/Ecom/Finance only; e.g. "best project management software...").
   - For each: appends brand context → sequential `generateContent` (Gemini) → crude JS analysis (`analyzeResponse`).
   - Analysis: `includes(brandLower)` for mentioned, relative index for position ("recommended"/"compared"/"cited"), word-list sentiment, competitor string matches.
   - Computes visibility_pct, stores raw results.
@@ -132,12 +132,12 @@ But it assumes:
 
 **To understand/reuse**:
 - `docs/aeo-visibility-tracker-mvp-implementation-document-v1.md` (the target to refine; original root copy was removed after organizing into docs/)
-- `src/app/api/scan/route.js` + `src/lib/gemini.js`
-- `src/data/industries.js` (will be replaced/supplemented by dynamic gen)
-- `src/services/api.js` (normalization, runScan)
+- `src/app/api/scan/route.js` + `src/shared/gemini.js`
+- `src/shared/industries.js` (will be replaced/supplemented by dynamic gen)
+- `src/shared/api.js` (normalization, runScan)
 - `src/app/scan/page.js`, `src/app/dashboard/page.js`
 - Dashboard components: `KpiCard.jsx`, `TopPromptsTable.jsx`, `CompetitorTable.jsx`, `InsightPanel.jsx`
-- `src/utils/format.js`, `src/lib/db.js`
+- `src/shared/format.js`, `src/server/db.js`
 - `src/app/page.js` + `DashboardPreview.jsx` (preserve brand voice)
 
 **Later targets** (examples): add prompt gen service, expand /api, new dashboard tabs or pages per doc IA, Supabase schema/migrations if needed, etc.
@@ -249,7 +249,7 @@ A working Next.js prototype already exists with:
 - Strong design system (serif + sans, #D9531E accent, clean cards, data-testid coverage).
 
 **Current limitations (the gaps this plan closes first)**:
-- Prompts are static + generic (only 3 per industry in `src/data/industries.js`).
+- Prompts are static + generic (only 3 per industry in `src/shared/industries.js`).
 - No website content analysis or brand-specific prompt generation.
 - Crude string-match analysis (no citations, weak position/sentiment).
 - No persistence of multiple runs, no trends, no brand entities.

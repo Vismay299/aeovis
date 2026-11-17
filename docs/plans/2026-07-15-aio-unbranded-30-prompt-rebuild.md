@@ -79,7 +79,7 @@ POST /api/scan → createScanJob → startScanJob(jobId, brand, url, industry, c
 
 ## Phase 1 — OpenRouter client + unified JSON helper
 
-**New `src/lib/openrouter.js`** — mirror `gemini.js`'s `generateContent(prompt, options, retries)`
+**New `src/server/openrouter.js`** — mirror `gemini.js`'s `generateContent(prompt, options, retries)`
 returning `{ text, model_used, tokens, cost }` so callers stay swappable. Details:
 - `getOpenRouterModel()` → `process.env.OPENROUTER_MODEL || "google/gemma-4-31b-it:free"`.
 - POST to `https://openrouter.ai/api/v1/chat/completions` with `Authorization: Bearer $OPENROUTER_API_KEY`,
@@ -91,7 +91,7 @@ returning `{ text, model_used, tokens, cost }` so callers stay swappable. Detail
 - Export `robustJsonParse(text)`: strip ```` ```json ```` fences, `JSON.parse`; on failure scan for the
   first balanced `[`/`{` … matching close and parse that slice; else `null`.
 
-**New `src/lib/llm.js`** — the single choke-point for all gen/extraction:
+**New `src/server/llm.js`** — the single choke-point for all gen/extraction:
 ```js
 import { generateContent, robustJsonParse } from "./openrouter.js";
 export async function llmJson(prompt, options = {}, jsonRetries = 2) {
@@ -110,7 +110,7 @@ export async function llmJson(prompt, options = {}, jsonRetries = 2) {
 
 ## Phase 2 — Guarantee exactly 30 unbranded prompts
 
-**New `src/lib/scoring/promptGen.js`** exporting
+**New `src/shared/scoring/promptGen.js`** exporting
 `generateUnbrandedPrompts(brand, website, industry, stats, count = 30)` → returns **exactly
 `count`** unbranded query objects `{ text, topic, intent_tier, source }` or **throws** a clear error.
 
@@ -144,7 +144,7 @@ helpers in `aioQueryClassify.js` stay for later re-enable.
 
 ## Phase 3 — Geo = India + extraction robustness
 
-**`src/lib/engines/brightdata.js`**
+**`src/shared/engines/brightdata.js`**
 - `buildGoogleSearchUrl` (line 58): default `geo = "in"`.
 - `brightDataSearch` (line 77): `const geo = process.env.SERP_GEO || "in";`. `hl:"en"`, `gl:geo`,
   and `country: geo` in the POST body are already wired (lines 63, 100) — just confirm.
@@ -164,7 +164,7 @@ OPENROUTER_MODEL=google/gemma-4-31b-it:free
 
 ## Phase 4 — Competitor extraction via one batched LLM call
 
-**New `src/lib/scoring/competitorExtract.js`**:
+**New `src/shared/scoring/competitorExtract.js`**:
 - `extractCompetitors({ results, brand, brandUrl, userCompetitors = [], stats, max = 10 })`:
   filter to `!is_branded_query && aio_present`; join `aio_text` (cap ~12k chars) + unique cited
   domains from `aio_references[].domain`; one `llmJson` call asking for competitor/alternative
@@ -204,7 +204,7 @@ Keep `visibility_pct` as-is (client reads that key). Add a comment block stating
 - `aio_coverage_pct` = `queries_with_aio ÷ 30`
 - `presence_rate_pct` = `visible ÷ 30`
 
-**`src/lib/scoring/aioConstants.js`** — India AIO coverage is lower/volatile:
+**`src/shared/scoring/aioConstants.js`** — India AIO coverage is lower/volatile:
 ```
 AIO_MIN_NON_BRANDED_COVERAGE = 0.15   // was 0.30
 AIO_COVERAGE_WARNING_PCT     = 30     // was 50
@@ -216,7 +216,7 @@ numbers flagged "treat with caution" rather than hiding them.
 
 ---
 
-## Phase 6 — Rewire the worker (`src/lib/workers/scanWorker.js`)
+## Phase 6 — Rewire the worker (`src/server/workers/scanWorker.js`)
 
 Collapse to the unbranded-only flow:
 1. Delete the branded-injection block (lines ~108-149) and the `mergeQueryLists` / branded-reduce
@@ -242,7 +242,7 @@ Collapse to the unbranded-only flow:
 
 ## Phase 7 — Frontend contract (labels + fields, no redesign)
 
-**`src/services/api.js` `normalizeResult`** — surface `shareOfAiPct` (= `visibility_pct`, the hero),
+**`src/shared/api.js` `normalizeResult`** — surface `shareOfAiPct` (= `visibility_pct`, the hero),
 `aioCoveragePct`, `presenceRatePct`, `queriesWithAio` (`summary.non_branded_with_aio`),
 `promptsTracked` (30), `visibleCount` (`summary.visible_non_branded`). Because the pipeline now
 emits all three consistent metrics, prefer `summary_stats` values and **stop** the client-side
@@ -264,8 +264,8 @@ inventing a different denominator — trust the summary.
 
 ## Phase 8 — Tests (offline, `node --test`, `*.test.mjs`)
 
-**Placement matters:** the `test:scoring` script globs only `src/lib/scoring/**` and
-`src/lib/engines/**`. Put **all** new tests under `src/lib/scoring/` (or widen the npm glob to
+**Placement matters:** the `test:scoring` script globs only `src/shared/scoring/**` and
+`src/shared/engines/**`. Put **all** new tests under `src/shared/scoring/` (or widen the npm glob to
 include `src/lib/*.test.mjs`). Mock the network by stubbing the provider modules — no live keys.
 
 1. `openrouter.test.mjs` — `robustJsonParse`: clean JSON, code-fenced, JSON-in-prose,
@@ -313,11 +313,11 @@ layer left pluggable). Auth / multi-tenancy. Deleting dead legacy (`engines/open
 `perplexity.js`, `bayesian.js`, `computeVisibilityScore.js`, `coMentions.js`) — safe to leave.
 
 ## Key files
-- **New:** `src/lib/openrouter.js`, `src/lib/llm.js`, `src/lib/scoring/promptGen.js`,
-  `src/lib/scoring/competitorExtract.js`, Phase-8 `*.test.mjs` (under `src/lib/scoring/`).
-- **Edit:** `src/lib/engines/brightdata.js` (geo), `src/lib/scoring/aioPipeline.js`
-  (summarize sub-metrics), `src/lib/scoring/aioConstants.js` (gates),
-  `src/lib/workers/scanWorker.js` (rewire), `src/services/api.js` + `src/app/dashboard/page.js` +
+- **New:** `src/server/openrouter.js`, `src/server/llm.js`, `src/shared/scoring/promptGen.js`,
+  `src/shared/scoring/competitorExtract.js`, Phase-8 `*.test.mjs` (under `src/shared/scoring/`).
+- **Edit:** `src/shared/engines/brightdata.js` (geo), `src/shared/scoring/aioPipeline.js`
+  (summarize sub-metrics), `src/shared/scoring/aioConstants.js` (gates),
+  `src/server/workers/scanWorker.js` (rewire), `src/shared/api.js` + `src/app/dashboard/page.js` +
   `src/components/dashboard/KpiCard.jsx` (labels/fields), `.env.example`.
 - **Retire from live path (keep on disk):** `coMentions.js`, `buildAioQueries`/`deriveCategorySeeds`
   in `aioPrompts.js`, `computeCompetitorAioMetrics` in `aioPipeline.js`.

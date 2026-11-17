@@ -1,9 +1,9 @@
-import { requireWorkspace } from "../../../../../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../../../../lib/workspace/requireWorkspace.ts";
-import { AppError, toErrorResponse } from "../../../../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../../../../lib/features/flags.ts";
-import { getLighthouseDetail } from "../../../../../../../../lib/audit/results.ts";
-import { buildLighthouseExportFile, LIGHTHOUSE_CATEGORIES } from "../../../../../../../../lib/audit/lighthousePayload.ts";
+import { requireWorkspace } from "../../../../../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../../../../../server/workspace/requireWorkspace.ts";
+import { AppError, toErrorResponse } from "../../../../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../../../../server/features/flags.ts";
+import { getLighthouseDetail } from "../../../../../../../../server/audit/results.ts";
+import { buildLighthouseExportFile, LIGHTHOUSE_CATEGORIES } from "../../../../../../../../server/audit/lighthousePayload.ts";
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ auditId: string; resultId: string }> | { auditId: string; resultId: string } };
 export type AuditLighthouseExportRouteDeps = RequireWorkspaceDeps & {

@@ -47,7 +47,7 @@ write-up of what the AI Overview probing problem requires.
 
 | | |
 |---|---|
-| Integration | [`src/lib/engines/brightdata.js`](../../src/lib/engines/brightdata.js) |
+| Integration | [`src/shared/engines/brightdata.js`](../../src/shared/engines/brightdata.js) |
 | Credential | `BRIGHTDATA_API_KEY` — read at `brightdata.js:137` |
 | Zone | `BRIGHTDATA_SERP_ZONE` if set (`brightdata.js:141-142`), else auto-discovered |
 | Discovery | `GET https://api.brightdata.com/zone/get_all_zones` (`brightdata.js:156`), first `type: "serp"` **and** `status: "active"` zone (`:175-177`) |
@@ -121,7 +121,7 @@ there. Summarised:
   HTTP error body (`:397-398`) and the HTTP **200** envelope (`:441-447`).
 - **A rejected probe stays an error row.** It must never become a skip with
   `cost: 0.0` — that is the R0.1.10 failure —
-  and `src/lib/engines/brightdataZone.test.mjs:334` pins it at
+  and `src/shared/engines/brightdataZone.test.mjs:334` pins it at
   `errored_queries: 1`, `error_rate_pct: 100`.
 
 **This replaced a cache that was a bare module-level string with no invalidator**
@@ -131,7 +131,7 @@ documents that still said it were corrected under R1.2.9 — one of them the
 `check:secrets` operator string itself.
 
 Behavioural pins, all resolving at `49fe39e`, in
-`src/lib/engines/brightdataZone.test.mjs`: `:66` (configured zone
+`src/shared/engines/brightdataZone.test.mjs`: `:66` (configured zone
 short-circuits), `:84` (fallback to the first active zone), `:101` (cached within
 the TTL, re-checked once it expires), `:167` (the TTL as a wall clock, not just
 the `0` case), `:198` (the invalidator and its `null` return), `:232` (malformed
@@ -189,7 +189,7 @@ Both directions. An ADR that lists only benefits is not an ADR.
   `BRIGHTDATA_API_KEY` and nothing else; `README.md:93` documents
   `BRIGHTDATA_SERP_ZONE`; and **`BRIGHTDATA_ZONE_TTL_MS` appears in neither** —
   at `49fe39e` it exists only in `scripts/check-secrets.mjs`,
-  `src/lib/engines/brightdata.js` and `src/lib/engines/brightdataZone.test.mjs`.
+  `src/shared/engines/brightdata.js` and `src/shared/engines/brightdataZone.test.mjs`.
   An operator can change how long a dead zone is reused, using a variable no
   operator-facing surface names.
 
@@ -216,15 +216,15 @@ Both directions. An ADR that lists only benefits is not an ADR.
   never calls the invalidator. Every process that runs today is such a process:
   at `49fe39e` the exported `invalidateBrightDataZoneCache` has **no consumer
   outside `brightdata.js` itself** — the only external call sites are in
-  `src/lib/engines/brightdataZone.test.mjs` (`:206`, `:218`, `:223`, `:253`), and
+  `src/shared/engines/brightdataZone.test.mjs` (`:206`, `:218`, `:223`, `:253`), and
   the two other files that name the symbol
-  (`scripts/check-secrets.mjs:178`, `src/lib/checkSecretsBrightdataNoZone.test.mjs:21`)
+  (`scripts/check-secrets.mjs:178`, `src/server/checkSecretsBrightdataNoZone.test.mjs:21`)
   only mention it in prose. The R1.2 fleet that would call it once per poll cycle
   is not built: `worker/src/lib/probe.js:26-30` still throws *"probeBatch: no
   adapter is built yet (R1.3)"*. **The TTL, not the invalidator, is what bounds
   staleness in production today.**
 - **The sourcing path swallows a zone rejection.** `fetchPeopleAlsoAsk`
-  (`src/lib/engines/serp.js:312`) calls `brightDataSearch` at `:325` and catches
+  (`src/shared/engines/serp.js:312`) calls `brightDataSearch` at `:325` and catches
   everything at `:352-354` with a `console.warn`, returning `[]`. A typed
   `BrightDataZoneError` is not distinguished from a timeout. So a dead zone
   during prompt sourcing degrades silently to "PAA found nothing": the prompt set
@@ -246,17 +246,17 @@ the three entries in the correction log.
 
 ### 1. Bright Data is what runs when `BRIGHTDATA_API_KEY` is set
 
-- `src/lib/engines/serp.js:14` — `if (getBrightDataApiKey()) return "brightdata";`
+- `src/shared/engines/serp.js:14` — `if (getBrightDataApiKey()) return "brightdata";`
   is evaluated *before* the SerpAPI fallback at `:15`, so a deployment holding
   both credentials uses Bright Data with no `SERP_PROVIDER` set.
-- `src/lib/engines/serp.js:165-166` — `probeGoogleAiOverview` returns
+- `src/shared/engines/serp.js:165-166` — `probeGoogleAiOverview` returns
   `probeGoogleAiOverviewBrightData(...)` as soon as the provider is `brightdata`.
   True of the function's contents; **not** the route a scan takes —
   `probeGoogleAiOverview` has no non-test caller at `49fe39e` (§3b).
-- `src/lib/engines/serp.js:324-327` — the People-Also-Ask path takes the Bright
+- `src/shared/engines/serp.js:324-327` — the People-Also-Ask path takes the Bright
   Data branch and `continue`s, never reaching `serpFetch`. This branch **is**
   live (§3a).
-- `src/lib/engines/types.js:47` — `getEnabledEngines()` enables
+- `src/shared/engines/types.js:47` — `getEnabledEngines()` enables
   `google_ai_overview` on `BRIGHTDATA_API_KEY` alone, with a comment at `:43-46`
   naming this ADR. It has **no caller at all** outside its own tests at
   `49fe39e` (§3b); live engine selection is a different function reading a
@@ -264,7 +264,7 @@ the three entries in the correction log.
   `enginePipeline.js`.
 
 **Where Bright Data is actually invoked — not through `serp.js`.** The probing
-route a scan takes runs through `src/lib/scoring/enginePipeline.js`, cited by
+route a scan takes runs through `src/shared/scoring/enginePipeline.js`, cited by
 anchor because a concurrent task has it dirty: `resolveEnabledEngines()` reads
 `ENGINES` (default `"aio"`), resolves the `aio` registry entry (grep
 `probe: probeAio`, one hit repo-wide) whose `isConfigured` is `() => true`, and
@@ -314,7 +314,7 @@ dashboard figure should be attributed to them.
 ### 3. Two paths are written against that code; only one of them can run
 
 **a. Prompt generation — ungated, and this is the live spend risk.**
-`src/lib/scoring/promptGen.js` imports `fetchPeopleAlsoAsk` from
+`src/shared/scoring/promptGen.js` imports `fetchPeopleAlsoAsk` from
 `../engines/serp.js` and uses it as the default when the caller passes no `deps`
 override (anchor, not line — that file is on the anchor list and is dirty in the
 working tree: grep `deps.fetchPeopleAlsoAsk`, one hit).
@@ -333,7 +333,7 @@ It does not run on *every* scan. Sourcing returns early when the stored prompt
 pool already meets the target, so a repeat scan of a brand whose frozen set is
 full never reaches the PAA function. The chain is `runScanChunk` →
 `runSourcingPhase` → `sourceUnbrandedQueries` → `generateUnbrandedPrompts`, all
-in `src/lib/workers/scanWorker.js` (anchor list; grep
+in `src/server/workers/scanWorker.js` (anchor list; grep
 `deps.sourceUnbrandedQueries`, one hit).
 
 **b. The AIO probe — the gate has a real bypass, and nothing is behind it.**
@@ -342,12 +342,12 @@ in `src/lib/workers/scanWorker.js` (anchor list; grep
 *without any credential check*, so `ENGINES_ENABLED=google_ai_overview` with only
 `SERPAPI_KEY` set puts `google_ai_overview` into the returned list, bypassing the
 `BRIGHTDATA_API_KEY` requirement R0.1.9 added at `types.js:47`.
-`src/lib/engines/types.test.mjs:90-97` asserts exactly that env combination and
+`src/shared/engines/types.test.mjs:90-97` asserts exactly that env combination and
 records that the branch was left alone deliberately: an operator naming an engine
 is a different claim from a key being present.
 
 *Nothing consumes it.* `getEnabledEngines()` (`types.js:28`) has **zero** callers
-outside `src/lib/engines/types.test.mjs` at `49fe39e`. Its last non-test caller
+outside `src/shared/engines/types.test.mjs` at `49fe39e`. Its last non-test caller
 was `src/lib/scoring/probe.js`, deleted by R6.5.3 at `75e9ca5`. Live engine
 selection is `resolveEnabledEngines()` in `enginePipeline.js`, reading `ENGINES`,
 which never consults `ENGINES_ENABLED`. **Setting `ENGINES_ENABLED` changes
@@ -367,11 +367,11 @@ sequencing warning the second round attached to R1.7.3 no longer applies.
   `types.test.mjs:55`, `:65`, `:71`, `:80`. Scope that honestly: with `probe.js`
   deleted, `getEnabledEngines()` has no caller at all, and the operator-facing
   surfaces that answer "is this deployment configured" —
-  `src/lib/health.js:19-33` (the `brightdata` vendor at `:26`) and
+  `src/server/health.js:19-33` (the `brightdata` vendor at `:26`) and
   `scripts/check-secrets.mjs` — never read `SERPAPI_KEY`. R0.1.9 corrected a
   capability check that no running code consults. Its value is preventive: the
   stale-key branch cannot come back into a revived probe path.
-- **Not closed.** R0.1.9 did not touch `src/lib/engines/serp.js` at all. The
+- **Not closed.** R0.1.9 did not touch `src/shared/engines/serp.js` at all. The
   **spend path** in §2 is unchanged by it. Do not read "types.js is fixed" as
   "SerpAPI is gone".
 
@@ -380,7 +380,7 @@ sequencing warning the second round attached to R1.7.3 no longer applies.
 `git grep -c SERPAPI_KEY HEAD -- src scripts worker supabase .env.example README.md`
 returns seven files, in four groups.
 
-**Non-test code — one file.** `src/lib/engines/serp.js` at `:24` (the read),
+**Non-test code — one file.** `src/shared/engines/serp.js` at `:24` (the read),
 `:50` (the `serpFetch` guard) and `:206`, `:270` (operator warnings). Only `:24`
 and `:50` are reached by a live caller, both via `fetchPeopleAlsoAsk`. `:206` and
 `:270` are inside `probeGoogleAiOverview`, so **those two warnings cannot print
@@ -389,23 +389,23 @@ was rejected, because the code that would say so never runs.
 
 **Comments that explain the absence — no branch.** `types.js:43`, `:45`.
 
-**Test fixtures on the live branch.** `src/lib/engines/serp.test.mjs:65`, `:143`,
+**Test fixtures on the live branch.** `src/shared/engines/serp.test.mjs:65`, `:143`,
 `:186`, `:213`, driving a stubbed `globalThis.fetch`; and
-`src/lib/engines/serpGeo.test.mjs` (six occurrences). These are not leftovers —
+`src/shared/engines/serpGeo.test.mjs` (six occurrences). These are not leftovers —
 they are the *only remaining coverage* of the live SerpAPI branch, which is why
 R1.7.3's acceptance says "removed **with their tests**".
 
 **Tests that assert it is *not* a credential — the R0.1.9 guards.**
-`types.test.mjs` (`:55`, `:71`, `:100`), `src/lib/health.test.mjs` (`:111`,
-`:126`, `:143`, `:157`) and `src/lib/checkSecrets.test.mjs` (`:119`, `:133`,
+`types.test.mjs` (`:55`, `:71`, `:100`), `src/server/health.test.mjs` (`:111`,
+`:126`, `:143`, `:157`) and `src/server/checkSecrets.test.mjs` (`:119`, `:133`,
 `:140`). Note the boundary precisely: the drift guard at `types.test.mjs:113-134`
-reads only `src/lib/engines/types.js`, `src/lib/health.js` and
+reads only `src/shared/engines/types.js`, `src/server/health.js` and
 `scripts/check-secrets.mjs` (`types.test.mjs:114-118`). **`serp.js` is not in its
 source list**, so nothing in the suite would fail if the request path in §2 grew
 back. The guard protects the capability check, not the spend path.
 
 Note what is *not* in any group: `.env.example` and `README.md` contain no
-`SERPAPI_KEY` reference, and neither do `src/lib/health.js` or
+`SERPAPI_KEY` reference, and neither do `src/server/health.js` or
 `scripts/check-secrets.mjs`. The credential is undeclared by every
 operator-facing surface while still being honoured by code.
 
@@ -419,7 +419,7 @@ operator-facing surface while still being honoured by code.
 - **The Bright Data per-query cost the product reports is an assumption, not a
   measurement.** `0.0015` is hard-coded twice — grep `result.cost = 0.0015`, one
   hit in `enginePipeline.js` (live, inside `probeAio`) and one in
-  `src/lib/scoring/aioPipeline.js:110` (dead: its caller `probeQueryOnce` at
+  `src/shared/scoring/aioPipeline.js:110` (dead: its caller `probeQueryOnce` at
   `:73` is reached only from `runAioScan` at `:171`, which nothing calls). A
   third copy at `serp.js:288` sits in `probeGoogleAiOverviewBrightData`, dormant
   for the reason in §2. Nothing in the repository measures the number. Treat any
@@ -494,7 +494,7 @@ previous revision:**
    *The second round of this ADR told R1.7.3 to sequence against R6.5.3 in case
    that task repaired the dead pair instead of deleting it. It deleted it
    (`75e9ca5`), so that constraint is discharged.*
-   Worth doing in the same change: add `src/lib/engines/serp.js` to the source
+   Worth doing in the same change: add `src/shared/engines/serp.js` to the source
    list of the drift guard at `types.test.mjs:114-118`, so the request path
    cannot grow back unnoticed the way the capability check could have (§5).
 2. **R1.7.4 (`todo`) — close the prompt-generation spend path.** §3a. The half
@@ -511,7 +511,7 @@ previous revision:**
    list, so a scan seeded without its Google grounding reports success. Not this
    ADR's to fix; recorded because it is the consequence of the decision that
    costs the most and is the least visible.
-6. ~~Remove the `SERPAPI_KEY` branch from `src/lib/engines/types.js`.~~
+6. ~~Remove the `SERPAPI_KEY` branch from `src/shared/engines/types.js`.~~
    **Done — R0.1.9, commit `6308cb7`.** Struck through rather than deleted so a
    reader arriving from an older link can see it closed rather than wonder
    whether it was dropped.
@@ -521,14 +521,14 @@ previous revision:**
 **2026-08-29 — task R0.2.4, first round.** The evidence section as first written
 asserted:
 
-> `SERPAPI_KEY` survives in exactly two places: `src/lib/engines/types.js:43` […]
-> and `src/lib/engines/serp.test.mjs`, which still sets it as a fixture. Neither
+> `SERPAPI_KEY` survives in exactly two places: `src/shared/engines/types.js:43` […]
+> and `src/shared/engines/serp.test.mjs`, which still sets it as a fixture. Neither
 > makes a SerpAPI call.
 
 Both halves were false, but not equally so.
 
 - **The `types.js` half was true when written and went stale in 37 minutes.**
-  `git show b6e3610:src/lib/engines/types.js` line 43 reads
+  `git show b6e3610:src/shared/engines/types.js` line 43 reads
   `const serpConfigured = process.env.BRIGHTDATA_API_KEY || process.env.SERPAPI_KEY;`
   — exactly what the ADR described, at the commit that added the ADR
   (`b6e3610`, 2026-08-29 16:01:49). R0.1.9 removed it at `6308cb7`, 16:39:04 the
@@ -552,7 +552,7 @@ for the spend path.
 **The lesson, stated as a rule rather than a diagnosis.** How the original author
 arrived at the claim is not recorded anywhere, so this ADR does not assert a
 cause. What is checkable is the trap: `SERPAPI_KEY` is absent from
-`.env.example`, `README.md`, `src/lib/health.js` and `scripts/check-secrets.mjs`,
+`.env.example`, `README.md`, `src/server/health.js` and `scripts/check-secrets.mjs`,
 so a credential search across the operator-facing surfaces returns a picture of a
 retired provider. The surviving reference lives inside a provider-resolution
 function whose *return value* — not its name — is what routes the request. Grep
@@ -605,17 +605,17 @@ Nearly every citation had **moved**, and the document did not describe what had
 since been built. Both are the same failure with different causes, and the second
 is the one an existence check cannot catch.
 
-*Citations repointed.* `src/lib/engines/serp.js` gained a line early in the file,
+*Citations repointed.* `src/shared/engines/serp.js` gained a line early in the file,
 shifting every one of its ~20 citations by one to eighteen lines. The previous
-revision's own assurance — "`git diff b6e3610 HEAD -- src/lib/engines/serp.js` is
+revision's own assurance — "`git diff b6e3610 HEAD -- src/shared/engines/serp.js` is
 empty" — was true when written and is now false, which is exactly why that
 sentence was replaced with a commit stamp rather than repeated. `serp.js:335`,
 the load-bearing "the one live billable `serpFetch`", is now `:342`; at the old
 number it lands on a **comment line** inside the `R1.6.2` note about `SERP_GEO`,
 seven lines above the call it used to name. It still **resolves**, which is the
 whole point: an existence check would have scored it green.
-`src/lib/workers/scanWorker.js` and
-`src/lib/scoring/enginePipeline.js` moved by hundreds of lines and are now cited
+`src/server/workers/scanWorker.js` and
+`src/shared/scoring/enginePipeline.js` moved by hundreds of lines and are now cited
 by greppable anchor instead.
 
 *Two claims stopped reproducing, and are recorded rather than deleted.*
@@ -715,8 +715,8 @@ revision "edits no file other than this one, so nothing cited below moves
 underneath it," and this log told the reader to confirm it with `git show --stat`
 on the landing commit. A verifier ran it. The revision landed in `0b2e68b`, which
 touches **seven** files: this ADR, `docs/contracts/probe-result.md`,
-`docs/vendors/mimo.md`, `src/lib/llmPricing.js`, `src/lib/llmPricing.test.mjs`,
-`src/lib/openrouter.js` and `src/lib/openrouter.test.mjs`. The prescribed check
+`docs/vendors/mimo.md`, `src/shared/llmPricing.js`, `src/shared/llmPricing.test.mjs`,
+`src/server/openrouter.js` and `src/server/openrouter.test.mjs`. The prescribed check
 returns 7, not 1. The stamp also read `25e7727` while the revision landed one
 commit later at `0b2e68b` — the same stamp/landing mismatch that failed the third
 round, repeated by the very rule written to prevent it.
@@ -747,32 +747,32 @@ git diff 49fe39e HEAD --stat
 ```
 
 Cross-reference the output against the fifteen files this document cites **by
-line**: `src/lib/engines/serp.js`, `src/lib/engines/brightdata.js`,
-`src/lib/engines/types.js`, `src/lib/engines/types.test.mjs`,
-`src/lib/engines/serp.test.mjs`, `src/lib/engines/brightdataZone.test.mjs`,
-`src/lib/checkSecretsBrightdataNoZone.test.mjs`, `src/lib/health.js`,
-`src/lib/scoring/aioPipeline.js`, `scripts/check-secrets.mjs`, `package.json`,
+line**: `src/shared/engines/serp.js`, `src/shared/engines/brightdata.js`,
+`src/shared/engines/types.js`, `src/shared/engines/types.test.mjs`,
+`src/shared/engines/serp.test.mjs`, `src/shared/engines/brightdataZone.test.mjs`,
+`src/server/checkSecretsBrightdataNoZone.test.mjs`, `src/server/health.js`,
+`src/shared/scoring/aioPipeline.js`, `scripts/check-secrets.mjs`, `package.json`,
 `README.md`, `.env.example`, `docs/decisions/serp-provider.md` and
 `docs/BUILD_JOURNAL.md`. If none of the fifteen appears, every line citation above
 still points where it did. If one appears, treat *every* citation into that file as
 suspect until re-derived — a file can change anywhere above a cited line.
 
 Three limits on that check, stated so it is not over-trusted. It does not cover the
-four files on the anchor list — `src/lib/scoring/enginePipeline.js`,
-`src/lib/workers/scanWorker.js`, `src/lib/scoring/promptGen.js` and
+four files on the anchor list — `src/shared/scoring/enginePipeline.js`,
+`src/server/workers/scanWorker.js`, `src/shared/scoring/promptGen.js` and
 `scripts/check-secrets.mjs` — which are exempt by design and must be re-grepped
 instead. (`check-secrets.mjs` is on both lists: anchor-cited for its four verdict
 strings, and line-cited once at `:178`.) It catches *movement*, not an in-place
 rewrite that leaves line numbers intact — the failure this log records at
 `serp.js:335`. And it reads commits, not
 the working tree: at the time of writing, `.env.example`,
-`src/lib/scoring/enginePipeline.js` and `src/lib/workers/scanWorker.js` were dirty
+`src/shared/scoring/enginePipeline.js` and `src/server/workers/scanWorker.js` were dirty
 with other agents' uncommitted work, and this stamp deliberately describes
 `49fe39e` rather than what was on disk.
 
 *The check, actually run against the round it replaces.* `git diff 25e7727 49fe39e
 --stat` lists fourteen files. Exactly two are cited by this ADR as evidence —
-`src/lib/scoring/promptGen.js` and `src/lib/workers/scanWorker.js` — and both are
+`src/shared/scoring/promptGen.js` and `src/server/workers/scanWorker.js` — and both are
 cited **by anchor rather than by line**, precisely because the third round watched
 them move by hundreds of lines. Both anchors still return one hit at `49fe39e`.
 None of the fifteen line-cited files appears in the diff. So the fourth round's

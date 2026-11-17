@@ -7,7 +7,7 @@ import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
 import { Button, PageHeader } from "@/components/portal/ui";
 import { QueryError } from "@/components/app/QueryState";
 import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
-import { panelQueryOptions } from "@/lib/query/portalQueries";
+import { panelQueryOptions } from "@/shared/query/portalQueries";
 import GettingStarted, { buildChecklist } from "@/components/portal/overview/GettingStarted";
 import { SetupChecklist } from "@/components/portal/overview/SetupChecklist";
 import KpiRow from "@/components/portal/overview/KpiRow";

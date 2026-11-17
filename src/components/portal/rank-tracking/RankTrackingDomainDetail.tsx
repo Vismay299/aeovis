@@ -17,8 +17,8 @@ import { NotFound } from "@/components/app/NotFound";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 import {
   devicesCount,
   KEYWORDS_PER_BATCH,

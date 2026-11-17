@@ -27,9 +27,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
-import { createSqlAuditStore } from "../../src/lib/audit/store.ts";
-import { createMemoryAuditStore } from "../../src/lib/audit/memoryStore.ts";
-import { saveCrawlerCredential } from "../../src/lib/audit/crawlerAccess.ts";
+import { createSqlAuditStore } from "../../src/server/audit/store.ts";
+import { createMemoryAuditStore } from "../../src/server/audit/memoryStore.ts";
+import { saveCrawlerCredential } from "../../src/server/audit/crawlerAccess.ts";
 
 const host = process.env.PGHOST || "";
 const database = process.env.PGDATABASE || "";

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { createScanJob, hasActiveScanForBrand, supabase } from "@/lib/db";
-import { DuplicateScanError } from "@/lib/duplicateScan";
-import { BUCKET_SCOPE, checkScanRateLimit } from "@/lib/rateLimit";
-import { incrementScanRateLimit } from "@/lib/db/analytics";
-import { runScanChunk } from "@/lib/workers/scanWorker";
-import { keepAlive } from "@/lib/keepAlive";
+import { createScanJob, hasActiveScanForBrand, supabase } from "@/server/db";
+import { DuplicateScanError } from "@/server/duplicateScan";
+import { BUCKET_SCOPE, checkScanRateLimit } from "@/server/rateLimit";
+import { incrementScanRateLimit } from "@/server/db/analytics";
+import { runScanChunk } from "@/server/workers/scanWorker";
+import { keepAlive } from "@/server/keepAlive";
 
 // A chunk can run for up to ~150s (CHUNK_TIME_BUDGET_MS in scanWorker.js)
 // plus finalize; give the fire-and-forget first chunk kicked off below room
@@ -15,7 +15,7 @@ export const maxDuration = 300;
  * R0.1.21 — the one refusal this route owes an anonymous caller when the scan
  * store is not there.
  *
- * `createScanJob` (src/lib/db.js) fail-softs to `global.memoryJobs` whenever
+ * `createScanJob` (src/server/db.js) fail-softs to `global.memoryJobs` whenever
  * there is no Supabase client. That map is legitimate for local development
  * and for the test suite, and it is a lie on a deployed instance: it is
  * per-process, so no worker invocation, no status poll on another instance and

@@ -3,7 +3,7 @@
 import { CardShell } from "@/components/app/CardShell";
 import { Badge } from "@/components/ui/badge";
 import { formatNextRun } from "@/shared/schedule";
-import type { CustomerScheduleView } from "@/lib/schedules/schedule.contract";
+import type { CustomerScheduleView } from "@/server/schedules/schedule.contract";
 
 type WindowItem = CustomerScheduleView["windows"][number];
 

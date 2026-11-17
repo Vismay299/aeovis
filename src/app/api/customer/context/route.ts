@@ -11,19 +11,19 @@
  * the whole surface can be exercised without a database through `deps`.
  */
 
-import { AppError } from "../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../lib/features/flags.ts";
-import { requireWorkspace } from "../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../lib/workspace/requireWorkspace.ts";
-import { contextGetQuery } from "../../../../lib/projectContext/projectContext.contract.ts";
+import { AppError } from "../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../server/features/flags.ts";
+import { requireWorkspace } from "../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../server/workspace/requireWorkspace.ts";
+import { contextGetQuery } from "../../../../server/projectContext/projectContext.contract.ts";
 import {
   applyContextUpdates,
   getProjectContext,
   maybeImportBrandBrief,
-} from "../../../../lib/projectContext/service.ts";
-import type { ProjectContextDeps } from "../../../../lib/projectContext/service.ts";
-import { captureServerEvent } from "../../../../lib/telemetry/server.ts";
+} from "../../../../server/projectContext/service.ts";
+import type { ProjectContextDeps } from "../../../../server/projectContext/service.ts";
+import { captureServerEvent } from "../../../../shared/telemetry/server.ts";
 import { updateProjectContextBody } from "../../../../shared/project-context.ts";
 import type { ProjectContextUpdate } from "../../../../shared/project-context.ts";
 

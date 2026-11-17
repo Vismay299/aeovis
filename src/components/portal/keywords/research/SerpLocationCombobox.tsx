@@ -19,8 +19,8 @@ import {
 } from "@/components/ui/combobox";
 import { InputGroupAddon } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 import { formatLocationLabel } from "@/shared/keyword-locations";
 
 export type SerpLocationOption = {

@@ -12,7 +12,7 @@ import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
 import { MonthlyProjection } from "@/components/app/cost/MonthlyProjection";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
 import { usePortal } from "@/components/portal/PortalShell";
-import { isApiError } from "@/lib/query/fetchJson";
+import { isApiError } from "@/shared/query/fetchJson";
 import { formatUsd, type PriceQuote } from "@/shared/pricing";
 import {
   formatNextRun,

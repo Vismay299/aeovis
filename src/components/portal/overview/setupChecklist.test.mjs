@@ -7,8 +7,8 @@ import {
   compileJsx,
   renderToHtml,
   textOf,
-} from "../../../lib/renderHarness.mjs";
-import { createFakeReactQuery } from "../../../lib/fakeReactQuery.mjs";
+} from "../../../server/renderHarness.mjs";
+import { createFakeReactQuery } from "../../../server/fakeReactQuery.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -69,8 +69,8 @@ async function loadChecklist({ track = [] } = {}) {
   };
   const reactQuery = createFakeReactQuery(React);
   const setupSteps = await import("../../../shared/setup-steps.ts");
-  const fetchJson = await import("../../../lib/query/fetchJson.ts");
-  const keys = await import("../../../lib/query/keys.ts");
+  const fetchJson = await import("../../../shared/query/fetchJson.ts");
+  const keys = await import("../../../shared/query/keys.ts");
 
   const hook = await compileJsx(
     path.join(here, "hooks/useSetupActivation.ts"),
@@ -79,8 +79,8 @@ async function loadChecklist({ track = [] } = {}) {
       modules: new Map([
         ["react", React],
         ["@tanstack/react-query", reactQuery],
-        ["@/lib/query/fetchJson", fetchJson],
-        ["@/lib/query/keys", keys],
+        ["@/shared/query/fetchJson", fetchJson],
+        ["@/shared/query/keys", keys],
       ]),
     },
   );
@@ -100,7 +100,7 @@ async function loadChecklist({ track = [] } = {}) {
       ["@/components/ui/button", { Button: buttonStub }],
       ["@/components/ui/collapsible", collapsibleStub],
       ["@/components/portal/PortalShell", { usePortal: () => portal }],
-      ["@/lib/telemetry/client", telemetry],
+      ["@/shared/telemetry/client", telemetry],
       ["@/shared/setup-steps", setupSteps],
       ["./hooks/useSetupActivation", hook],
     ]),

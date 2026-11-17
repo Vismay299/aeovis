@@ -175,7 +175,7 @@ function Verbatim({ prompt, brandAliases, onGenerateContent }) {
         </p>
 
         {/* R1.5.3 — the engine's own screen, behind a signed URL that expires
-            (120 s; src/lib/evidenceSignedUrl.js). Rendered only when a capture
+            (120 s; src/server/evidenceSignedUrl.js). Rendered only when a capture
             was actually stored for this answer: no capture, no button. A plain
             link, so the new tab is a real navigation the browser cannot block
             and the signed URL never touches this page. */}

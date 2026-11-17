@@ -18,15 +18,15 @@
 **Status:** parts 1, 2 and 3 accepted.
 **Citation baseline:** every `file:line` below was read in the working tree at
 commit `95b190d`. Four files this document cites were **dirty in the working
-tree** when it was written — `src/lib/workers/scanWorker.js`, `src/lib/db.js`,
-`src/lib/scoring/enginePipeline.js`, `src/app/api/content/worker/route.js` — and
+tree** when it was written — `src/server/workers/scanWorker.js`, `src/server/db.js`,
+`src/shared/scoring/enginePipeline.js`, `src/app/api/content/worker/route.js` — and
 are therefore cited **by exported symbol or greppable string, never by line**,
 per [the anchor rule](../vendors/README.md#a-note-on-citing-check-secretsmjs).
 Everything cited with a line number was clean at `95b190d`. To find out whether
 the numbers have gone stale:
 
 ```bash
-git log --oneline 95b190d..HEAD -- vercel.json worker src/app/api/scan src/lib/liveDbGate.js src/lib/liveWriteGuard.js src/lib/workerIsolation.test.mjs scripts/setup-supabase.mjs .github/workflows/ci.yml
+git log --oneline 95b190d..HEAD -- vercel.json worker src/app/api/scan src/server/liveDbGate.js src/server/liveWriteGuard.js src/server/workerIsolation.test.mjs scripts/setup-supabase.mjs .github/workflows/ci.yml
 ```
 
 Empty means they still resolve. Non-empty means re-derive before trusting them.
@@ -45,7 +45,7 @@ repository has drifted into answering the question twice, in two places, and
 the two answers disagree about almost everything except that a function cannot
 do it:
 
-- `src/lib/workers/scanWorker.js` runs the *current* (API-based) scan pipeline
+- `src/server/workers/scanWorker.js` runs the *current* (API-based) scan pipeline
   inside Vercel functions, and has grown a large amount of machinery whose only
   purpose is to survive a process that will be killed mid-work.
 - `worker/` is a second, separate Node workspace with its own `package.json`,
@@ -85,7 +85,7 @@ vendor is §5 and is not settled here.
   rather than dying mid-batch is what keeps a lease from being orphaned for its
   full duration on every deploy."*
 - nothing under `worker/` may import from the web app, and that is enforced by
-  a test in the **main** suite — `src/lib/workerIsolation.test.mjs:55` and
+  a test in the **main** suite — `src/server/workerIsolation.test.mjs:55` and
   `:72` — not by a convention.
 
 The consequence of that isolation is what makes §5 deferrable: a workspace of
@@ -143,7 +143,7 @@ call yourself with, and no base-URL resolution that falls through
 
 ### 2.3 Liveness is inferred from a timestamp because the process cannot be observed
 
-`src/lib/db.js` exports `HEARTBEAT_STALE_MS` (3 minutes) and `isJobAlive`,
+`src/server/db.js` exports `HEARTBEAT_STALE_MS` (3 minutes) and `isJobAlive`,
 which decides a job is alive purely from how recently `heartbeat_at` moved
 (grep `HEARTBEAT_STALE_MS` and `export function isJobAlive`). `updateScanJob`
 stamps `heartbeat_at` on every call (grep `heartbeat_at: new Date()`). On top
@@ -220,7 +220,7 @@ logs.
 
 ### 2.8 In-process state cannot be process-local, and once was
 
-`createScanJob` in `src/lib/db.js` fail-softs into `global.memoryJobs`, which
+`createScanJob` in `src/server/db.js` fail-softs into `global.memoryJobs`, which
 is per-process and therefore invisible to the status poll, the cron worker and
 every other instance. That produced a 201 for a scan nobody could read back;
 `docs/decisions/2026-09-05-unpersisted-scan-jobs.md` is the ADR that closed it
@@ -238,7 +238,7 @@ whose only reader is the next line of the same logical operation.
 > the **platform mechanism** was taken, not the long-lived worker this section
 > argued for. Next is 14.2 so there is no `after()`; `@vercel/functions`
 > `waitUntil` (`package.json:52`, `^3.9.7`) is used through exactly one helper,
-> `src/lib/keepAlive.js:36`, at nine post-response sites — including
+> `src/server/keepAlive.js:36`, at nine post-response sites — including
 > `src/app/api/scan/route.js:142`, the very line cited below.
 > **§2.9 no longer supports §1.** The fleet decision stands on its own grounds
 > (a real-surface probe needs a persistent browser and minutes of wall clock,
@@ -278,7 +278,7 @@ is **not** proven by any test in this repository. R3.1.5 stays tagged
 *"The probes need a persistent browser and minutes of wall clock. A Vercel
 function has neither: it is request-scoped, and Playwright's browsers do not
 belong in a deploy bundle."* The root `package.json` has no `playwright`
-entry, and `src/lib/workerIsolation.test.mjs:44` asserts that the fleet's
+entry, and `src/server/workerIsolation.test.mjs:44` asserts that the fleet's
 manifest does.
 
 ### What this does *not* claim
@@ -323,7 +323,7 @@ Three properties make that honest today:
    a loud stub, not a green fleet producing invented data. `claimBatch` refuses
    the same way for an unreachable queue.
 3. **It cannot accidentally become the web app.** The isolation guard
-   (`src/lib/workerIsolation.test.mjs:55`, `:72`) runs in the main CI suite, so
+   (`src/server/workerIsolation.test.mjs:55`, `:72`) runs in the main CI suite, so
    a laptop worker and a container worker are provably the same program.
 
 `worker/README.md`'s *What is not built* table is the current truth: the
@@ -339,7 +339,7 @@ The repository has a hard, tested boundary that keeps *test* processes off the
 production database, and it is worth being precise about where its edge is,
 because a laptop fleet sits just outside it.
 
-**What is enforced.** `src/lib/liveDbGate.js` and `src/lib/liveWriteGuard.js`
+**What is enforced.** `src/server/liveDbGate.js` and `src/server/liveWriteGuard.js`
 exist because an earlier draft of R3.2.1's live test wrote two real rows into
 `scans` and two into `brand_metrics_daily` on production. Since R3.2.4:
 
@@ -352,11 +352,11 @@ exist because an earlier draft of R3.2.1's live test wrote two real rows into
   `liveDbGate({ ...process.env })` is refused the same way `liveDbGate()` is.
 - Armed-but-blind does not read as armed: both `requireArmedGuard` and
   `armedLiveDbGate` throw when `covers.supabase` or `covers.pg` is false.
-- `NEVER_WRITABLE` in `src/lib/liveWriteGuard.js:126` refuses 20 customer
+- `NEVER_WRITABLE` in `src/server/liveWriteGuard.js:126` refuses 20 customer
   tables — the frozen list runs `:126-147`, `scans` through `content_lessons`,
   and includes `brand_metrics_daily`, `scan_jobs`, `prompt_results`,
   `citations` and `result_brands` — *even when a test names them*.
-- `src/lib/liveWriteGuardAuto.mjs` preloads the guard into every process
+- `src/server/liveWriteGuardAuto.mjs` preloads the guard into every process
   started by `npm test`, `npm run test:scoring` and `npm run test:live`.
 
 **Where its edge is, stated because it matters here.** That module's own
@@ -371,7 +371,7 @@ claimed to be more:
   `@supabase/supabase-js`; nothing preloads a patch into that process.
 - **Even if it were, the fleet's two tables are the opt-in-writable ones.**
   `WRITABLE_BY_OPT_IN` is `["scan_runs", "probe_tasks"]`
-  (`src/lib/liveWriteGuard.js`), which is exactly what a fleet pass writes.
+  (`src/server/liveWriteGuard.js`), which is exactly what a fleet pass writes.
 
 So the only thing that decides which database a laptop fleet writes is **which
 credentials that process was given.** Two sharp edges in the current code make
@@ -396,7 +396,7 @@ when the fleet's target matches production and no explicit opt-in is present —
 belongs to **R1.2.6 ("Fleet config validated at boot")**, which is `todo`;
 `liveDbGate`'s `isRealEnvironment` / `dbTarget` host+path comparison is the
 right shape to copy, and copying rather than importing is what
-`src/lib/workerIsolation.test.mjs` requires. **Until R1.2.6 lands, this is a
+`src/server/workerIsolation.test.mjs` requires. **Until R1.2.6 lands, this is a
 convention and not a guard, and this ADR says so rather than implying
 otherwise.**
 
@@ -482,7 +482,7 @@ and is not verified by anything in this repository.*
    is an explicit `terminationGracePeriodSeconds` on the Deployment, set by us,
    rather than a platform default we would have to discover empirically.
 3. **Reversal still costs one image definition.** The isolation rule
-   (`src/lib/workerIsolation.test.mjs:55`, `:72`) is what makes this true, and it
+   (`src/server/workerIsolation.test.mjs:55`, `:72`) is what makes this true, and it
    is as true for Zeabur as it was for the three candidates.
 
 ### 5.1.a What ratification changes about C4, and what it does not
@@ -654,7 +654,7 @@ landed (`docs/runbooks/fleet-dev.md`) and R1.2.6's boot validation landed
 ## Consequences
 
 - **`worker/` is confirmed as the fleet's home**, and the "no imports from
-  `src/`" rule (`src/lib/workerIsolation.test.mjs`) is confirmed as load-bearing
+  `src/`" rule (`src/server/workerIsolation.test.mjs`) is confirmed as load-bearing
   rather than stylistic: it is what makes §5 reversible for the price of one
   image definition.
 - **The Vercel tier stays as it is.** With a polling fleet, R3.1.1's 10-minute
@@ -725,12 +725,12 @@ greppable strings where it was not.
 `src/app/api/scan/[job_id]/status/route.js:56` ·
 `worker/src/index.js:247`, `:258`, `:263`, `:273` ·
 `worker/src/config.js:33`, `:35` · `worker/src/lib/probe.js:27` ·
-`worker/src/lib/queue.js:64` · `src/lib/workerIsolation.test.mjs:44`, `:55`,
-`:72` · `src/lib/liveWriteGuard.js:126` (`NEVER_WRITABLE`) ·
+`worker/src/lib/queue.js:64` · `src/server/workerIsolation.test.mjs:44`, `:55`,
+`:72` · `src/server/liveWriteGuard.js:126` (`NEVER_WRITABLE`) ·
 `docs/HANDOFF-2026-08-30.md:133-137`, `:139-142`, `:147-149`.
 
 **Cited by symbol or greppable string (dirty in the working tree at
-`95b190d` — `src/lib/workers/scanWorker.js`, `src/lib/db.js`,
+`95b190d` — `src/server/workers/scanWorker.js`, `src/server/db.js`,
 `src/app/api/content/worker/route.js`):**
 `CHUNK_TIME_BUDGET_MS` and its `Soft per-chunk time budget` docstring ·
 `budgetHit: true` · `reason: "checkpointed"` · `resolveSelfContinueUrl` ·
@@ -742,9 +742,9 @@ greppable strings where it was not.
 
 **Whole-file / structural evidence:** `worker/README.md` · `worker/package.json`
 · root `package.json` (no `playwright`, no `@vercel/functions`) ·
-`.github/workflows/ci.yml` · `src/lib/liveDbGate.js` (`armedLiveDbGate`,
+`.github/workflows/ci.yml` · `src/server/liveDbGate.js` (`armedLiveDbGate`,
 `liveDbGate`, `requireArmedGuard`, `isRealEnvironment`, `dbTarget`) ·
-`src/lib/liveWriteGuardAuto.mjs` · `scripts/setup-supabase.mjs` ·
+`src/server/liveWriteGuardAuto.mjs` · `scripts/setup-supabase.mjs` ·
 `docs/PROD_MIGRATIONS.md` · `docs/plans/production-plan.md` §C1/§C2 (status
 **SUPERSEDED**) · `docs/OPERATOR_LEDGER.md` rows R1.1.2, R1.1.3, R3.1.1 ·
 `docs/contracts/engine-surface-matrix.md` §4.1, §7 ·
@@ -759,7 +759,7 @@ grep -c 'FLEET_\|SUPABASE_SERVICE_ROLE_KEY' .env.example                        
 ```
 
 > **The second command no longer reproduces (2026-09-18, R3.1.5).** It now
-> returns `src/lib/keepAlive.js` and `package.json:52`. The absence it recorded
+> returns `src/server/keepAlive.js` and `package.json:52`. The absence it recorded
 > was real at `95b190d` and is the finding R3.1.5 closed; it is annotated rather
 > than edited so the derivation of §2.9 stays readable. The other two still
 > reproduce as written.

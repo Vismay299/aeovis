@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import AuthLayout from "@/components/portal/AuthLayout";
-import { isFeatureEnabled } from "@/lib/features/flags";
+import { isFeatureEnabled } from "@/server/features/flags";
 import { buildOnboardingPath, firstParam } from "@/shared/auth-redirect";
 import { SignUpForm } from "@/components/auth/SignUpForm";
 

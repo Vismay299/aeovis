@@ -1,4 +1,4 @@
-import { describeRosterState } from "../../../lib/scoring/rosterContinuity.js";
+import { describeRosterState } from "../../../shared/scoring/rosterContinuity.js";
 import { formatPercent } from "./chartMath.js";
 
 /**
@@ -23,7 +23,7 @@ import { formatPercent } from "./chartMath.js";
  * rather than computing something that does.
  *
  * WHERE THE FIELD LIVES. `share_of_voice_pct` is produced per ENGINE by
- * computeEngineSummary (src/lib/scoring/enginePipeline.js) and persisted under
+ * computeEngineSummary (src/shared/scoring/enginePipeline.js) and persisted under
  * `raw_results.engines[<engine>]`, which normalizeResult surfaces as
  * `result.perEngineSummaries`. There is currently NO scan-level
  * `share_of_voice_pct`: summarizeEngineResults' backward-compat summary object

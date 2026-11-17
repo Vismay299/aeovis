@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { updatePromptStatus } from "@/lib/db/prompts";
+import { updatePromptStatus } from "@/server/db/prompts";
 
 export async function PATCH(request, { params }) {
   params = await params;

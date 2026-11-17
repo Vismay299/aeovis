@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/select";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { parseMapsLocation, googleMapsPointUrl } from "@/shared/local-coordinates";
-import { describeError } from "@/lib/query/errors";
+import { describeError } from "@/shared/query/errors";
 import type { SavedBusinessView, SaveBusinessInput } from "./hooks/useLocalBusinesses";
 import { useLocalSerp, type LocalSerpRow } from "./hooks/useLocalSerp";
 

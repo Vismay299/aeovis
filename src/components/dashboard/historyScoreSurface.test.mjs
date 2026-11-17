@@ -21,13 +21,13 @@ import {
   summarizeEngineSlice,
   computeHeadline,
   summarizeEngineResults,
-} from "../../lib/scoring/enginePipeline.js";
-import * as apiClient from "../../services/api.js";
-import * as formatModule from "../../utils/format.js";
-import * as aliasesModule from "../../lib/scoring/aliases.js";
-import * as brandKeyModule from "../../lib/scoring/brandKey.js";
-import * as aioConstantsModule from "../../lib/scoring/aioConstants.js";
-import * as enginePipelineModule from "../../lib/scoring/enginePipeline.js";
+} from "../../shared/scoring/enginePipeline.js";
+import * as apiClient from "../../shared/api.js";
+import * as formatModule from "../../shared/format.js";
+import * as aliasesModule from "../../shared/scoring/aliases.js";
+import * as brandKeyModule from "../../shared/scoring/brandKey.js";
+import * as aioConstantsModule from "../../shared/scoring/aioConstants.js";
+import * as enginePipelineModule from "../../shared/scoring/enginePipeline.js";
 
 /**
  * R2.1.1, round 2 — THE READ SIDE OF THE NULL.
@@ -471,7 +471,7 @@ async function renderSidebar(props) {
     }],
     ["@/components/landing/SiteNav", { __esModule: true, Wordmark: () => null }],
     // NOT stubbed: the reader under test.
-    ["@/lib/scoring/enginePipeline", { ...enginePipelineModule, __esModule: true }],
+    ["@/shared/scoring/enginePipeline", { ...enginePipelineModule, __esModule: true }],
   ]);
 
   const requireShim = (specifier) => {
@@ -616,17 +616,17 @@ function makeRequireShim(patchedReact, { history = [] } = {}) {
       usePathname: () => "/dashboard",
       useSearchParams: () => new URLSearchParams(),
     }],
-    ["@/services/api", apiStub],
-    ["@/utils/format", formatModule],
-    ["@/lib/scoring/aliases", aliasesModule],
-    ["@/lib/scoring/brandKey", brandKeyModule],
-    ["@/lib/scoring/aioConstants", aioConstantsModule],
+    ["@/shared/api", apiStub],
+    ["@/shared/format", formatModule],
+    ["@/shared/scoring/aliases", aliasesModule],
+    ["@/shared/scoring/brandKey", brandKeyModule],
+    ["@/shared/scoring/aioConstants", aioConstantsModule],
     // NOT stubbed: the reader under test.
-    ["@/lib/scoring/enginePipeline", { ...enginePipelineModule, __esModule: true }],
+    ["@/shared/scoring/enginePipeline", { ...enginePipelineModule, __esModule: true }],
   ]);
   return (specifier) => {
     if (modules.has(specifier)) return modules.get(specifier);
-    if (specifier.startsWith("@/components/") || specifier.startsWith("@/lib/")) {
+    if (specifier.startsWith("@/components/") || specifier.startsWith("@/server/") || specifier.startsWith("@/shared/")) {
       return anyNamedExport;
     }
     throw new Error(

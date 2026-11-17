@@ -24,7 +24,7 @@ import { SerpAnalysisCard } from "./SerpAnalysisCard";
 import { SaveKeywordsDialog } from "./SaveKeywordsDialog";
 import { LOCATION_OPTIONS } from "@/shared/keyword-locations";
 import { trackKeywordResearch } from "../telemetry";
-import { isApiError } from "@/lib/query/fetchJson";
+import { isApiError } from "@/shared/query/fetchJson";
 
 export function KeywordResearchPage() {
   const c = useKeywordResearchController();

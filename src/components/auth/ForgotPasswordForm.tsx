@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageLoading } from "@/components/app/Spinner";
 import AuthLayout from "@/components/portal/AuthLayout";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { getSupabaseBrowserClient } from "@/shared/supabase/browser";
 import {
   authCallbackUrl,
   DEFAULT_AFTER_SIGN_IN,

@@ -9,14 +9,14 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "sucrase";
 
-import { normalizeResult } from "../../services/api.js";
+import { normalizeResult } from "../../shared/api.js";
 
 /**
  * R2.2.11 — THE CITATION SHARE A CUSTOMER ACTUALLY SEES.
  *
  * The first pass of R2.2.11 made the scan-level mirror
- * (src/lib/scoring/enginePipeline.js) and summaryToMetricsRow
- * (src/lib/analytics/rollup.js) publish `null` instead of `0` when the citation
+ * (src/shared/scoring/enginePipeline.js) and summaryToMetricsRow
+ * (src/shared/analytics/rollup.js) publish `null` instead of `0` when the citation
  * denominator is empty — every answered non-branded row's citation list
  * unobserved, so there is nothing to divide by. Both fixes were correct and
  * both were INVISIBLE, because SourcesView.jsx ended the chain with
@@ -26,7 +26,7 @@ import { normalizeResult } from "../../services/api.js";
  *
  * This file is the guard for the render edge, and it is deliberately not a unit
  * test of a helper: it compiles the REAL SourcesView.jsx off disk, feeds it a
- * result produced by the REAL normalizeResult() in src/services/api.js, and
+ * result produced by the REAL normalizeResult() in src/shared/api.js, and
  * reads the markup. The only hand-built thing is the database row, which is the
  * actual boundary — everything from there to the DOM is the shipped code.
  *
@@ -44,7 +44,7 @@ import { normalizeResult } from "../../services/api.js";
  * WHAT THIS FILE DOES NOT PROVE: static markup only. No browser, no CSS, no
  * effects. It proves the words and the em dash reach the DOM, not that they are
  * legible. It also does not run the scan pipeline — that is
- * src/lib/scoring/citationShareEmptyDenominator.test.mjs, which drives the real
+ * src/shared/scoring/citationShareEmptyDenominator.test.mjs, which drives the real
  * registry and asserts the null is produced in the first place.
  */
 

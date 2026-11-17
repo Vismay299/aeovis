@@ -1,6 +1,6 @@
-import { listFetches, startFetch } from "../../../../../lib/local/fetches.ts";
-import { fetchesQuery, startFetchBody } from "../../../../../lib/local/local.contract.ts";
-import { approve, gate, jsonOk, parseBody, parseQuery, respond, type LocalRouteDeps } from "../../../../../lib/local/routeKit.ts";
+import { listFetches, startFetch } from "../../../../../server/local/fetches.ts";
+import { fetchesQuery, startFetchBody } from "../../../../../server/local/local.contract.ts";
+import { approve, gate, jsonOk, parseBody, parseQuery, respond, type LocalRouteDeps } from "../../../../../server/local/routeKit.ts";
 
 export const dynamic = "force-dynamic";
 // Reviews and posts poll the provider inline for up to 20 seconds.

@@ -15,7 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { EmptyState } from "@/components/app/EmptyState";
-import { formatTimestamp, relativeTime } from "@/utils/format";
+import { formatTimestamp, relativeTime } from "@/shared/format";
 import { formatUsd } from "@/shared/money";
 import type { WorkspaceUsage } from "@/shared/costs";
 

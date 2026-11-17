@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getBrandBrief, upsertBrandBrief } from "@/lib/db/content";
-import { HEALTHCARE_CXO_BRIEF } from "@/lib/content/briefs/healthcareCxo";
+import { getBrandBrief, upsertBrandBrief } from "@/server/db/content";
+import { HEALTHCARE_CXO_BRIEF } from "@/shared/content/briefs/healthcareCxo";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

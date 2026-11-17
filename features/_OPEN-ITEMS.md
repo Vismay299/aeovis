@@ -16,7 +16,7 @@ Later specs asked earlier ones for small changes. Shared names are already fixed
 | A2 | F01, F03 | Add the migration paperwork subtasks (repository `README.md` migration table, `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`). | F04 |
 | A3 | F01 | `safeFetch`: `maxRedirects: 0` returns the 3xx unfollowed with `Location`; `truncate: true` returns a cut body with `truncated: true`. | F19, F18 |
 | A4 | F01 | Optional `ctx.cancelRequested()` in the job context. | F18 |
-| A5 | F01 | Accept one-line telemetry/email hooks in `reserveSpend`, `toErrorResponse`, `requireWorkspace` and the job runner (call `src/lib/telemetry/context.ts`). | F25, F26 |
+| A5 | F01 | Accept one-line telemetry/email hooks in `reserveSpend`, `toErrorResponse`, `requireWorkspace` and the job runner (call `src/shared/telemetry/context.ts`). | F25, F26 |
 | A6 | F02 | Confirm `meter(fetcher, estimate, defaultFeature)` and `DataforseoCallContext` shapes; list the section files other specs port: `labs`, `google-ads`, `keyword-metrics`, `filters`, `researchScopeFilters`, `serp-locations`, `backlinks`, `backlinksTarget` (F13/F16), `business` (F17), Lighthouse (F18). | F13, F17, F18 |
 | A7 | F02, F04 | `src/shared/safe-url.ts` is the same file in both; note "second PR keeps it unchanged". | F04 |
 | A8 | F03 | Add Claude to `PERCEEV_ENGINE_PROVIDERS` and make the provider route-aware; DataForSEO rows use `cost_source: "gateway"`. | F02 |
@@ -28,7 +28,7 @@ Later specs asked earlier ones for small changes. Shared names are already fixed
 | A14 | F09 | Document the inline-approval rule (quote ≤ USD 0.25 via `PricedActionButton`; bulk and jobs always use the dialog). | F13 |
 | A15 | F09 | `startCustomerScan` is extracted from the scan route as a pure move; `recordApproval` accepts subject kind `assistant_approval`. | F22 |
 | A16 | F10 | `ScheduleField` gains optional `allowManual`, `dailyNote`; confirm column names `managed_by`, `customer_updated_at`. | F15, F27 |
-| A17 | F11 | Import from `src/lib/questions/workspaceQuestions.ts`; origin `manual` with `sourceRef { kind: "explore_run", id }`; event names in `prompt_explorer:*` form. | F08, F26 |
+| A17 | F11 | Import from `src/server/questions/workspaceQuestions.ts`; origin `manual` with `sourceRef { kind: "explore_run", id }`; event names in `prompt_explorer:*` form. | F08, F26 |
 | A18 | F12 | Use F08's `normalize_question_text` definition (collapse whitespace, trim, lowercase); flip `QUESTION_HISTORY_AVAILABLE` to `true` in phase 3; event names in `question_history:*` form. | F08, F26 |
 | A19 | F13 | Gate `/api/customer/keywords/locations` on `keyword_research` OR `rank_tracking` OR `local_seo`; expose `runSerpRequest` for tools. | F15, F17, F22 |
 | A20 | F14 | Expose `runSerpCompetitorsRequest` for tools. | F22 |

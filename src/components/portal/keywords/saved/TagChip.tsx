@@ -4,7 +4,7 @@
 
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 import { resolveTagColor, tagChipClass } from "@/shared/tag-colors";
 
 /** One saved-keyword tag, in its stable palette colour. */

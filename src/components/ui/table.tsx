@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import * as React from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 // Row hover and selection use a foreground and primary tint: bg-muted is the
 // page background in the light theme, so it would not show on a card.

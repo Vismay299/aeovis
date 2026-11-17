@@ -18,13 +18,13 @@ for (const name of [
 ])
   delete process.env[name];
 const { brightDataSearch } = await import(
-  "../../src/lib/engines/brightdata.js"
+  "../../src/shared/engines/brightdata.js"
 );
 const { evidenceDocument } = await import(
-  "../../src/lib/db/measurementEvidence.js"
+  "../../src/server/db/measurementEvidence.js"
 );
-const {parseGoogleSerp}=await import("../../src/lib/engines/googlePayload.js");
-const {classifyProviderFailure}=await import("../../src/lib/engines/providerFailure.js");
+const {parseGoogleSerp}=await import("../../src/shared/engines/googlePayload.js");
+const {classifyProviderFailure}=await import("../../src/shared/engines/providerFailure.js");
 const directory = "/tmp/aeovis-google-live-repairs";
 await mkdir(directory, { recursive: true, mode: 0o700 });
 const rows = [];

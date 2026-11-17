@@ -6,9 +6,9 @@ import { Banner, Button, Card, PageHeader } from "@/components/portal/ui";
 import MockScanPanel from "@/components/portal/scans/MockScanPanel";
 import { AgentCanvas } from "@/components/studio/AgentCanvas";
 import { AgentBuilder } from "@/components/studio/AgentBuilder";
-import { FORMATS } from "@/lib/content/agents/formats";
-import { BLOCKS, DEFAULT_PIPELINES } from "@/lib/content/agents/blocks";
-import { builtinAgents } from "@/lib/content/agents/model";
+import { FORMATS } from "@/shared/content/agents/formats";
+import { BLOCKS, DEFAULT_PIPELINES } from "@/shared/content/agents/blocks";
+import { builtinAgents } from "@/shared/content/agents/model";
 import "./demo.css";
 
 export default function DemoPage() {

@@ -1,8 +1,8 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { keys } from "@/lib/query/keys";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { keys } from "@/shared/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
 import type { KeyFileStatus } from "@/shared/indexnow";
 import { trackIndexNowEvent } from "../telemetry";
 

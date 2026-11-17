@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { normalizeFilterValues } from "@/lib/query/filterSearchParams";
+import { normalizeFilterValues } from "@/shared/query/filterSearchParams";
 
 export type UseDebouncedFiltersOptions<V extends Record<string, string>> = {
   applied: V;

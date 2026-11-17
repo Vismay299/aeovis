@@ -3,7 +3,7 @@
 import { CardShell } from "@/components/app/CardShell";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 import type { GridSummaryRow } from "./hooks/useLocalGrid";
 
 export type GridHistoryProps = {

@@ -11,7 +11,7 @@ import {
   addHistoryItem,
   removeHistoryItem,
   saveHistory,
-} from "@/lib/query/localHistory";
+} from "@/shared/query/localHistory";
 
 export type UseLocalHistoryStoreOptions<TItem, TAddInput> = {
   storageKey: string;

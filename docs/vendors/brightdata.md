@@ -2,9 +2,9 @@
 
 > <!-- doc-status -->
 > **Status: LIVE.** Implemented in
-> [`src/lib/engines/brightdata.js`](../../src/lib/engines/brightdata.js);
+> [`src/shared/engines/brightdata.js`](../../src/shared/engines/brightdata.js);
 > parser fixtures in
-> [`src/lib/engines/brightdataParser.test.mjs`](../../src/lib/engines/brightdataParser.test.mjs).
+> [`src/shared/engines/brightdataParser.test.mjs`](../../src/shared/engines/brightdataParser.test.mjs).
 
 **Date:** 2026-09-04 · **Task:** R1.2.9 (the zone cache), R6.3.1 (the rest) · **Verified at:** `bf332fe`
 **Applies to:** the Google AI Overview engine (`aio`) — the only paid engine on
@@ -19,7 +19,7 @@ the live scan path.
 | Request | `POST https://api.brightdata.com/request` (`brightdata.js:371`) |
 | Body | `{ zone, url, format: "json", country }` (`brightdata.js:378-386`) |
 | Search URL | `https://www.google.com/search?q=…&hl=en&gl=<geo>&brd_json=1&brd_ai_overview=2` (`buildGoogleSearchUrl`, `brightdata.js:250-261`) |
-| Geo | `resolveSerpGeo()` — one default, `in` ([`serpGeo.js`](../../src/lib/engines/serpGeo.js)) |
+| Geo | `resolveSerpGeo()` — one default, `in` ([`serpGeo.js`](../../src/shared/engines/serpGeo.js)) |
 | Cost | `0.0015` per query, applied in `enginePipeline.js` — grep `result.cost = 0.0015`, which matches there and in `aioPipeline.js`'s dead probe path, and nowhere else (no line: that file is being edited concurrently) |
 
 ## Response shape
@@ -217,9 +217,9 @@ text mentions a 5xx), `:334-378` (a rejected probe is an **error row**, never a
 1. **`invalidateBrightDataZoneCache()` has no production consumer.** Swept for
    the symbol across `src`, `scripts`, `worker` and `supabase`. Outside
    `brightdata.js` itself it appears in three files, and **exactly one of them
-   calls it**: `src/lib/engines/brightdataZone.test.mjs` (`:206`, `:218`, `:223`,
+   calls it**: `src/shared/engines/brightdataZone.test.mjs` (`:206`, `:218`, `:223`,
    `:253`), a test. The other two only *mention* it in prose —
-   `src/lib/checkSecretsBrightdataNoZone.test.mjs:21`, in the file comment
+   `src/server/checkSecretsBrightdataNoZone.test.mjs:21`, in the file comment
    explaining why that file stays split from `checkSecretsBrightdata.test.mjs`,
    and `scripts/check-secrets.mjs`, in the comment above the `PASS` string.
    An earlier revision of this list counted the first of those as a caller:
@@ -239,7 +239,7 @@ text mentions a 5xx), `:334-378` (a rejected probe is an **error row**, never a
 ### Which process actually holds this cache
 
 **Not the worker container, and an earlier revision of this file said it was.**
-`worker/` cannot import `src/` at all — `src/lib/workerIsolation.test.mjs:72`
+`worker/` cannot import `src/` at all — `src/server/workerIsolation.test.mjs:72`
 fails any relative import that climbs out of `worker/` — and a sweep of
 `worker/src` for `brightdata` and `engines/` returns nothing.
 
@@ -259,10 +259,10 @@ the symbol, not merely mention it. There are five importers besides
 
 | Importer | Call site | Live? |
 |---|---|---|
-| `src/lib/scoring/enginePipeline.js:1` | in `probeAio` — grep `brightDataSearch(query.text` | **live** — the probing phase, every scan |
-| `src/lib/engines/serp.js:5` | `:325`, in `fetchPeopleAlsoAsk` | **live** — the sourcing phase, conditionally |
+| `src/shared/scoring/enginePipeline.js:1` | in `probeAio` — grep `brightDataSearch(query.text` | **live** — the probing phase, every scan |
+| `src/shared/engines/serp.js:5` | `:325`, in `fetchPeopleAlsoAsk` | **live** — the sourcing phase, conditionally |
 | ” | `:286`, in `probeGoogleAiOverviewBrightData` | dead |
-| `src/lib/scoring/aioPipeline.js:1` | `:99`, in `probeQueryOnce` | dead |
+| `src/shared/scoring/aioPipeline.js:1` | `:99`, in `probeQueryOnce` | dead |
 
 **Probing — live.** `runScanChunk` resolves engines through `enginePipeline.js`
 (grep `resolveEnabledEngines`), whose `aio` entry (grep `probe: probeAio`, one hit
@@ -385,7 +385,7 @@ for the reason given at the end of `README.md`.*
 *`HEAD` moved twice during this revision (`d845e97` → `bf332fe`), which is why the
 stamp above is a commit and not a date alone. Between the first revision's
 `967bda6` and `bf332fe`, every file cited here **by line** is byte-identical
-except `src/lib/scoring/promptGen.js`, which is newly cited in this round and was
+except `src/shared/scoring/promptGen.js`, which is newly cited in this round and was
 read at `bf332fe`; the rest carry forward by blob identity, checked with
 `git rev-parse <commit>:<file>` rather than assumed.*
 
@@ -396,8 +396,8 @@ at `bf332fe` those lines are a doc comment and an unrelated helper while the two
 **resolved** — the file is long enough that `:60` and `:94` both exist — it just
 no longer pointed at anything relevant, which is Rule 2's point exactly. The route
 is cited by anchor from here on.
-`scripts/check-secrets.mjs`, `src/lib/workers/scanWorker.js` (which moved again
-mid-revision), `src/lib/scoring/enginePipeline.js` and that cron route are all
+`scripts/check-secrets.mjs`, `src/server/workers/scanWorker.js` (which moved again
+mid-revision), `src/shared/scoring/enginePipeline.js` and that cron route are all
 cited by name and greppable string rather than by line; each anchor was grepped at
 `bf332fe` and its hit count checked — see
 [the note in `README.md`](./README.md#a-note-on-citing-check-secretsmjs).*

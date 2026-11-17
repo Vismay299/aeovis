@@ -21,8 +21,8 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { validateTemplateData, buildScanFinishedData, buildScheduleSkippedData, buildSpendCapData } from "../../src/lib/email/templates.ts";
-import { readEmailConfig } from "../../src/lib/email/config.ts";
+import { validateTemplateData, buildScanFinishedData, buildScheduleSkippedData, buildSpendCapData } from "../../src/server/email/templates.ts";
+import { readEmailConfig } from "../../src/server/email/config.ts";
 
 export const TEMPLATES = ["scan_finished", "schedule_skipped", "spend_cap_reached"];
 
@@ -182,7 +182,7 @@ export async function runTestSend({ argv, env = process.env, deps = {} }) {
   assertSupabaseConfigured(env);
 
   const cfg = readEmailConfig(env);
-  const admin = deps.admin ?? (await import("../../src/lib/supabase/admin.js")).getSupabaseAdmin(env);
+  const admin = deps.admin ?? (await import("../../src/shared/supabase/admin.js")).getSupabaseAdmin(env);
   if (!admin) refuse(SUPABASE_CONFIG_MESSAGE);
 
   const recipient = await resolveRecipient(admin, args.to);

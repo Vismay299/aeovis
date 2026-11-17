@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageLoading } from "@/components/app/Spinner";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { getSupabaseBrowserClient } from "@/shared/supabase/browser";
 import { signInErrorMessage } from "@/shared/auth-errors";
 import {
   DEFAULT_AFTER_SIGN_IN,

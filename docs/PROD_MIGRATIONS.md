@@ -18,8 +18,8 @@ those paths were clean in the working tree when it was read — so those numbers
 describe committed blobs.
 
 Four files this document also names were **dirty in the working tree** at the
-time of writing (other tasks in flight): `src/lib/db.js`,
-`src/lib/workers/scanWorker.js`, `src/lib/scoring/enginePipeline.js`,
+time of writing (other tasks in flight): `src/server/db.js`,
+`src/server/workers/scanWorker.js`, `src/shared/scoring/enginePipeline.js`,
 `src/app/api/scan/route.js`. They are therefore cited by **greppable symbol,
 never by line**, because a line number read out of a tree nobody has committed
 is a number that is wrong by the time you read it.
@@ -70,7 +70,7 @@ source:
 > table can exist while the function that makes it usable does not — exactly
 > the state 009 was found in.
 
-The same rule is asserted in a live test at `src/lib/scanRunsLive.test.mjs:110`
+The same rule is asserted in a live test at `src/server/scanRunsLive.test.mjs:110`
 ("pg_class, not `SELECT ... LIMIT 0`: a head probe against PostgREST cannot
 tell a missing table from a permissions error").
 
@@ -111,7 +111,7 @@ against a customer's in-flight scan can kill it. Check `pg_proc`; do not dial
 the number.
 
 The repo's own enumeration of which RPCs write which tables is in
-`src/lib/liveWriteGuard.js` (grep for `claim_scan_job_attempt:` and
+`src/server/liveWriteGuard.js` (grep for `claim_scan_job_attempt:` and
 `increment_scan_rate_limit:` — that file was dirty in the working tree, so it is
 cited by symbol).
 
@@ -130,24 +130,24 @@ migrations did not, this is where you look to predict the symptom.**
 | Migration | Depended on by | Reached from | If missing |
 |---|---|---|---|
 | `001` | everything | every route | Nothing works |
-| `002` | `src/lib/db/content.js` | `/api/content*`, `/api/content-items`, `/api/brand-briefs`, `/api/lessons` | Content OS 500s |
+| `002` | `src/server/db/content.js` | `/api/content*`, `/api/content-items`, `/api/brand-briefs`, `/api/lessons` | Content OS 500s |
 | `003` | agent config + provenance snapshot | `/api/agents` | Agent create/read fails; `content_jobs.agent_*` writes fail |
 | `004` | knowledge blocks + custom pipelines | `/api/knowledge` | Knowledge routes fail; agent `pipeline`/`block_config` writes fail |
-| `005` | `src/lib/db/analytics.js` (analytics tables), `scan_jobs.checkpoint`/`heartbeat_at` | the scan pipeline and every dashboard trend | Chunked probing cannot checkpoint; rescue cannot see staleness; all trends empty |
-| `006` | `acquireLease("content_jobs", …)` at `src/app/api/content/worker/route.js:55` and `src/lib/content/contentWorker.js:169`; `content_runs` writes at `src/lib/db/content.js:342` | cron `/api/content/worker` (`vercel.json`, `30 0 * * *`) | Content jobs lose single-flight — two executions race one row, each spending a full per-item cost cap |
-| `007` | `DUPLICATE_SCAN_INDEX` at `src/lib/duplicateScan.js:19`, caught in `src/lib/db.js` (`createScanJob`) | `POST /api/scan` | The duplicate-scan TOCTOU reopens; each duplicate spends a full Bright Data + LLM budget |
-| `008` | `recordCronTick` / `getCronTicks`, `src/lib/db/analytics.js:555` and `:571` | cron `/api/scan/worker:279`, cron `/api/content/worker:91`, read by `/api/health:48` | `/api/health` cannot answer "did the cron fire"; heartbeat writes warn and return `null` |
-| `009` | `incrementScanRateLimit`, `src/lib/db/analytics.js:523`; `checkScanRateLimit` at `src/lib/rateLimit.js:332` | `POST /api/scan` | The anonymous free scan has no cap at all |
-| `010` | `src/lib/probeQueue.js` and the fleet's copy `worker/src/lib/queue.js` | **nothing deployed** — see below | No observable symptom today |
-| `011` | `openScanRun`/`closeScanRun`, `src/lib/scanRuns.js:223`/`:280`, imported by `src/lib/workers/scanWorker.js`; `RUN_OUTCOMES` at `src/app/api/scan/worker/route.js:12` | `POST /api/scan`, `/api/scan/[job_id]/status`, cron `/api/scan/worker` | The chunk worker's ledger writes fail; a measured-zero pass and a never-ran pass become indistinguishable again |
-| `012` | `claim_scan_job_attempt` RPC, called from `src/lib/workers/scanWorker.js` (grep `claimJobAttempt`) | same three entry points as 011 | A poison job is resumed forever by the cron sweep, spending real vendor budget every tick |
-| `013` | `sov_state`/`sov_state_reason` on every row `buildMetricsRows` produces (`src/lib/analytics/rollup.js`), written verbatim by `upsertBrandMetricsDaily` (`src/lib/db/analytics.js`) | scan finalize (cron `/api/scan/worker`), `scripts/backfill-analytics.mjs`, read by `GET /api/brands/[brand]/metrics` | **Every scan finalize fails its `brand_metrics_daily` upsert with PostgREST `PGRST204` ("column sov_state ... does not exist")** — the upsert passes the row object through unfiltered, so this is a hard failure, not a dropped field |
+| `005` | `src/server/db/analytics.js` (analytics tables), `scan_jobs.checkpoint`/`heartbeat_at` | the scan pipeline and every dashboard trend | Chunked probing cannot checkpoint; rescue cannot see staleness; all trends empty |
+| `006` | `acquireLease("content_jobs", …)` at `src/app/api/content/worker/route.js:55` and `src/shared/content/contentWorker.js:169`; `content_runs` writes at `src/server/db/content.js:342` | cron `/api/content/worker` (`vercel.json`, `30 0 * * *`) | Content jobs lose single-flight — two executions race one row, each spending a full per-item cost cap |
+| `007` | `DUPLICATE_SCAN_INDEX` at `src/server/duplicateScan.js:19`, caught in `src/server/db.js` (`createScanJob`) | `POST /api/scan` | The duplicate-scan TOCTOU reopens; each duplicate spends a full Bright Data + LLM budget |
+| `008` | `recordCronTick` / `getCronTicks`, `src/server/db/analytics.js:555` and `:571` | cron `/api/scan/worker:279`, cron `/api/content/worker:91`, read by `/api/health:48` | `/api/health` cannot answer "did the cron fire"; heartbeat writes warn and return `null` |
+| `009` | `incrementScanRateLimit`, `src/server/db/analytics.js:523`; `checkScanRateLimit` at `src/server/rateLimit.js:332` | `POST /api/scan` | The anonymous free scan has no cap at all |
+| `010` | `src/server/probeQueue.js` and the fleet's copy `worker/src/lib/queue.js` | **nothing deployed** — see below | No observable symptom today |
+| `011` | `openScanRun`/`closeScanRun`, `src/server/scanRuns.js:223`/`:280`, imported by `src/server/workers/scanWorker.js`; `RUN_OUTCOMES` at `src/app/api/scan/worker/route.js:12` | `POST /api/scan`, `/api/scan/[job_id]/status`, cron `/api/scan/worker` | The chunk worker's ledger writes fail; a measured-zero pass and a never-ran pass become indistinguishable again |
+| `012` | `claim_scan_job_attempt` RPC, called from `src/server/workers/scanWorker.js` (grep `claimJobAttempt`) | same three entry points as 011 | A poison job is resumed forever by the cron sweep, spending real vendor budget every tick |
+| `013` | `sov_state`/`sov_state_reason` on every row `buildMetricsRows` produces (`src/shared/analytics/rollup.js`), written verbatim by `upsertBrandMetricsDaily` (`src/server/db/analytics.js`) | scan finalize (cron `/api/scan/worker`), `scripts/backfill-analytics.mjs`, read by `GET /api/brands/[brand]/metrics` | **Every scan finalize fails its `brand_metrics_daily` upsert with PostgREST `PGRST204` ("column sov_state ... does not exist")** — the upsert passes the row object through unfiltered, so this is a hard failure, not a dropped field |
 
 **Two honest gaps in that table.**
 
 1. **`010` is required by nothing that runs.** `git grep probeQueue -- src worker`
-   at `1a5ed81` returns only its own test, comments in `src/lib/liveDbGate.js` /
-   `src/lib/workerIsolation.test.mjs`, and the deliberate copy in
+   at `1a5ed81` returns only its own test, comments in `src/server/liveDbGate.js` /
+   `src/server/workerIsolation.test.mjs`, and the deliberate copy in
    `worker/src/lib/queue.js`. The fleet in `worker/` is not deployed —
    `011_scan_runs.sql:373` says so in the file ("the fleet is not deployed until
    R1.3 lands a real adapter"). So a database missing 010 will look perfectly
@@ -156,7 +156,7 @@ migrations did not, this is where you look to predict the symptom.**
 2. **`006`'s `scan_jobs.lease_owner` / `scan_jobs.lease_expires_at` are still
    unwritten.** `006_agent_control_plane.sql:22-23` says they are added so that
    adopting the primitive later is a code-only change, and
-   `git grep 'acquireLease(' -- src/app src/lib/content` confirms the only two
+   `git grep 'acquireLease(' -- src/app src/shared/content` confirms the only two
    call sites both pass `"content_jobs"`. Their absence would therefore also be
    invisible.
 
@@ -744,9 +744,9 @@ treat it as not applied and re-run.
 
 The `predicate` column is the point of checking the definition rather than just
 the name: the four statuses in the index **must** match `SCAN_JOB_RUNNING` in
-`src/lib/db.js` (grep `export const SCAN_JOB_RUNNING`). A status added in JS
+`src/server/db.js` (grep `export const SCAN_JOB_RUNNING`). A status added in JS
 and not here reopens the race. *(The migration's own header cites
-`src/lib/db.js:318` for that constant; at `1a5ed81` it is at `src/lib/db.js:556`.
+`src/server/db.js:318` for that constant; at `1a5ed81` it is at `src/server/db.js:556`.
 The stated values still match — `pending`, `generating_prompts`, `probing`,
 `scoring` — only the line number in the comment has gone stale.)*
 
@@ -795,7 +795,7 @@ SELECT c.relname                AS table_name,
 means not applied.
 
 Worth knowing while you diagnose: the heartbeat write is **deliberately
-non-fatal**. `recordCronTick` (`src/lib/db/analytics.js:555`) logs
+non-fatal**. `recordCronTick` (`src/server/db/analytics.js:555`) logs
 `[heartbeat] could not record the "<name>" tick: …` and returns `null` rather
 than failing the run it is only observing. So a missing 008 does not break the
 cron — it makes `/api/health` unable to tell a cron that stopped from a cron
@@ -1239,7 +1239,7 @@ outside 1...50000, by raising — never by returning 0.
 **After applying, confirm the cron exists** in the Vercel project:
 `/api/scan-runs/retention` at `30 3 * * *` (`vercel.json`), half an hour after
 the evidence sweep so the two never share a window. The route is `SELF_GATED`
-in `src/lib/operatorPerimeter.js` and authenticates with `CRON_SECRET` only.
+in `src/server/operatorPerimeter.js` and authenticates with `CRON_SECRET` only.
 
 
 ---
@@ -1357,12 +1357,12 @@ than none:
 ## See also
 
 - `README.md` § Database — the one-line summary table of what each migration
-  adds. That table is guarded: `src/lib/docStatus.test.mjs` fails if a migration
+  adds. That table is guarded: `src/server/docStatus.test.mjs` fails if a migration
   on disk is missing from it.
 - `scripts/setup-supabase.mjs:61-132` — `EXPECTED_OBJECTS`, the runner's own
   post-apply catalog check. Narrower than this file for 001-006; identical in
   spirit.
-- `src/lib/migrationsLedger.test.mjs`, `src/lib/migrationsRunner.test.mjs` — the
+- `src/server/migrationsLedger.test.mjs`, `src/server/migrationsRunner.test.mjs` — the
   guards that stop `EXPECTED_OBJECTS` going stale again (finding C10).
 - `docs/plans/2026-08-29-rebuild-roadmap.md:13-25` — the eleven standing rules,
   of which rule 4 is the one this file serves.

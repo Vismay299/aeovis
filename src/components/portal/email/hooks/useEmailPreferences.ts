@@ -3,8 +3,8 @@
 import { useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useOptimisticMutation } from "@/components/app/hooks/useOptimisticMutation";
-import { emailKeys } from "@/lib/query/keys";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { emailKeys } from "@/shared/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
 
 export type EmailPreferences = {
   productUpdates: boolean;

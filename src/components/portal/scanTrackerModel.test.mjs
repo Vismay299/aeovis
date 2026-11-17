@@ -12,7 +12,7 @@ import {
   scanTrackerReducer,
   trackerView,
 } from "./scanTrackerModel.js";
-import { isReconnecting } from "../../lib/scanProgress.js";
+import { isReconnecting } from "../../shared/scanProgress.js";
 
 test("adoption of the first active unsettled job", () => {
   const state = initialTrackerState("brand-1");

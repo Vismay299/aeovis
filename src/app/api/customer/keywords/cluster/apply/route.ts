@@ -1,14 +1,14 @@
-import { AppError } from "../../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../../lib/workspace/requireWorkspace.ts";
-import { clusterApplyBody } from "../../../../../../lib/keywords/keywords.contract.ts";
-import { jobStore } from "../../../../../../lib/jobs/store.ts";
-import { getJobStatus } from "../../../../../../lib/jobs/status.ts";
-import { createSavedKeywordsRepository } from "../../../../../../lib/keywords/repository.ts";
+} from "../../../../../../server/workspace/requireWorkspace.ts";
+import { clusterApplyBody } from "../../../../../../server/keywords/keywords.contract.ts";
+import { jobStore } from "../../../../../../server/jobs/store.ts";
+import { getJobStatus } from "../../../../../../server/jobs/status.ts";
+import { createSavedKeywordsRepository } from "../../../../../../server/keywords/repository.ts";
 
 export const dynamic = "force-dynamic";
 
