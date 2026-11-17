@@ -65,12 +65,17 @@ function AssistantPageContent() {
   const startChat = useCallback(() => {
     creating.current = true;
     setCreateError(null);
-    createSession.mutate(undefined, {
-      onError: (error) => setCreateError(error),
-      onSettled: () => {
+    // Inline error via mutateAsync: the landing view below renders createError
+    // ("Failed to start a new chat." + Retry), and the mutation's
+    // `meta: { errorToast: false }` keeps the shared toast off.
+    void createSession
+      .mutateAsync(undefined)
+      .catch((error: Error) => {
+        setCreateError(error);
+      })
+      .finally(() => {
         creating.current = false;
-      },
-    });
+      });
   }, [createSession]);
 
   const configured = configQuery.data?.configured === true;

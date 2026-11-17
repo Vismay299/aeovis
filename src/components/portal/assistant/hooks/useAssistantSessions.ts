@@ -122,6 +122,9 @@ export function useAssistantSessions(
   );
 
   const createSession = useMutation({
+    // AssistantPage shows a create failure inline ("Failed to start a new
+    // chat." + Retry), so opt out of the shared error toast.
+    meta: { errorToast: false },
     mutationFn: () =>
       fetchJson<{ id: string; title: string }>("/api/customer/assistant/sessions", {
         method: "POST",
