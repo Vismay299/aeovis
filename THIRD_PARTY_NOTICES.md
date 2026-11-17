@@ -825,3 +825,17 @@ SOFTWARE.
 
 ### F22 Phase 3 ports
 - `src/server/tools/own/siteReading.ts` (from `src/server/lib/scrape.ts`, `src/server/features/sam/samChatTools.ts`)
+
+### F23 Phase 1 ports
+- `src/shared/reports.ts` (from `src/types/schemas/reports.ts:5-70`, `src/types/schemas/report-templates.ts:5-26`)
+- `src/shared/report-share.ts` (from `src/shared/report-share.ts:5-20`, `src/server/features/reports/shareAccess.ts:23`, `src/routes/s/$token/raw.ts:44-53`)
+- `src/shared/report-sandbox.ts` (from `src/shared/report-sandbox.ts:1-130`)
+- `src/shared/report-sandbox.test.ts` (from `src/shared/report-sandbox.test.ts:4-17`)
+- `src/server/reports/repository.ts` (from `src/server/features/reports/repositories/ReportRepository.ts:1-276`)
+- `src/server/reports/service.ts` (from `src/server/features/reports/services/ReportService.ts:22-326`)
+- `src/server/reports/service.test.ts` (ported cases from `src/server/features/reports/services/ReportService.test.ts:61-276`)
+- `src/server/reports/templateRepository.ts` (from `src/server/features/reports/repositories/ReportTemplateRepository.ts:1-113`)
+- `src/server/reports/templateService.ts` (from `src/server/features/reports/services/ReportTemplateService.ts:17-184`)
+- `src/server/reports/templateService.test.ts` (ported cases from `src/server/features/reports/services/ReportTemplateService.test.ts:53-115`)
+- `supabase/migrations/150_f23_reports.sql` (from `src/db/reports.schema.ts:11-85`, `src/db/report-templates.schema.ts:5-43`)
+- `supabase/migrations/151_f23_report_share_views.sql` (from `src/routes/s/$token/raw.ts:44-53`, `src/db/reports.schema.ts`)
