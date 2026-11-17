@@ -8,7 +8,7 @@ Three ideas drive every decision on this page, in this order:
   2. Show the evidence. No score without the sentence that produced it.
   3. Unbranded or it doesn't count. The neutrality of the probe is the trust story.
 
-Ported from design-options/prototype.src.html; see docs/design/DESIGN-SYSTEM.md.
+Ported from docs/design/options/prototype.src.html; see docs/design/DESIGN-SYSTEM.md.
 Every figure below is the one reading quoted on every other surface (§10 of
 that document) and every brand on it is fictional.
 */

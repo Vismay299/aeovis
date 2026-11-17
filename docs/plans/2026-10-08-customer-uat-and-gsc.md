@@ -1,5 +1,8 @@
 # Perceev: customer UAT and self-service Google Search Console
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** The October 2026 plan for customer UAT and self-service Google Search Console. Moved here from the repository root (`plan.md`) on 2026-11-17; its authority was not re-assessed at the move.
+
 Prepared: 8 October 2026. Repository: `/Users/vismay/Desktop/Projects/AEO`.
 
 ## 1. What we are building

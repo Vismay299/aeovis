@@ -1,5 +1,8 @@
 # AEO Visibility Tracker - Performance Optimization Plan
 
+> <!-- doc-status -->
+> **Status: HISTORICAL.** A compiled performance audit and optimisation plan. Moved here from the repository root (`aeo_performance_optimization_plan.md`) on 2026-11-17; its authority was not re-assessed at the move.
+
 This document compiles, synthesizes, and structures the findings of 15 specialized codebase audits targeting performance bottlenecks in the AEO (AI Engine Optimization) Visibility Tracker pipeline. It outlines current bottlenecks and proposes three distinct conceptual approaches for pipeline runtime optimization.
 
 ---

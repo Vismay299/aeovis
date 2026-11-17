@@ -1,5 +1,8 @@
 # AnswerRank — Product Requirements
 
+> <!-- doc-status -->
+> **Status: SUPERSEDED-BY** [PRODUCT.md](../../PRODUCT.md). The February 2026 "AnswerRank" product requirements. Moved here from `memory/PRD.md` on 2026-11-17 and kept for its rationale.
+
 ## Problem statement
 The original AEO scoring app produced 0% visibility for every brand because:
 1. The BrightData AI-Overview parser was reading the wrong JSON path (`text`/`text_blocks`) while BrightData actually returns `ai_overview.texts` with nested list/paragraph blocks and `ai_overview.references` (using `href`).

@@ -1,0 +1,15 @@
+{
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.expand": false,
+  "explorer.fileNesting.patterns": {
+    "README.md": "CLAUDE.md, DESIGN.md, PRODUCT.md, THIRD_PARTY_NOTICES.md",
+    "package.json": "package-lock.json, .nvmrc",
+    "tsconfig.json": "jsconfig.json, tsconfig.tsbuildinfo, next-env.d.ts",
+    "next.config.mjs": "vercel.json, postcss.config.mjs, tailwind.config.js, components.json, .eslintrc.json",
+    ".gitignore": ".gitattributes",
+    ".env.example": ".env, .env.local, .env.*.local"
+  },
+  "files.exclude": {
+    "**/.DS_Store": true
+  }
+}

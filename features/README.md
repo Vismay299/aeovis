@@ -5,7 +5,7 @@
 
 ## What this folder is
 
-The 20 October teardown ([`Open SEO/OpenSEO-vs-Perceev.html`](../Open%20SEO/OpenSEO-vs-Perceev.html)) compared OpenSEO (`every-app/open-seo`, MIT) with Perceev. It found 26 capabilities where OpenSEO leads. The owner decided to adopt all of them except **billing** and the **MCP server**, to add **classic SEO**, to **trial DataForSEO**, to **reuse OpenSEO's code**, and to make the customer app's **UI/UX match OpenSEO's**.
+The 20 October teardown ([`docs/open-seo/OpenSEO-vs-Perceev.html`](../docs/open-seo/OpenSEO-vs-Perceev.html)) compared OpenSEO (`every-app/open-seo`, MIT) with Perceev. It found 26 capabilities where OpenSEO leads. The owner decided to adopt all of them except **billing** and the **MCP server**, to add **classic SEO**, to **trial DataForSEO**, to **reuse OpenSEO's code**, and to make the customer app's **UI/UX match OpenSEO's**.
 
 Each feature has one spec, detailed enough that an AI agent can implement it phase by phase without guessing. Read these first, in order:
 
