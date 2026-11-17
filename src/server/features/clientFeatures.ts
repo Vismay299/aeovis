@@ -49,6 +49,7 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "reports",
   "report_sharing",
   "report_generate",
+  "assistant",
 ];
 
 export type ClientFeatureName = FeatureName;

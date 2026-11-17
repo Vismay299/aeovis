@@ -152,6 +152,12 @@ export const keys = {
   // F18 phase 9 — the owner-only Shopify crawler-access list for one workspace.
   siteAuditCrawlerAccess: (brandKey: string) =>
     ["siteAuditCrawlerAccess", brandKey] as const,
+  // F22 — the in-app assistant. Config and the session list are
+  // workspace-scoped; a session and an approval are id-addressed records.
+  assistantConfig: (brandKey: string) => ["assistantConfig", brandKey] as const,
+  assistantSessions: (brandKey: string) => ["assistantSessions", brandKey] as const,
+  assistantSession: (sessionId: string) => ["assistantSession", sessionId] as const,
+  assistantApproval: (approvalId: string) => ["assistantApproval", approvalId] as const,
 } as const;
 
 // F12 §6.2 — question history reads. Workspace data follows

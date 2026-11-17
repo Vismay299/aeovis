@@ -181,6 +181,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
     label: "AI Tools",
     items: [
       {
+        id: "assistant",
+        label: "Assistant",
+        href: "/portal/assistant",
+        icon: MessageSquareText,
+        flag: "assistant",
+      },
+      {
         id: "context",
         label: "Context",
         href: "/portal/context",
