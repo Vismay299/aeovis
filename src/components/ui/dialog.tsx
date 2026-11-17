@@ -35,7 +35,7 @@ function DialogOverlay({
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
       className={cn(
-        "fixed inset-0 isolate z-50 bg-black/50 duration-100 data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
+        "fixed inset-0 isolate z-50 bg-black/50 motion-overlay",
         className,
       )}
       {...props}
@@ -60,7 +60,7 @@ function DialogContent({
         data-slot="dialog-content"
         data-fullscreen={fullScreenOnMobile ? "" : undefined}
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] -translate-x-1/2 overflow-y-auto -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground border border-border shadow-xl duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          "fixed top-1/2 left-1/2 z-50 grid w-full max-h-[calc(100%-2rem)] max-w-[calc(100%-2rem)] -translate-x-1/2 overflow-y-auto -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground border border-border shadow-xl outline-none sm:max-w-sm motion-modal",
           fullScreenOnMobile &&
             "max-sm:inset-0 max-sm:top-0 max-sm:left-0 max-sm:h-[100dvh] max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-none max-sm:pb-safe",
           className,

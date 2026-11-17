@@ -1,0 +1,182 @@
+/* The Perceev colour scheme: Onyx and White.
+
+   <html data-palette="onyx"> is the base and is always set. It is a dark
+   scheme with two colours: a near-black page and a white that does the text
+   and every primary action. It renders the same whichever theme preference
+   is stored, so the tokens below are written once and the `dark:` utility
+   variant is widened to follow data-palette (see app-theme.css).
+
+   Variants under review change only the few --p-* inputs:
+     shades   the same two colours, pushed warmer, cooler, softer or harder
+     accents  a third colour that takes over the primary actions */
+
+:root[data-palette] {
+  --p-bg: #0a0a0b;
+  --p-ink: #f5f5f5;
+  --p-card: color-mix(in oklab, var(--p-ink) 6%, var(--p-bg));
+  --p-side: color-mix(in oklab, #000 30%, var(--p-bg));
+  --p-accent: var(--p-ink);
+  --p-on-accent: var(--p-bg);
+}
+
+/* ── Shades ────────────────────────────────────────────────────────── */
+
+/* Softer: a lifted charcoal page, less glare on the white. */
+:root[data-palette="carbon"] {
+  --p-bg: #131316;
+  --p-ink: #ececee;
+  --p-card: #1c1c20;
+  --p-side: #0d0d0f;
+}
+
+/* Harder: true black, pure white, cards barely lifted. */
+:root[data-palette="pitch"] {
+  --p-bg: #000000;
+  --p-ink: #ffffff;
+  --p-card: #0c0c0d;
+  --p-side: #000000;
+}
+
+/* Warm: brown-black with an ivory white. */
+:root[data-palette="ember"] {
+  --p-bg: #0d0b0a;
+  --p-ink: #f6f1e9;
+  --p-card: #181513;
+  --p-side: #080706;
+}
+
+/* Cool: blue-black with an icy white. */
+:root[data-palette="frost"] {
+  --p-bg: #080a0e;
+  --p-ink: #eef2f7;
+  --p-card: #11151c;
+  --p-side: #05070a;
+}
+
+/* Stepped greys: the page stays onyx, surfaces climb in clear steps and the
+   primary action is a mid grey instead of white. */
+:root[data-palette="slate"] {
+  --p-card: #1b1b1e;
+  --p-accent: #c9c9cf;
+  --p-on-accent: #0a0a0b;
+}
+
+/* ── Accents: onyx, white, and one colour that pops ────────────────── */
+
+:root[data-palette="volt"] { --p-accent: #c8f53a; --p-on-accent: #0a0a0b; }
+:root[data-palette="arcade"] { --p-accent: #ff6a13; --p-on-accent: #0a0a0b; }
+:root[data-palette="electric"] { --p-accent: #4d7cff; --p-on-accent: #ffffff; }
+:root[data-palette="ultra"] { --p-accent: #a78bfa; --p-on-accent: #0a0a0b; }
+:root[data-palette="aqua"] { --p-accent: #34e0c2; --p-on-accent: #0a0a0b; }
+:root[data-palette="pulse"] { --p-accent: #ff4d8d; --p-on-accent: #0a0a0b; }
+
+/* ── Tokens ────────────────────────────────────────────────────────── */
+
+:root[data-palette] {
+  color-scheme: dark;
+
+  /* customer app */
+  --background: var(--p-bg);
+  --foreground: var(--p-ink);
+  --card: var(--p-card);
+  --card-foreground: var(--p-ink);
+  --popover: color-mix(in oklab, var(--p-ink) 5%, var(--p-card));
+  --popover-foreground: var(--p-ink);
+  --primary: var(--p-accent);
+  --primary-foreground: var(--p-on-accent);
+  --secondary: color-mix(in oklab, var(--p-ink) 12%, var(--p-bg));
+  --secondary-foreground: var(--p-ink);
+  --muted: color-mix(in oklab, var(--p-ink) 8%, var(--p-bg));
+  --muted-foreground: color-mix(in oklab, var(--p-ink) 64%, transparent);
+  --accent: color-mix(in oklab, var(--p-ink) 12%, var(--p-bg));
+  --accent-foreground: var(--p-ink);
+  --destructive: oklch(70% 0.19 25);
+  --success: oklch(74% 0.17 150);
+  --success-foreground: #06120a;
+  --warning: oklch(82% 0.15 80);
+  --warning-foreground: #1a1203;
+  --info: oklch(74% 0.13 235);
+  --info-foreground: #04121c;
+  --border: color-mix(in oklab, var(--p-ink) 13%, var(--p-bg));
+  --input: color-mix(in oklab, var(--p-ink) 28%, var(--p-bg));
+  --ring: var(--p-accent);
+  --chart-1: oklch(70% 0.15 255);
+  --chart-2: oklch(72% 0.16 45);
+  --chart-3: oklch(74% 0.13 165);
+  --chart-4: oklch(80% 0.14 80);
+  --chart-5: oklch(72% 0.16 355);
+  --chart-you: var(--p-accent);
+  --chart-rival-1: color-mix(in oklab, var(--p-ink) 55%, var(--p-bg));
+  --chart-rival-2: color-mix(in oklab, var(--p-ink) 38%, var(--p-bg));
+  --chart-rival-3: color-mix(in oklab, var(--p-ink) 24%, var(--p-bg));
+  --chart-none: color-mix(in oklab, var(--p-ink) 13%, var(--p-bg));
+  --sidebar: var(--p-side);
+  --sidebar-foreground: var(--p-ink);
+  --sidebar-primary: var(--p-accent);
+  --sidebar-primary-foreground: var(--p-on-accent);
+  --sidebar-accent: color-mix(in oklab, var(--p-ink) 10%, transparent);
+  --sidebar-accent-foreground: var(--p-ink);
+  --sidebar-border: color-mix(in oklab, var(--p-ink) 12%, var(--p-bg));
+  --sidebar-ring: var(--p-accent);
+
+  --trend-grid-color: color-mix(in oklab, var(--p-ink) 16%, transparent);
+  --trend-axis-color: color-mix(in oklab, var(--p-ink) 62%, transparent);
+  --trend-fill-start-opacity: 0.24;
+  --trend-fill-end-opacity: 0.03;
+  --trend-tooltip-bg: color-mix(in oklab, var(--p-card) 95%, transparent);
+  --trend-tooltip-border: color-mix(in oklab, var(--p-ink) 18%, transparent);
+  --trend-tooltip-shadow: oklch(0% 0 0 / 0.5);
+
+  /* public website and the legacy report components */
+  --paper: var(--p-bg);
+  --surface: var(--p-card);
+  --sunken: color-mix(in oklab, var(--p-ink) 4%, var(--p-bg));
+  --raised: color-mix(in oklab, var(--p-ink) 5%, var(--p-card));
+  --ink-1: var(--p-ink);
+  --ink-2: color-mix(in oklab, var(--p-ink) 84%, var(--p-bg));
+  --ink-3: color-mix(in oklab, var(--p-ink) 72%, var(--p-bg));
+  --ink-4: color-mix(in oklab, var(--p-ink) 62%, var(--p-bg));
+  --line: color-mix(in oklab, var(--p-ink) 13%, var(--p-bg));
+  --line-soft: color-mix(in oklab, var(--p-ink) 8%, var(--p-bg));
+  --line-strong: color-mix(in oklab, var(--p-ink) 24%, var(--p-bg));
+  --brand: var(--p-accent);
+  --brand-lift: color-mix(in oklab, var(--p-accent) 84%, var(--p-bg));
+  --brand-tint: color-mix(in oklab, var(--p-accent) 14%, var(--p-bg));
+  --brand-line: color-mix(in oklab, var(--p-accent) 36%, var(--p-bg));
+  --on-brand: var(--p-on-accent);
+  --card-brand: var(--p-ink);
+  --card-brand-ink: var(--p-bg);
+  --card-brand-soft: color-mix(in oklab, var(--p-bg) 68%, var(--p-ink));
+  --card-brand-line: color-mix(in oklab, var(--p-bg) 22%, transparent);
+  --good: oklch(76% 0.16 155);
+  --good-tint: color-mix(in oklab, oklch(76% 0.16 155) 16%, var(--p-bg));
+  --on-good: #06120a;
+  --warn: oklch(82% 0.15 80);
+  --warn-tint: color-mix(in oklab, oklch(82% 0.15 80) 16%, var(--p-bg));
+  --crit: oklch(72% 0.18 25);
+  --crit-tint: color-mix(in oklab, oklch(72% 0.18 25) 16%, var(--p-bg));
+  --you: var(--p-accent);
+  --rival-1: color-mix(in oklab, var(--p-ink) 55%, var(--p-bg));
+  --rival-2: color-mix(in oklab, var(--p-ink) 38%, var(--p-bg));
+  --rival-3: color-mix(in oklab, var(--p-ink) 24%, var(--p-bg));
+  --none: color-mix(in oklab, var(--p-ink) 13%, var(--p-bg));
+
+  /* on a dark page depth is a hairline of light plus a deep shadow */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 0 0 1px color-mix(in oklab, var(--p-ink) 9%, transparent);
+  --shadow-2: 0 10px 28px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px color-mix(in oklab, var(--p-ink) 10%, transparent);
+  --shadow-3: 0 28px 64px -18px rgba(0, 0, 0, 0.8), 0 0 0 1px color-mix(in oklab, var(--p-ink) 11%, transparent);
+}
+
+/* A scheme change cross-fades the whole page instead of snapping. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 1ms;
+  }
+}

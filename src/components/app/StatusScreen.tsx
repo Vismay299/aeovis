@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/shared/utils";
 import { Spinner } from "@/components/app/Spinner";
-import { PerceevMark } from "@/components/app/brand/PerceevLogo";
+import { PerceevLoader, PerceevMark } from "@/components/app/brand/PerceevLogo";
 
 const WIDTHS = {
   sm: "max-w-xs",
@@ -51,11 +51,14 @@ export function StatusScreen({
           WIDTHS[size]
         )}
       >
-        {logo ? <PerceevMark className="size-10" /> : null}
+        {/* Outside the app shell the mark itself is the loading indicator. */}
+        {logo ? (
+          pending ? <PerceevLoader className="h-10" /> : <PerceevMark className="size-10" />
+        ) : null}
         {title ? (
           <h1 className="text-center text-xl font-semibold">{title}</h1>
         ) : null}
-        {pending ? <Spinner /> : null}
+        {pending && !logo ? <Spinner /> : null}
         {description ? (
           <p className="text-center text-sm text-muted-foreground">
             {description}

@@ -2,7 +2,9 @@
    src/client/styles/app.css
    Modified for Perceev. See THIRD_PARTY_NOTICES.md. */
 
-@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *));
+/* The scheme in palettes.css is dark whichever theme preference is stored,
+   so dark: utilities follow data-palette as well as data-theme. */
+@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *, [data-palette], [data-palette] *));
 
 @theme {
   --container-8xl: 88rem;

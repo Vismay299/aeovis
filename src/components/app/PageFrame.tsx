@@ -20,7 +20,7 @@ export function PageFrame({
     <div className="px-4 py-4 pb-24 md:px-6 md:py-6 md:pb-8">
       <div
         className={cn(
-          "mx-auto space-y-5",
+          "mx-auto animate-page-in space-y-5",
           width === "7xl" && "max-w-7xl",
           className
         )}

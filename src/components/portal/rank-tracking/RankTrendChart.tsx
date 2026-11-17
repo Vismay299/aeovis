@@ -94,7 +94,8 @@ export function RankTrendChart({
               dot={{ r: 2 }}
               activeDot={{ r: 4 }}
               connectNulls={false}
-              isAnimationActive={false}
+              animationDuration={700}
+            animationEasing="ease-out"
             />
           ))}
         </LineChart>

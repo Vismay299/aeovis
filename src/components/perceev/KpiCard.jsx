@@ -8,6 +8,8 @@
  * caution or critical.
  */
 
+import { RollingNumber } from '@/components/app/motion/RollingNumber';
+
 const TONE_CLASS = { you: 'is-you' };
 const TONE_COLOR = {
   good: 'var(--good)',
@@ -34,7 +36,7 @@ export const KpiCard = ({
         className={`stat__v ${TONE_CLASS[tone] || ''}`.trim()}
         style={blank ? { color: 'var(--ink-4)' } : TONE_COLOR[tone] ? { color: TONE_COLOR[tone] } : undefined}
       >
-        {shown}
+        {blank ? shown : <RollingNumber>{shown}</RollingNumber>}
         {!blank && suffix && <small>{suffix}</small>}
       </span>
       {sub && <span className="stat__d dim">{sub}</span>}

@@ -4,7 +4,8 @@
 //   src/client/components/NavTabs.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
+import { LayoutGroup, motion } from "motion/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/shared/utils";
@@ -20,9 +21,11 @@ export function NavTabs({
   className?: string;
 }) {
   return (
-    <nav aria-label={label} className={cn("flex gap-1 border-b border-border", className)}>
-      {children}
-    </nav>
+    <LayoutGroup id={useId()}>
+      <nav aria-label={label} className={cn("flex gap-1 border-b border-border", className)}>
+        {children}
+      </nav>
+    </LayoutGroup>
   );
 }
 
@@ -49,11 +52,18 @@ export function NavTab({
       aria-current={isActive ? "page" : undefined}
       className={cn(
         "relative inline-flex h-9 items-center px-3 text-sm font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 data-[status=active]:text-foreground",
-        "after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 data-[status=active]:after:opacity-100",
         className
       )}
     >
       {children}
+      {isActive ? (
+        <motion.span
+          layoutId="nav-tab-underline"
+          aria-hidden
+          transition={{ type: "spring", bounce: 0.15, visualDuration: 0.3 }}
+          className="absolute inset-x-0 -bottom-px h-0.5 bg-foreground"
+        />
+      ) : null}
     </Link>
   );
 }

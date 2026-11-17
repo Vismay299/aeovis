@@ -184,7 +184,8 @@ export function RankTrackingOverview({
                         stroke={b.color}
                         fill={b.color}
                         fillOpacity={0.7}
-                        isAnimationActive={false}
+                        animationDuration={700}
+            animationEasing="ease-out"
                       />
                     ))}
                   </AreaChart>

@@ -2,6 +2,11 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "../styles/app-theme.css";
+@import "../styles/palettes.css";
+@import "../styles/motion.css";
+@import "../styles/shapes.css";
+@import "../styles/charts.css";
+
 @config "../../tailwind.config.js";
 
 /* Tailwind 4 auto-detects sources by walking the repo, which mints utilities
@@ -423,13 +428,10 @@
 }
 .nav__in { display: flex; align-items: center; gap: 30px; height: var(--nav-h) }
 .wordmark {
-  display: flex; align-items: center; gap: 10px;
-  font-weight: 640; font-size: 19px; letter-spacing: -.04em; color: var(--ink-1);
+  display: flex; align-items: center; gap: 9px; color: var(--ink-1);
 }
-.wordmark__m {
-  width: 22px; height: 22px; border-radius: 6px; background: var(--brand);
-  display: grid; place-items: center; flex: none;
-}
+.wordmark__mark { height: 26px; width: auto }
+.wordmark__type { height: 15px; width: auto }
 .nav__links { display: flex; gap: 4px; margin-left: 14px }
 .nav__links a {
   padding: 7px 13px; border-radius: var(--r-pill); font-size: 14.5px; color: var(--ink-2);
@@ -437,8 +439,6 @@
 }
 .nav__links a:hover { background: var(--sunken); color: var(--ink-1) }
 .nav__r { margin-left: auto; display: flex; align-items: center; gap: 10px }
-
-
 
 /* ═══════════════════════════════════════════════════════════════
    LANDING
@@ -805,7 +805,11 @@ mark.lit-rival { background: var(--sunken); color: var(--ink-2); font-weight: 60
    to its content's max-content and will happily push past its container —
    which is how a grid of KPI tiles ends up 624px wide inside a 343px column.
    The .g* modifiers below replace this template outright. */
-.grid { display: grid; gap: 13px; align-items: start; grid-template-columns: minmax(0, 1fr) }
+/* In the components layer so a Tailwind grid-cols-* or gap-* utility on the
+   same element wins. Unlayered, this rule forced every `grid` to one column. */
+@layer components {
+  .grid { display: grid; gap: 13px; align-items: start; grid-template-columns: minmax(0, 1fr) }
+}
 
 /* a plain vertical stack, with the same shrinkable track */
 .stack { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) }
@@ -1051,5 +1055,4 @@ mark.lit-rival { background: var(--sunken); color: var(--ink-2); font-weight: 60
   .qrow__e, .qrow__v { grid-column: 2 }
   .qrow__v { justify-content: flex-start }
 }
-
 
