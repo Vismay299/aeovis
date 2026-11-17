@@ -17,7 +17,7 @@
  *
  * WHAT IT CANNOT PROVE: no browser, no click, no network. It shows the href in
  * the markup is the route's path. That the route answers correctly is
- * src/lib/evidenceSignedUrl.route.test.mjs, at the real handler.
+ * src/server/evidenceSignedUrl.route.test.mjs, at the real handler.
  */
 import test from "node:test";
 import assert from "node:assert/strict";

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { EXTERNAL_TOOL_NAMES, PAID_TOOL_NAMES } from "../../lib/tools/names.ts";
+import { EXTERNAL_TOOL_NAMES, PAID_TOOL_NAMES } from "../../server/tools/names.ts";
 import { SKILL_MANIFEST } from "./manifest.generated.ts";
 
 const BANNED = [

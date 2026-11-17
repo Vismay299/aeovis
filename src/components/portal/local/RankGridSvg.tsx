@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import { googleMapsPointUrl } from "@/shared/local-coordinates";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 export type RankGridPoint = {
   row: number;

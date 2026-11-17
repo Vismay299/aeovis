@@ -70,8 +70,8 @@ Preflight — STOP and report to the user (do not start any role) if any of thes
   (a) files this phase's spec lists, and features/<FEATURE>-*.md (checkboxes, notes);
   (b) these shared files, APPEND-ONLY (add your own lines, never edit or reorder others'):
       package.json, package-lock.json, .env.example, .github/workflows/ci.yml,
-      src/lib/features/names.ts, src/lib/features/clientFeatures.ts, src/lib/jobs/kinds.ts,
-      src/lib/pricing/actions/index.ts, src/components/app/navigation/items.ts,
+      src/server/features/names.ts, src/server/features/clientFeatures.ts, src/server/jobs/kinds.ts,
+      src/shared/pricing/actions/index.ts, src/components/app/navigation/items.ts,
       scripts/setup-supabase.mjs, THIRD_PARTY_NOTICES.md, README.md (migration table),
       docs/OPERATOR_LEDGER.md, docs/PROD_MIGRATIONS.md, features/README.md (only your feature's row).
   Never edit another feature's spec, 00-CONVENTIONS.md, or another feature's code. If one needs a change,
@@ -98,7 +98,7 @@ Run roles in the order of §3. Run at most two roles at the same time, to keep c
   Rule: no new requirements. Everything traces to a spec line.
 
 [BE] Backend Developer — writes code
-  Owns: supabase/migrations, src/lib/**, src/app/api/**, scripts/qa/*-db.mjs, server tests, .env.example names.
+  Owns: supabase/migrations, src/server/**, src/shared/**, src/app/api/**, scripts/qa/*-db.mjs, server tests, .env.example names.
   Does: implements the BACKEND tasks, writes the server/route/DB tests the spec names, runs each subtask's Verify
   command, records results.
   Output: 02-be-handoff.md — files changed, verify commands with pass/fail, contract as built, SPEC GAPs.

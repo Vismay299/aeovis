@@ -20,8 +20,8 @@ import {
   closeSheetsModal,
   getSheetsModalState,
   subscribeSheetsModal,
-} from "@/lib/export/sheetsModalStore";
-import { GOOGLE_SHEETS_NEW_URL } from "@/lib/export/clipboard";
+} from "@/shared/export/sheetsModalStore";
+import { GOOGLE_SHEETS_NEW_URL } from "@/shared/export/clipboard";
 
 export function ExportToSheetsModal() {
   const state = useSyncExternalStore(

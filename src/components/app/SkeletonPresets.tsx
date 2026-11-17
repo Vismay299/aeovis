@@ -4,7 +4,7 @@
 //   src/client/components/SkeletonPresets.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 import { PageFrame } from "@/components/app/PageFrame";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";

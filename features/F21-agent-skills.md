@@ -8,7 +8,7 @@
 | ID | F21 |
 | Wave | 4 |
 | Comparison rows covered | Agent skills |
-| Depends on | **F01 only** (merged: TypeScript, test glob, `isFeatureEnabled`, `src/lib/features/names.ts`), matching `features/README.md`. The skill bodies *name* tools owned by F07, F08, F13–F20, F22 and F23, but F21 ships no call site: every name is a string in `src/lib/tools/names.ts` (created here) and the guard checks membership, not implementation. F21 can therefore merge before those specs; F22-AC-01 is what proves the vocabulary real. |
+| Depends on | **F01 only** (merged: TypeScript, test glob, `isFeatureEnabled`, `src/server/features/names.ts`), matching `features/README.md`. The skill bodies *name* tools owned by F07, F08, F13–F20, F22 and F23, but F21 ships no call site: every name is a string in `src/server/tools/names.ts` (created here) and the guard checks membership, not implementation. F21 can therefore merge before those specs; F22-AC-01 is what proves the vocabulary real. |
 | Blocks | F22 (loads the catalog and builds `activate_skill`), F23 (adds the `seo-report` skill and moves its four tool names from planned to declared) |
 | Reserved migrations | 140–144. **None used**: skills are files bundled at build time. |
 | Feature flag | `FEATURE_ASSISTANT_SKILLS` (name `assistant_skills`, spend `[]`, server-only; not in `CLIENT_FEATURES`). Off hides the skill catalog from the assistant without touching tools. |
@@ -34,9 +34,9 @@ Perceev gets a library of written workflows ("skills") that the in-app assistant
 
 ## 3. What Perceev has today
 
-- **No customer skills and no assistant.** The only Markdown "skills" are the Content OS pipeline prompts in `src/lib/content/skills/*.md` (`draft.geo_article.md`, `review.linkedin_post.md`, `fact_check.shared.md` and 11 more). They are step prompts: frontmatter `name/step/playbook/inputs/output`, `{{var}}` placeholders rendered by code (`src/lib/content/skills/loader.js:76-84`), chosen by step × playbook with a `.shared.md` fallback (`:48-69`), read from disk at runtime from `process.cwd()/src/lib/content/skills` (`:13`). Because they are read at runtime, `next.config.mjs:16-26` must list them in `outputFileTracingIncludes` or production content routes break.
+- **No customer skills and no assistant.** The only Markdown "skills" are the Content OS pipeline prompts in `src/shared/content/skills/*.md` (`draft.geo_article.md`, `review.linkedin_post.md`, `fact_check.shared.md` and 11 more). They are step prompts: frontmatter `name/step/playbook/inputs/output`, `{{var}}` placeholders rendered by code (`src/shared/content/skills/loader.js:76-84`), chosen by step × playbook with a `.shared.md` fallback (`:48-69`), read from disk at runtime from `process.cwd()/src/shared/content/skills` (`:13`). Because they are read at runtime, `next.config.mjs:16-26` must list them in `outputFileTracingIncludes` or production content routes break.
 - **Tool names the skills will use** are fixed by the specs that own them: F07 (`get_project_context`, `update_project_context`), F08 (`list_questions`, `add_questions`), F13 (`list_saved_keywords`, `save_keywords`, `research_keywords`), F14 (`get_domain_overview`, `get_ranked_keywords`), F15 (`list_rank_trackers`, `get_rank_tracker`, `add_rank_tracking_keywords`, `run_rank_check`), F16 (`get_backlinks_overview`, `list_backlinks`, `list_referring_domains`, `get_backlink_history`), F17 (OpenSEO's eight local names), F18 (`run_site_audit`, `get_site_audit_status`, `get_site_audit_issues`, `get_site_audit_pages`, `list_site_audits`), F19 (`submit_indexnow_urls`), F20 (ten GA4 names), plus F22's own tools and F23's report tools (both declared in §6.2.1).
-- **Must not break:** the content pipeline loader, its tracing includes, and its tests (`src/lib/content/loader.test.mjs`). F21 adds a separate directory and never touches `src/lib/content/skills/`.
+- **Must not break:** the content pipeline loader, its tracing includes, and its tests (`src/shared/content/loader.test.mjs`). F21 adds a separate directory and never touches `src/shared/content/skills/`.
 
 ## 4. Target behaviour and acceptance criteria
 
@@ -50,7 +50,7 @@ Perceev gets a library of written workflows ("skills") that the in-app assistant
 | F21-AC-06 | `loadSkill(name, …)` returns the body prefixed with `PERCEEV_SURFACE_NOTE` and the skill's version; unknown or hidden names return `null`. | unit `skills.test.ts` |
 | F21-AC-07 | With every declared tool available, the served list is exactly the 14 names of §6.2.5 (11 ported, 3 new); `seo-report` is absent until F23 adds it. | unit `skills.test.ts` (parity with `openseo:src/server/features/sam/samSkills.test.ts:8-28`) |
 | F21-AC-08 | **Versioning:** if a skill's body or frontmatter hash differs from `versions.lock.json` but its `version` is unchanged, the test fails with "bump the version of <name>"; a version lower than the locked one (compared as three integers, major then minor then patch, never as strings) fails. | unit `versions.test.ts` |
-| F21-AC-09 | **Separation:** nothing under `src/assistant/` reads `src/lib/content/skills`, the content loader still reads only its own folder, and no `SKILL.md` exists under `src/lib/content/`. | unit `separation.test.ts` |
+| F21-AC-09 | **Separation:** nothing under `src/assistant/` reads `src/shared/content/skills`, the content loader still reads only its own folder, and no `SKILL.md` exists under `src/shared/content/`. | unit `separation.test.ts` |
 | F21-AC-10 | **Content lint:** no skill body contains "OpenSEO", "openseo.so", "credits", "list_projects", "create_project", "whoami", "AskUserQuestion" or "set_report_sharing"; every skill contains the untrusted-data guardrail sentence; every skill whose `tools` or `optional_tools` include a paid tool (`PAID_TOOL_NAMES`) contains the price-card sentence, and every skill that includes an external tool (`EXTERNAL_TOOL_NAMES`) contains the confirm sentence. | unit `skillLint.test.ts` |
 | F21-AC-11 | Each ported skill keeps the port recipe of §6.2.6 (sections in order, tool substitutions), checked by a per-skill heading list. | unit `skillLint.test.ts` |
 | F21-AC-12 | `listSkills`/`loadSkill` called with `enabled: false` return `[]`/`null` whatever the manifest holds; with `enabled: true` the catalog is as AC-05. (F22 passes `isFeatureEnabled("assistant_skills", brandKey)` as `enabled`; that wiring is F22-AC-09.) | unit `skills.test.ts` |
@@ -60,7 +60,7 @@ Perceev gets a library of written workflows ("skills") that the in-app assistant
 
 **In scope:**
 - Skill file format, restricted frontmatter parser, build script, generated manifest, version lock, loader API used by F22.
-- `src/lib/tools/names.ts`: the declared tool vocabulary (`TOOL_NAMES`, `PLANNED_TOOL_NAMES`, `PAID_TOOL_NAMES`, `EXTERNAL_TOOL_NAMES`, `SKILL_TERMS`) that F22 must make true.
+- `src/server/tools/names.ts`: the declared tool vocabulary (`TOOL_NAMES`, `PLANNED_TOOL_NAMES`, `PAID_TOOL_NAMES`, `EXTERNAL_TOOL_NAMES`, `SKILL_TERMS`) that F22 must make true.
 - Port of 11 public OpenSEO skills to Perceev tools and AEO focus; three new skills: `content-brief`, `ai-crawler-fix`, `question-panel-review`.
 - Guards: tool references, versions, separation, branding and safety lint.
 
@@ -80,9 +80,9 @@ None. Migrations 140–144 stay unused. Skill activation is recorded by F22 in `
 
 ### 6.2 Server modules
 
-All new files are TypeScript with erasable syntax only and relative imports with explicit extensions (conventions §5.4). `src/assistant/` is a new top-level folder fixed by the owner's brief; it follows the `src/lib/**` import rules.
+All new files are TypeScript with erasable syntax only and relative imports with explicit extensions (conventions §5.4). `src/assistant/` is a new top-level folder fixed by the owner's brief; it follows the `src/server/**` and `src/shared/**` import rules.
 
-#### 6.2.1 `src/lib/tools/names.ts` — declared tool vocabulary (pure, no imports)
+#### 6.2.1 `src/server/tools/names.ts` — declared tool vocabulary (pure, no imports)
 
 ```ts
 // The names every skill and the F22 registry agree on. F22's registry test asserts
@@ -503,7 +503,7 @@ The review in chat. If `save_report` is available and the user asks for a docume
 
 #### 6.2.11 `src/assistant/skills/references.ts` — the reference checker
 
-`SKILL_TERMS` is not defined here: conventions §5.7 puts it in `src/lib/tools/names.ts` beside `TOOL_NAMES` (§6.2.1), and this module takes it as the `terms` dependency.
+`SKILL_TERMS` is not defined here: conventions §5.7 puts it in `src/server/tools/names.ts` beside `TOOL_NAMES` (§6.2.1), and this module takes it as the `terms` dependency.
 
 ```ts
 export type ReferenceProblem = { skill: string; token: string; line: number; reason: "unknown_tool" | "not_in_frontmatter" | "optional_not_declared" };
@@ -537,8 +537,8 @@ None in F21. F22 labels the `activate_skill` tool badge with the skill name (F22
 
 ### 6.8 Deviations from conventions
 
-1. **New top-level `src/assistant/`** (owner brief) instead of `src/lib/assistant/`. Import rules of `src/lib/**` apply to it.
-2. **`src/lib/tools/names.ts` is created by F21**, although F22 owns the registry: the tool-reference guard (owner brief) must exist before the registry. F22 makes the list true and tests equality. The file holds `SKILL_TERMS` as conventions §5.7 requires, plus `PLANNED_TOOL_NAMES`, `PAID_TOOL_NAMES` and `EXTERNAL_TOOL_NAMES`, which §5.7 does not list; those three are additive and need no amendment there.
+1. **New top-level `src/assistant/`** (owner brief) instead of `src/server/assistant/`. Import rules of `src/server/**` and `src/shared/**` apply to it.
+2. **`src/server/tools/names.ts` is created by F21**, although F22 owns the registry: the tool-reference guard (owner brief) must exist before the registry. F22 makes the list true and tests equality. The file holds `SKILL_TERMS` as conventions §5.7 requires, plus `PLANNED_TOOL_NAMES`, `PAID_TOOL_NAMES` and `EXTERNAL_TOOL_NAMES`, which §5.7 does not list; those three are additive and need no amendment there.
 3. **Generated source file** (`manifest.generated.ts`) committed to git, with a `prebuild` check, instead of a runtime file read (reason in §6.2.3).
 
 ## 7. Code reuse map
@@ -579,18 +579,18 @@ Modified for Perceev. See THIRD_PARTY_NOTICES.md. -->
 **Goal:** the skill pipeline exists and is guarded, with one Perceev skill to prove it end to end.
 
 - [x] **P1.T1 Vocabulary and format**
-  - [x] **P1.T1.S1** *Files:* `src/lib/tools/names.ts`, `src/lib/tools/names.test.ts`. *Do:* §6.2.1; tests: no duplicates across `TOOL_NAMES ∪ PLANNED_TOOL_NAMES`; every name matches `^[a-z][a-z0-9_]{2,63}$`; `PAID_TOOL_NAMES ⊆ TOOL_NAMES`; `EXTERNAL_TOOL_NAMES ⊆ TOOL_NAMES`; `PAID_TOOL_NAMES ∩ EXTERNAL_TOOL_NAMES = ∅`; `SKILL_TERMS ∩ (TOOL_NAMES ∪ PLANNED_TOOL_NAMES) = ∅` (risk 3); `isDeclaredToolName("save_report") === true`, `("activate_skill") === false`. *Verify:* `node --test src/lib/tools/names.test.ts` → pass.
+  - [x] **P1.T1.S1** *Files:* `src/server/tools/names.ts`, `src/server/tools/names.test.ts`. *Do:* §6.2.1; tests: no duplicates across `TOOL_NAMES ∪ PLANNED_TOOL_NAMES`; every name matches `^[a-z][a-z0-9_]{2,63}$`; `PAID_TOOL_NAMES ⊆ TOOL_NAMES`; `EXTERNAL_TOOL_NAMES ⊆ TOOL_NAMES`; `PAID_TOOL_NAMES ∩ EXTERNAL_TOOL_NAMES = ∅`; `SKILL_TERMS ∩ (TOOL_NAMES ∪ PLANNED_TOOL_NAMES) = ∅` (risk 3); `isDeclaredToolName("save_report") === true`, `("activate_skill") === false`. *Verify:* `node --test src/server/tools/names.test.ts` → pass.
   - [x] **P1.T1.S2** *Files:* `src/assistant/skills/types.ts`, `src/assistant/skills/frontmatter.ts`, `src/assistant/skills/frontmatter.test.ts`. *Do:* §6.2.2; cases: valid file; CRLF; missing frontmatter; unknown key `metadata`; duplicate key; bad name `Foo`; description 19 chars; version `1.0`; source `openseo:foo`; empty `tools`; `internal: yes`; body without `#` title; body 199 chars; HTML licence comment stripped from body. *Verify:* `node --test src/assistant/skills/frontmatter.test.ts` → pass.
 - [x] **P1.T2 Build script and manifest**
   - [x] **P1.T2.S1** *Files:* `scripts/build-assistant-skills.mjs`, `package.json` (scripts `skills:build`, `prebuild`). *Do:* §6.2.3. *Verify:* `node scripts/build-assistant-skills.mjs --write && node scripts/build-assistant-skills.mjs --check` → exit 0; editing a body without rebuilding → `--check` exits 1 with the stale message.
   - [x] **P1.T2.S2** *Files:* `src/assistant/skills/ai-crawler-fix/SKILL.md` (§6.2.9 verbatim), `src/assistant/skills/manifest.generated.ts`, `src/assistant/skills/versions.lock.json`. *Verify:* `npm run skills:build` → manifest contains one entry `ai-crawler-fix@1.0.0`.
 - [x] **P1.T3 Loader and guards**
   - [x] **P1.T3.S1** *Files:* `src/assistant/skills/index.ts`, `src/assistant/skills/skills.test.ts`. *Do:* §6.2.4, §6.2.7; tests with injected manifests: internal hidden; missing required tool hides; missing optional tool does not; `requires_flags` false hides; `requires_flags` non-empty with `flags` omitted hides (§6.2.4); `enabled: false` → `[]`/`null`; load prepends the note; unknown name `null`; sort order; `getSkillVersion` returns a version for an internal and for a tool-hidden skill and `null` for an unknown name; `skillCatalogFingerprint` changes on a version bump and not on input reordering (AC-13). *Verify:* `node --test src/assistant/skills/skills.test.ts` → pass.
-  - [x] **P1.T3.S2** *Files:* `src/assistant/skills/references.ts` (`checkSkillToolReferences`), `src/assistant/skills/toolReferences.test.ts`. *Do:* §6.2.11, taking `terms` from `src/lib/tools/names.ts`; fixture cases: tool in frontmatter and body passes; body token not in frontmatter → `not_in_frontmatter`; typo `get_scan_reprot` → `unknown_tool` with line; `business_overview` and `place_id` pass as terms; planned `save_report` passes only in `optional_tools`; then the real check over `SKILL_MANIFEST` returns `[]`. *Verify:* `node --test src/assistant/skills/toolReferences.test.ts` → pass.
-  - [x] **P1.T3.S3** *Files:* `src/assistant/skills/manifest.test.ts`, `src/assistant/skills/versions.test.ts`, `src/assistant/skills/separation.test.ts`, `src/assistant/skills/skillLint.test.ts`. *Do:* AC-01, 03, 08, 09, 10 (lint list in AC-10; heading lists per skill from §6.2.6 table; for new skills: Goal · Workspace memory · Tools · Workflow · What to return · Guardrails). `separation.test.ts` reads source text of every file under `src/assistant/` and asserts no `content/skills` substring; asserts `src/lib/content/skills/loader.js` still contains `"src", "lib", "content", "skills"` and not `assistant`; asserts no `SKILL.md` under `src/lib/content`. *Verify:* `node --test src/assistant/skills/` → pass.
-  - [x] **P1.T3.S4** *Files:* `src/lib/features/names.ts` (append `assistant_skills: { spend: [] as const }`). *Verify:* `node --test src/lib/features/` → pass.
+  - [x] **P1.T3.S2** *Files:* `src/assistant/skills/references.ts` (`checkSkillToolReferences`), `src/assistant/skills/toolReferences.test.ts`. *Do:* §6.2.11, taking `terms` from `src/server/tools/names.ts`; fixture cases: tool in frontmatter and body passes; body token not in frontmatter → `not_in_frontmatter`; typo `get_scan_reprot` → `unknown_tool` with line; `business_overview` and `place_id` pass as terms; planned `save_report` passes only in `optional_tools`; then the real check over `SKILL_MANIFEST` returns `[]`. *Verify:* `node --test src/assistant/skills/toolReferences.test.ts` → pass.
+  - [x] **P1.T3.S3** *Files:* `src/assistant/skills/manifest.test.ts`, `src/assistant/skills/versions.test.ts`, `src/assistant/skills/separation.test.ts`, `src/assistant/skills/skillLint.test.ts`. *Do:* AC-01, 03, 08, 09, 10 (lint list in AC-10; heading lists per skill from §6.2.6 table; for new skills: Goal · Workspace memory · Tools · Workflow · What to return · Guardrails). `separation.test.ts` reads source text of every file under `src/assistant/` and asserts no `content/skills` substring; asserts `src/shared/content/skills/loader.js` still contains `"src", "lib", "content", "skills"` and not `assistant`; asserts no `SKILL.md` under `src/shared/content`. *Verify:* `node --test src/assistant/skills/` → pass.
+  - [x] **P1.T3.S4** *Files:* `src/server/features/names.ts` (append `assistant_skills: { spend: [] as const }`). *Verify:* `node --test src/server/features/` → pass.
 
-**Checkpoint:** `node --import ./src/lib/liveWriteGuardAuto.mjs --test 'src/assistant/**/*.test.ts' src/lib/tools/names.test.ts` → pass; `npm run build` → exit 0 (prebuild check passes). Completes F21-AC-01, 02, 03, 04, 05, 06, 08, 09, 10, 12, 13.
+**Checkpoint:** `node --import ./src/server/liveWriteGuardAuto.mjs --test 'src/assistant/**/*.test.ts' src/server/tools/names.test.ts` → pass; `npm run build` → exit 0 (prebuild check passes). Completes F21-AC-01, 02, 03, 04, 05, 06, 08, 09, 10, 12, 13.
 
 ### Phase 2 — Port the eleven OpenSEO skills
 
@@ -618,7 +618,7 @@ Modified for Perceev. See THIRD_PARTY_NOTICES.md. -->
 - [x] **P3.T1.S1** *Files:* `src/assistant/skills/content-brief/SKILL.md` (§6.2.8 verbatim body), `src/assistant/skills/question-panel-review/SKILL.md` (§6.2.10 verbatim body). *Verify:* `npm run skills:build && node --test "src/assistant/skills/*.test.ts"` → pass.
 - [x] **P3.T1.S2** *Files:* `src/assistant/skills/skills.test.ts`. *Do:* add the AC-07 expected-list case (14 names). *Verify:* `node --test "src/assistant/skills/skills.test.ts"` → pass.
 
-**Checkpoint:** full suite `node --import ./src/lib/liveWriteGuardAuto.mjs --test-concurrency=4 --test "src/**/*.test.mjs" "src/**/*.test.ts"` → pass; `npm run build` → exit 0. Completes F21-AC-07; the section order of the two new skills is enforced by `skillLint.test.ts` ("new Perceev skills keep the six-section order", P1.T3.S3).
+**Checkpoint:** full suite `node --import ./src/server/liveWriteGuardAuto.mjs --test-concurrency=4 --test "src/**/*.test.mjs" "src/**/*.test.ts"` → pass; `npm run build` → exit 0. Completes F21-AC-07; the section order of the two new skills is enforced by `skillLint.test.ts` ("new Perceev skills keep the six-section order", P1.T3.S3).
 
 Phases may merge together if the reviewer prefers one PR; each remains independently verifiable.
 
@@ -626,7 +626,7 @@ Phases may merge together if the reviewer prefers one PR; each remains independe
 
 | Test file | Cases | ACs |
 |---|---|---|
-| `src/lib/tools/names.test.ts` | uniqueness, regex, paid and external subsets, terms disjoint from tool names, `isDeclaredToolName` | 04, 10 |
+| `src/server/tools/names.test.ts` | uniqueness, regex, paid and external subsets, terms disjoint from tool names, `isDeclaredToolName` | 04, 10 |
 | `src/assistant/skills/frontmatter.test.ts` | 14 grammar cases (P1.T1.S2), licence header stripped before the body rules | 02 |
 | `src/assistant/skills/manifest.test.ts` | folder = name; unique; generated == fresh build; `SKILL_MANIFEST_FINGERPRINT` == fresh build's; descriptions ≤ 1,024; bodies ≤ 24,000 | 01, 03, 13 |
 | `src/assistant/skills/toolReferences.test.ts` | fixture problems; real manifest clean | 04 |

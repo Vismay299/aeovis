@@ -13,10 +13,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { exportRows } from "@/lib/export/exportRows";
-import { downloadFile } from "@/lib/export/download";
-import { copyTableToClipboard } from "@/lib/export/clipboard";
-import { openSheetsModal } from "@/lib/export/sheetsModalStore";
+import { exportRows } from "@/shared/export/exportRows";
+import { downloadFile } from "@/shared/export/download";
+import { copyTableToClipboard } from "@/shared/export/clipboard";
+import { openSheetsModal } from "@/shared/export/sheetsModalStore";
 import {
   SERP_FEATURE_SHORT_LABELS,
   SERP_FEATURE_TOOLTIPS,

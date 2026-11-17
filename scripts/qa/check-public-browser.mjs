@@ -4,8 +4,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { chromium } from "playwright";
-import { getPublicUrlInventory } from "../../src/lib/publicSite.js";
-import { sha256 } from "../../src/lib/repairs/releaseEvidence.mjs";
+import { getPublicUrlInventory } from "../../src/server/publicSite.js";
+import { sha256 } from "../../src/server/repairs/releaseEvidence.mjs";
 
 const origin = new URL(process.argv[2] || "http://127.0.0.1:3328");
 assert.ok(["127.0.0.1", "localhost", "[::1]"].includes(origin.hostname), "browser checks require a disposable local app");

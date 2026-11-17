@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { prepareEvidenceQualification, cleanupEvidenceQualification, verifyEvidenceRetention, withdrawQaRedaction } from "@/lib/ops/evidenceQualification";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { prepareEvidenceQualification, cleanupEvidenceQualification, verifyEvidenceRetention, withdrawQaRedaction } from "@/server/ops/evidenceQualification";
 export const dynamic="force-dynamic";
 export const maxDuration=120;
 

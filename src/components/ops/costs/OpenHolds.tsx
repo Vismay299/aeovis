@@ -18,7 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatTimestamp, relativeTime } from "@/utils/format";
+import { formatTimestamp, relativeTime } from "@/shared/format";
 import { formatUsd } from "@/shared/money";
 import type { OperatorCosts } from "@/shared/costs";
 

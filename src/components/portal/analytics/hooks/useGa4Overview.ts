@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 
 /** GET /api/customer/ga4/overview for the selected range. */
 export function useGa4Overview(brandKey: string, range: string) {

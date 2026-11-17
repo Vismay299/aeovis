@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { ExternalLink } from "lucide-react";
-import { resolveUrlHref } from "@/lib/table/url";
+import { resolveUrlHref } from "@/shared/table/url";
 
 export function ExternalUrlCell({
   value,

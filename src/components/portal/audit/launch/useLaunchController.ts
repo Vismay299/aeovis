@@ -15,7 +15,7 @@ import {
   LARGE_AUDIT_CONFIRM_PAGES,
   estimatedCrawlMinutes,
 } from "@/shared/audit-limits";
-import { ApiError } from "@/lib/query/fetchJson";
+import { ApiError } from "@/shared/query/fetchJson";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
 import { useAuditList } from "../hooks/useAuditList";
 import { useDeleteAudit } from "../hooks/useDeleteAudit";

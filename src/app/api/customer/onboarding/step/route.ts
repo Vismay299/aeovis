@@ -1,11 +1,11 @@
-import { requireUser as defaultRequireUser, type RequireUserDeps } from "../../../../../lib/auth/requireUser.ts";
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { recordStep as defaultRecordStep } from "../../../../../lib/onboarding/steps.ts";
+import { requireUser as defaultRequireUser, type RequireUserDeps } from "../../../../../server/auth/requireUser.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { recordStep as defaultRecordStep } from "../../../../../server/onboarding/steps.ts";
 import { visibleSteps, type OnboardingStep } from "../../../../../shared/onboarding.ts";
-import { onboardingStepBodySchema } from "../../../../../lib/onboarding/onboarding.contract.ts";
-import { getGa4ConnectionState as defaultGetGa4ConnectionState } from "../../../../../lib/ga4/connection.ts";
+import { onboardingStepBodySchema } from "../../../../../server/onboarding/onboarding.contract.ts";
+import { getGa4ConnectionState as defaultGetGa4ConnectionState } from "../../../../../server/ga4/connection.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

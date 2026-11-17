@@ -6,10 +6,10 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import { toast } from "sonner";
 import { usePortal } from "@/components/portal/PortalShell";
-import { keys } from "@/lib/query/keys";
+import { keys } from "@/shared/query/keys";
 import { BackLink } from "@/components/app/PageHeader";
 import { QueryError } from "@/components/app/QueryState";
 import { SkeletonPage } from "@/components/app/SkeletonPresets";

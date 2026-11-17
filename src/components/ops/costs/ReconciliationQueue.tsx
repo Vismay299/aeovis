@@ -26,7 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { relativeTime } from "@/utils/format";
+import { relativeTime } from "@/shared/format";
 import { formatUsd } from "@/shared/money";
 import type { OperatorCosts } from "@/shared/costs";
 import { BulkAcceptDialog } from "./BulkAcceptDialog";

@@ -6,7 +6,7 @@
 
 import { useCallback, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { parseSearchParams, buildSearch } from "@/lib/query/urlState";
+import { parseSearchParams, buildSearch } from "@/shared/query/urlState";
 
 export type UseUrlSearchStateOptions<S> = {
   arrays?: readonly (keyof S)[];

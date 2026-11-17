@@ -29,7 +29,7 @@ import {
   VolumeCell,
 } from "./RankTrackingTableParts";
 import { AiVisibilityCell } from "./AiVisibilityCell";
-import type { SelectionAnchor } from "@/lib/table/tableSelection";
+import type { SelectionAnchor } from "@/shared/table/tableSelection";
 
 export const RANK_TRACKING_HEADER_CLASS =
   "text-xs uppercase tracking-wide text-muted-foreground";

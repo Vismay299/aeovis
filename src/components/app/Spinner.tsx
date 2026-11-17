@@ -4,7 +4,7 @@
 //   src/client/components/Spinner.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 import { Spinner as SpinnerIcon } from "@/components/ui/spinner";
 
 /** A loading indicator with an optional visible label, e.g. "Checking…". */

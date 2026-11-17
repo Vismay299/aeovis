@@ -1,6 +1,6 @@
-import { listBusinessCategories } from "../../../../../lib/local/listings.ts";
-import { categoriesQuery } from "../../../../../lib/local/local.contract.ts";
-import { gate, jsonOk, parseQuery, respond, type LocalRouteDeps } from "../../../../../lib/local/routeKit.ts";
+import { listBusinessCategories } from "../../../../../server/local/listings.ts";
+import { categoriesQuery } from "../../../../../server/local/local.contract.ts";
+import { gate, jsonOk, parseQuery, respond, type LocalRouteDeps } from "../../../../../server/local/routeKit.ts";
 
 export const dynamic = "force-dynamic";
 

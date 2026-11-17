@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { INDUSTRY_PROMPTS } from "@/data/industries";
+import { INDUSTRY_PROMPTS } from "@/shared/industries";
 
 export async function GET() {
   const industries = Object.keys(INDUSTRY_PROMPTS).map((key) => ({

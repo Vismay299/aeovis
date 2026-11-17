@@ -55,32 +55,32 @@ F01 gives every later feature the same five building blocks: TypeScript and zod 
 ## 3. What Perceev has today
 
 - **Language and validation.** All code is JS/JSX/MJS. `jsconfig.json` has only the `@/*` path. `typescript@6.0.3` is a devDependency but no `tsconfig.json` exists. `zod`, `ai` and `@openrouter/ai-sdk-provider` are not dependencies (`package.json`). Node is pinned `>=22.22.0 <23`. Node 22.22.3 runs erasable-syntax `.ts` files directly; this was checked during spec writing (`node t.ts` printed `ok 1` with no ExperimentalWarning).
-- **Tests.** `npm test` and `npm run test:scoring` run `node --import ./src/lib/liveWriteGuardAuto.mjs --test "src/**/*.test.mjs"`. `src/lib/testCoverageGuard.test.mjs:24-49` asserts that the `test:scoring` glob collects every `*.test.mjs` under `src/`, and `:69-89` asserts that `npm test` equals `test:scoring` and that CI runs `npm run test:scoring`. Route tests use loader hooks (`src/lib/customerRoutes.test.hooks.mjs`, `src/lib/cronAuth.route.hooks.mjs`). The DB harness pattern refuses any database that is not a loopback `_qa`/`_uat` database (`scripts/qa/check-repair-workflows.mjs:13-18`). CI's `customer-database` job applies every migration in order to Postgres 16, then runs `scripts/qa/check-probe-dispatch.mjs` and `scripts/qa/check-repair-workflows.mjs` (`.github/workflows/ci.yml:16-59`).
-- **Customer auth.** `getCustomerContext()` and `findCustomerBrand()` (`src/lib/supabase/customer.js:31-37`, `src/lib/supabase/customerContext.js:1-30`) resolve the Supabase session and active memberships (`brandKey`, `role`, `display_name`, `website`, `website_host`, `aliases`). `customerRouteContext()` (`src/lib/supabase/customerRoute.js:4-18`) adds the 503/401/503/403 cross-site/404 mapping. `getSupabaseAdmin()` (`src/lib/supabase/admin.js:10-24`) returns the service-role client or `null`. Several routes repeat the mapping by hand (for example `src/app/api/customer/scan/route.js:16-27`).
-- **Cron auth and background work.** `isCronAuthorized()` (`src/lib/cronAuth.js:126-166`) fails closed in production without `CRON_SECRET`. `keepAlive()` (`src/lib/keepAlive.js:36-73`) wraps `@vercel/functions` `waitUntil`. `makeSelfContinue()` (`src/lib/selfContinue.js:146-201`) fires a fire-and-forget request back at a worker route with `x-cron-secret` and the deployment-protection bypass header. Worker routes that authenticate themselves are listed in `SELF_GATED` (`src/lib/operatorPerimeter.js:72-91`). `vercel.json` has daily crons only.
-- **Scan worker (NOT migrated by F01).** Scans run on `scan_jobs` through `runScanChunk` (`src/lib/workers/scanWorker.js:2872`), with a 150 s chunk budget (`:111`), a 300 s worker limit (`:1174`), its own self-continue copy (`:1216-1260`), a run reaper (`:3752`), a scheduler tick (`:3308`) and per-brand single-flight through the partial index `scan_jobs_one_running_per_brand` (migration 007) plus `jobLease.js`. Answer-engine calls are claimed one attempt at a time through `claim_probe_dispatch` (migrations 027 and 035), from `runDurableProbing` (`src/lib/workers/durableProbing.js:62-329`).
-- **Spend control today.** It is specific to scans. `claim_probe_dispatch(p_id, p_reserve, p_scan_cap, p_day_cap, p_lease_seconds)` reserves `p_reserve` per attempt in `probe_attempts.reserved_usd`, allows at most 3 attempts per observation, and refuses when `scan_spend + p_reserve > p_scan_cap` or `day_spend + p_reserve > p_day_cap`, where spend sums `coalesce(charged_usd, reserved_usd)` (`supabase/migrations/035_scoped_provider_rollout.sql:36-89`). `dispatchBudget()` reads `SCAN_PROBE_RESERVATION_USD` (default 1 in code; the owner states production runs at 0.20), `SCAN_MAX_COST_PER_SCAN` and `SCAN_MAX_COST_PER_DAY` (`src/lib/workers/durableProbing.js:26-41`). Content checks have their own `claim_content_check` (`supabase/migrations/031_content_check_budget.sql:13-27`). LLM pricing has named cost sources and fails loud on unpriced models (`src/lib/llmPricing.js:20-45`, `resolveCost` at `:651-713`). There is **no** generic reservation, no per-workspace cap and no paid-feature switch.
-- **SSRF.** `src/lib/ssrfGuard.js` already resolves names with `node:dns` (`:518-526`) and checks every address in every notation (`:542-608`). It refuses DNS failures (fail closed), follows redirects by hand and re-validates each hop (`:612-647`). It names its own gap: the second resolution inside `fetch()` (TOCTOU / DNS rebinding) is narrowed but not closed (`:27-40`). It has no hostname-suffix blocklist, no body-size cap and no timeout. `src/lib/crawlabilitySsrf.route.test.mjs` covers the crawlability route's use of it.
-- **LLM paths.** `src/lib/llm.js` and `src/lib/openrouter.js` (`generateContent`) remain for existing features and are not changed.
+- **Tests.** `npm test` and `npm run test:scoring` run `node --import ./src/server/liveWriteGuardAuto.mjs --test "src/**/*.test.mjs"`. `src/server/testCoverageGuard.test.mjs:24-49` asserts that the `test:scoring` glob collects every `*.test.mjs` under `src/`, and `:69-89` asserts that `npm test` equals `test:scoring` and that CI runs `npm run test:scoring`. Route tests use loader hooks (`src/server/customerRoutes.test.hooks.mjs`, `src/server/cronAuth.route.hooks.mjs`). The DB harness pattern refuses any database that is not a loopback `_qa`/`_uat` database (`scripts/qa/check-repair-workflows.mjs:13-18`). CI's `customer-database` job applies every migration in order to Postgres 16, then runs `scripts/qa/check-probe-dispatch.mjs` and `scripts/qa/check-repair-workflows.mjs` (`.github/workflows/ci.yml:16-59`).
+- **Customer auth.** `getCustomerContext()` and `findCustomerBrand()` (`src/shared/supabase/customer.js:31-37`, `src/shared/supabase/customerContext.js:1-30`) resolve the Supabase session and active memberships (`brandKey`, `role`, `display_name`, `website`, `website_host`, `aliases`). `customerRouteContext()` (`src/shared/supabase/customerRoute.js:4-18`) adds the 503/401/503/403 cross-site/404 mapping. `getSupabaseAdmin()` (`src/shared/supabase/admin.js:10-24`) returns the service-role client or `null`. Several routes repeat the mapping by hand (for example `src/app/api/customer/scan/route.js:16-27`).
+- **Cron auth and background work.** `isCronAuthorized()` (`src/server/cronAuth.js:126-166`) fails closed in production without `CRON_SECRET`. `keepAlive()` (`src/server/keepAlive.js:36-73`) wraps `@vercel/functions` `waitUntil`. `makeSelfContinue()` (`src/server/selfContinue.js:146-201`) fires a fire-and-forget request back at a worker route with `x-cron-secret` and the deployment-protection bypass header. Worker routes that authenticate themselves are listed in `SELF_GATED` (`src/server/operatorPerimeter.js:72-91`). `vercel.json` has daily crons only.
+- **Scan worker (NOT migrated by F01).** Scans run on `scan_jobs` through `runScanChunk` (`src/server/workers/scanWorker.js:2872`), with a 150 s chunk budget (`:111`), a 300 s worker limit (`:1174`), its own self-continue copy (`:1216-1260`), a run reaper (`:3752`), a scheduler tick (`:3308`) and per-brand single-flight through the partial index `scan_jobs_one_running_per_brand` (migration 007) plus `jobLease.js`. Answer-engine calls are claimed one attempt at a time through `claim_probe_dispatch` (migrations 027 and 035), from `runDurableProbing` (`src/server/workers/durableProbing.js:62-329`).
+- **Spend control today.** It is specific to scans. `claim_probe_dispatch(p_id, p_reserve, p_scan_cap, p_day_cap, p_lease_seconds)` reserves `p_reserve` per attempt in `probe_attempts.reserved_usd`, allows at most 3 attempts per observation, and refuses when `scan_spend + p_reserve > p_scan_cap` or `day_spend + p_reserve > p_day_cap`, where spend sums `coalesce(charged_usd, reserved_usd)` (`supabase/migrations/035_scoped_provider_rollout.sql:36-89`). `dispatchBudget()` reads `SCAN_PROBE_RESERVATION_USD` (default 1 in code; the owner states production runs at 0.20), `SCAN_MAX_COST_PER_SCAN` and `SCAN_MAX_COST_PER_DAY` (`src/server/workers/durableProbing.js:26-41`). Content checks have their own `claim_content_check` (`supabase/migrations/031_content_check_budget.sql:13-27`). LLM pricing has named cost sources and fails loud on unpriced models (`src/shared/llmPricing.js:20-45`, `resolveCost` at `:651-713`). There is **no** generic reservation, no per-workspace cap and no paid-feature switch.
+- **SSRF.** `src/server/ssrfGuard.js` already resolves names with `node:dns` (`:518-526`) and checks every address in every notation (`:542-608`). It refuses DNS failures (fail closed), follows redirects by hand and re-validates each hop (`:612-647`). It names its own gap: the second resolution inside `fetch()` (TOCTOU / DNS rebinding) is narrowed but not closed (`:27-40`). It has no hostname-suffix blocklist, no body-size cap and no timeout. `src/server/crawlabilitySsrf.route.test.mjs` covers the crawlability route's use of it.
+- **LLM paths.** `src/server/llm.js` and `src/server/openrouter.js` (`generateContent`) remain for existing features and are not changed.
 - **Must not break.** P0 dispatch controls and functions (027–035), `scan_jobs` behaviour, the 3,558-test suite, `testCoverageGuard`, the CI database job, existing routes' markup and status codes.
 
 ## 4. Target behaviour and acceptance criteria
 
 | ID | Statement | Verified by |
 |---|---|---|
-| F01-AC-01 | `tsconfig.json` exists with `allowJs`, `strict`, `noEmit`, `erasableSyntaxOnly`, `allowImportingTsExtensions` and `paths {"@/*":["./src/*"]}`; `npm run typecheck` exits 0 on `main` plus F01. | CI step `typecheck`; unit `src/lib/platform/tsSetup.test.mjs` |
-| F01-AC-02 | `npm test` runs `src/**/*.test.mjs` and `src/**/*.test.ts`; `testCoverageGuard` fails if a `*.test.ts` file is not collected. | `src/lib/testCoverageGuard.test.mjs` (extended) |
-| F01-AC-03 | `THIRD_PARTY_NOTICES.md` contains OpenSEO's MIT licence text verbatim and lists every COPY/PORT file; every file whose header says "Portions ported from every-app/open-seo" is listed. | unit `src/lib/platform/thirdPartyNotices.test.mjs` |
-| F01-AC-04 | `toErrorResponse()` returns `{error, code, recovery?, details?}` with the error's status and `Cache-Control: no-store`; zod errors become 400 `invalid_request`; unknown errors become 500 `internal_error` without leaking the message. | unit `src/lib/http/errors.test.ts` |
-| F01-AC-05 | `requireWorkspace()` maps no-auth-config→503 `auth_not_configured`, no user→401 `unauthenticated`, membership read failure→503 `membership_unavailable`, cross-site write→403 `cross_site`, unknown brand→404 `workspace_not_found`, member on owner-only→403 `owner_required`, missing service client→503 `storage_unavailable`; success returns the §5 shape. | unit `src/lib/workspace/requireWorkspace.test.ts` |
+| F01-AC-01 | `tsconfig.json` exists with `allowJs`, `strict`, `noEmit`, `erasableSyntaxOnly`, `allowImportingTsExtensions` and `paths {"@/*":["./src/*"]}`; `npm run typecheck` exits 0 on `main` plus F01. | CI step `typecheck`; unit `src/server/platform/tsSetup.test.mjs` |
+| F01-AC-02 | `npm test` runs `src/**/*.test.mjs` and `src/**/*.test.ts`; `testCoverageGuard` fails if a `*.test.ts` file is not collected. | `src/server/testCoverageGuard.test.mjs` (extended) |
+| F01-AC-03 | `THIRD_PARTY_NOTICES.md` contains OpenSEO's MIT licence text verbatim and lists every COPY/PORT file; every file whose header says "Portions ported from every-app/open-seo" is listed. | unit `src/server/platform/thirdPartyNotices.test.mjs` |
+| F01-AC-04 | `toErrorResponse()` returns `{error, code, recovery?, details?}` with the error's status and `Cache-Control: no-store`; zod errors become 400 `invalid_request`; unknown errors become 500 `internal_error` without leaking the message. | unit `src/shared/http/errors.test.ts` |
+| F01-AC-05 | `requireWorkspace()` maps no-auth-config→503 `auth_not_configured`, no user→401 `unauthenticated`, membership read failure→503 `membership_unavailable`, cross-site write→403 `cross_site`, unknown brand→404 `workspace_not_found`, member on owner-only→403 `owner_required`, missing service client→503 `storage_unavailable`; success returns the §5 shape. | unit `src/server/workspace/requireWorkspace.test.ts` |
 | F01-AC-06 | `reserveSpend` refuses with `feature_disabled` when the feature has no enabled `paid_feature_controls` row (or the brand is not on its allowlist), `over_approved_max` when `estimateUsd > maxUsd`, `daily_cap` when the workspace daily cap or the feature's platform daily cap would be exceeded, and `workspace_cap` when the workspace monthly cap would be exceeded. Refusals create no hold. | DB `scripts/qa/check-f01-db.mjs` group `spend-refusals` |
 | F01-AC-07 | 20 concurrent reservations of USD 1 against a USD 10 daily cap grant exactly 10. | DB group `spend-concurrency` |
-| F01-AC-08 | A second `reserveSpend` with the same `(brandKey, idempotencyKey)` returns the same `holdId` while held, and throws `AppError 409 duplicate_paid_call` after settle or release. | DB group `spend-idempotency`; unit `src/lib/spend/spend.test.ts` |
-| F01-AC-09 | `metered()` settles on `actualUsd`, releases when `billed === false` or the call throws `UnbilledCallError`, settles at actual on `ChargedCallError`, and records an unknown cost (counted at the estimate) for any other thrown error. Settlement still happens if the caller has already returned (keepAlive). | unit `src/lib/spend/metered.test.ts` |
+| F01-AC-08 | A second `reserveSpend` with the same `(brandKey, idempotencyKey)` returns the same `holdId` while held, and throws `AppError 409 duplicate_paid_call` after settle or release. | DB group `spend-idempotency`; unit `src/shared/spend/spend.test.ts` |
+| F01-AC-09 | `metered()` settles on `actualUsd`, releases when `billed === false` or the call throws `UnbilledCallError`, settles at actual on `ChargedCallError`, and records an unknown cost (counted at the estimate) for any other thrown error. Settlement still happens if the caller has already returned (keepAlive). | unit `src/shared/spend/metered.test.ts` |
 | F01-AC-10 | An actual cost above the estimate writes the ledger row with `meta.undershoot = true` and logs `[spend] estimate undershoot` with feature, provider, endpoint, estimate and actual. Nothing else is logged. | unit `metered.test.ts`; DB group `spend-settle` |
 | F01-AC-11 | Holds past `expires_at` become `expired` and write one ledger row with `actual_usd NULL`, `accounted_usd = estimate_usd`, `cost_source = 'reservation'`. | DB group `spend-expiry` |
-| F01-AC-12 | Every paid feature ships disabled: a fresh database has no enabled `paid_feature_controls` row; `isFeatureEnabled()` is false in production for any flag whose env var is unset. | DB group `spend-defaults`; unit `src/lib/features/flags.test.ts` |
-| F01-AC-13 | `enqueueJob` with the same `dedupeKey` returns `{jobId: <same>, deduped: true}`; with a `singleActiveKey` already queued or running it throws `AppError 409 job_already_running` with `details.activeJobId`. | DB group `jobs-enqueue`; unit `src/lib/jobs/enqueue.test.ts` |
+| F01-AC-12 | Every paid feature ships disabled: a fresh database has no enabled `paid_feature_controls` row; `isFeatureEnabled()` is false in production for any flag whose env var is unset. | DB group `spend-defaults`; unit `src/server/features/flags.test.ts` |
+| F01-AC-13 | `enqueueJob` with the same `dedupeKey` returns `{jobId: <same>, deduped: true}`; with a `singleActiveKey` already queued or running it throws `AppError 409 job_already_running` with `details.activeJobId`. | DB group `jobs-enqueue`; unit `src/server/jobs/enqueue.test.ts` |
 | F01-AC-14 | `step.do` memoises: a completed step's function is never called again on replay, and its output is returned. | unit `runner.test.ts` "memoises completed steps" |
 | F01-AC-15 | A step with `billed: true` and `retries: 2` is rejected at definition time (`AppError 500 billed_step_retries`); a billed step found `running` on replay (crash mid-step) fails with `billed_step_interrupted` and its function is not called again. | unit `runner.test.ts`; DB group `jobs-steps` |
 | F01-AC-16 | A non-billed step that throws is retried up to `retries` times with backoff (`run_at` moves forward, the job yields), then fails with `step_attempts_exhausted`. | unit `runner.test.ts` |
@@ -88,17 +88,17 @@ F01 gives every later feature the same five building blocks: TypeScript and zod 
 | F01-AC-18 | A step whose `timeoutMs` exceeds the remaining invocation budget is not started; the job yields and a self-continue to `/api/jobs/tick?job_id=` is fired. | unit `runner.test.ts` "yields before a step that cannot finish" |
 | F01-AC-19 | Step outputs over 64 KB or not JSON-serialisable fail the step with `step_output_too_large` / `step_output_not_json`. | unit `runner.test.ts` |
 | F01-AC-20 | Two ticks claiming at once never run the same job (SKIP LOCKED + lease); a writer whose lease expired is fenced (its step completion returns `false` (the runner maps it to `lost_lease`), no state change). | DB group `jobs-leases` |
-| F01-AC-21 | The watchdog fails jobs past `deadline_at` (`deadline_exceeded`) and past `max_invocations` (`invocation_limit`), oldest first, at most 100 per tick, and one failing row does not stop the sweep. | DB group `jobs-watchdog`; unit `src/lib/jobs/watchdog.test.ts` |
+| F01-AC-21 | The watchdog fails jobs past `deadline_at` (`deadline_exceeded`) and past `max_invocations` (`invocation_limit`), oldest first, at most 100 per tick, and one failing row does not stop the sweep. | DB group `jobs-watchdog`; unit `src/server/jobs/watchdog.test.ts` |
 | F01-AC-22 | `cancelJob` cancels a queued job immediately; a running job finishes its current step, then ends `cancelled` before the next step starts. | unit `runner.test.ts`; DB group `jobs-cancel` |
-| F01-AC-23 | `getJobStatus` returns `pollAfterSeconds` 5 for running manual jobs, 20 for running scheduled jobs (both overridable per kind), `clamp(run_at − now, 5, 60)` for a sleeping or queued job, and `null` for terminal jobs. | unit `src/lib/jobs/status.test.ts` |
-| F01-AC-24 | `POST /api/jobs/tick` returns 401 without the cron secret, 200 `{skipped:"disabled"}` when `FEATURE_JOBS_TICK` is not `on`, and 202 `{accepted:true}` otherwise. Work continues in `keepAlive`. | route `src/lib/jobs/tick.route.test.mjs` |
-| F01-AC-25 | `GET /api/customer/jobs/[jobId]` returns 404 for a job of another workspace and for system jobs, and the §5 status shape for its own. | route `src/lib/jobs/jobsRoutes.route.test.mjs` |
-| F01-AC-26 | Periodic tasks advance `next_run_at` before running; a task that throws is not retried until its next slot, and missed slots collapse into one catch-up run. | DB group `jobs-periodic`; unit `src/lib/jobs/periodic.test.ts` |
+| F01-AC-23 | `getJobStatus` returns `pollAfterSeconds` 5 for running manual jobs, 20 for running scheduled jobs (both overridable per kind), `clamp(run_at − now, 5, 60)` for a sleeping or queued job, and `null` for terminal jobs. | unit `src/server/jobs/status.test.ts` |
+| F01-AC-24 | `POST /api/jobs/tick` returns 401 without the cron secret, 200 `{skipped:"disabled"}` when `FEATURE_JOBS_TICK` is not `on`, and 202 `{accepted:true}` otherwise. Work continues in `keepAlive`. | route `src/server/jobs/tick.route.test.mjs` |
+| F01-AC-25 | `GET /api/customer/jobs/[jobId]` returns 404 for a job of another workspace and for system jobs, and the §5 status shape for its own. | route `src/server/jobs/jobsRoutes.route.test.mjs` |
+| F01-AC-26 | Periodic tasks advance `next_run_at` before running; a task that throws is not retried until its next slot, and missed slots collapse into one catch-up run. | DB group `jobs-periodic`; unit `src/server/jobs/periodic.test.ts` |
 | F01-AC-27 | Migration 043 applies cleanly on a database without `pg_cron`/`pg_net` (CI) and, where they exist, installs exactly one `perceev-jobs-tick` schedule running every minute. | CI `customer-database` (applies without the extensions); DB group `jobs-cron` (NOTICE/NULL path; skipped without `vault`); the installed schedule is verified by the owner on Supabase (`select * from cron.job`) and recorded in the PR body |
-| F01-AC-28 | `cached()` returns `hit:false` and stores on miss, `hit:true` within TTL, refetches after TTL and when the stored value fails the schema; workspace-scoped keys differ per brand; values over 256 KB go to Storage bucket `provider-cache`. | unit `src/lib/cache/providerCache.test.ts`; DB group `cache` |
-| F01-AC-29 | `llmObject`/`llmText` reserve an estimate, call OpenRouter with `usage.include` and `maxRetries: 0`, settle on `providerMetadata.openrouter.usage.cost` (or the `llmPricing` price table on other gateways), and never log the prompt or the answer. | unit `src/lib/llm/llm.test.ts` |
-| F01-AC-30 | `safeFetch` refuses OpenSEO's blocked host names and suffixes, all private/metadata addresses (via `ssrfGuard`), more than 5 redirects, bodies over `maxBytes`, and connects only to the address it vetted (a resolver that later answers a private address cannot redirect the connection). | unit `src/lib/http/safeFetch.test.ts` |
-| F01-AC-31 | The route contract test fails when any registered response schema is closed (`additionalProperties:false`) or missing, and its walker finds closed objects inside arrays, unions and `$defs`. | unit `src/lib/http/routeContract.test.ts` |
+| F01-AC-28 | `cached()` returns `hit:false` and stores on miss, `hit:true` within TTL, refetches after TTL and when the stored value fails the schema; workspace-scoped keys differ per brand; values over 256 KB go to Storage bucket `provider-cache`. | unit `src/server/cache/providerCache.test.ts`; DB group `cache` |
+| F01-AC-29 | `llmObject`/`llmText` reserve an estimate, call OpenRouter with `usage.include` and `maxRetries: 0`, settle on `providerMetadata.openrouter.usage.cost` (or the `llmPricing` price table on other gateways), and never log the prompt or the answer. | unit `src/server/llm/llm.test.ts` |
+| F01-AC-30 | `safeFetch` refuses OpenSEO's blocked host names and suffixes, all private/metadata addresses (via `ssrfGuard`), more than 5 redirects, bodies over `maxBytes`, and connects only to the address it vetted (a resolver that later answers a private address cannot redirect the connection). | unit `src/shared/http/safeFetch.test.ts` |
+| F01-AC-31 | The route contract test fails when any registered response schema is closed (`additionalProperties:false`) or missing, and its walker finds closed objects inside arrays, unions and `$defs`. | unit `src/shared/http/routeContract.test.ts` |
 | F01-AC-32 | No F01 change alters P0 dispatch: migrations 027–035 functions are untouched; `scripts/qa/check-probe-dispatch.mjs` still passes. | CI `customer-database` job |
 
 ## 5. Scope
@@ -106,13 +106,13 @@ F01 gives every later feature the same five building blocks: TypeScript and zod 
 **In scope**
 - TypeScript enablement, zod v4, `ai` v6, `@openrouter/ai-sdk-provider`, `undici` (for connection pinning), type packages.
 - `THIRD_PARTY_NOTICES.md`.
-- `src/lib/http/errors.ts`, `src/lib/workspace/requireWorkspace.ts`, `src/lib/http/routeContract.ts` + contract test.
-- Durable job runner `src/lib/jobs/` with tables `jobs`, `job_steps`, `job_periodic`, tick route, customer status/cancel routes, watchdog, retention, pg_cron schedule.
-- Spend guard `src/lib/spend/` with tables `paid_feature_controls`, `workspace_spend_limits`, `spend_holds`, `spend_ledger`, operator APIs to set controls and limits.
-- Feature flags `src/lib/features/`.
-- Provider cache `src/lib/cache/` with table `provider_cache` and bucket `provider-cache`.
-- LLM helper `src/lib/llm/`.
-- `safeFetch` `src/lib/http/safeFetch.ts` on top of `src/lib/ssrfGuard.js`.
+- `src/shared/http/errors.ts`, `src/server/workspace/requireWorkspace.ts`, `src/shared/http/routeContract.ts` + contract test.
+- Durable job runner `src/server/jobs/` with tables `jobs`, `job_steps`, `job_periodic`, tick route, customer status/cancel routes, watchdog, retention, pg_cron schedule.
+- Spend guard `src/shared/spend/` with tables `paid_feature_controls`, `workspace_spend_limits`, `spend_holds`, `spend_ledger`, operator APIs to set controls and limits.
+- Feature flags `src/server/features/`.
+- Provider cache `src/server/cache/` with table `provider_cache` and bucket `provider-cache`.
+- LLM helper `src/server/llm/`.
+- `safeFetch` `src/shared/http/safeFetch.ts` on top of `src/server/ssrfGuard.js`.
 
 **Out of scope**
 - Moving the scan worker, `scan_jobs`, `claim_probe_dispatch` or the scan caps onto the job runner or spend guard (see §6.3.8; scan accounting in the ledger is F03, scan approval is F09).
@@ -970,9 +970,9 @@ END $$;
 
 ### 6.2 Server modules
 
-**Import rule for all new server code (binding for every spec).** Modules under `src/lib/**` import other modules with **relative paths and explicit extensions** (`./store.ts`, `../keepAlive.js`), never `@/`, so `node --test` runs them without a bundler. `@/` stays for `src/app/**` and `src/components/**`. TypeScript must be erasable-only (no `enum`, `namespace`, parameter properties, `import =`); `erasableSyntaxOnly` enforces this.
+**Import rule for all new server code (binding for every spec).** Modules under `src/server/**` and `src/shared/**` import other modules with **relative paths and explicit extensions** (`./store.ts`, `../keepAlive.js`), never `@/`, so `node --test` runs them without a bundler. `@/` stays for `src/app/**` and `src/components/**`. TypeScript must be erasable-only (no `enum`, `namespace`, parameter properties, `import =`); `erasableSyntaxOnly` enforces this.
 
-#### `src/lib/http/errors.ts` (PATTERN, `openseo:src/server/lib/errors.ts`)
+#### `src/shared/http/errors.ts` (PATTERN, `openseo:src/server/lib/errors.ts`)
 
 ```ts
 export class AppError extends Error {
@@ -991,13 +991,13 @@ export function jsonOk(body: unknown, status?: number): Response; // JSON + NO_S
 `toErrorResponse` rules, in order:
 1. `AppError` → `status`, body `{ error: message, code, recovery?, details? }`.
 2. `ZodError` (zod v4 `z.ZodError`) → 400 `{ error: "The request was not valid.", code: "invalid_request", details: { issues: [{ path: "a.b", message }] } }` (path and message only; never the received value).
-3. `SpendRefused` (from `src/lib/spend/errors.ts`) → `feature_disabled` 403 "This feature is not enabled for your workspace."; `daily_cap` 402 "Today's spend limit for this workspace has been reached." recovery "Try again tomorrow or ask the workspace owner to raise the limit."; `workspace_cap` 402 "This month's spend limit for this workspace has been reached."; `over_approved_max` 409 "This now costs more than you approved. Review the new price." with `details.estimateUsd`. When a `daily_cap` refusal has `scope: "feature"`, the copy is "This feature's daily spend limit has been reached." and the recovery is "Try again tomorrow."
+3. `SpendRefused` (from `src/shared/spend/errors.ts`) → `feature_disabled` 403 "This feature is not enabled for your workspace."; `daily_cap` 402 "Today's spend limit for this workspace has been reached." recovery "Try again tomorrow or ask the workspace owner to raise the limit."; `workspace_cap` 402 "This month's spend limit for this workspace has been reached."; `over_approved_max` 409 "This now costs more than you approved. Review the new price." with `details.estimateUsd`. When a `daily_cap` refusal has `scope: "feature"`, the copy is "This feature's daily spend limit has been reached." and the recovery is "Try again tomorrow."
 4. `SyntaxError` from `request.json()` → 400 `invalid_json` "The request body must be JSON."
 5. Anything else → 500 `{ error: "Something went wrong. Please retry.", code: "internal_error" }` and `console.error("[http] unhandled", err instanceof Error ? err.name + ": " + err.message.slice(0, 200) : typeof err)`.
 
 Every response carries `Cache-Control: no-store` and `Content-Type: application/json`.
 
-#### `src/lib/workspace/requireWorkspace.ts`
+#### `src/server/workspace/requireWorkspace.ts`
 
 ```ts
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -1025,7 +1025,7 @@ Built on `getCustomerContext()` (`../supabase/customer.js`) and `getSupabaseAdmi
 
 `user.email` is `context.user.email ?? ""`. `deps` exists for unit tests only; route code never passes it. Existing routes are not migrated by F01. New routes must use it.
 
-#### `src/lib/http/routeContract.ts` and `src/lib/http/schemaContract.ts`
+#### `src/shared/http/routeContract.ts` and `src/shared/http/schemaContract.ts`
 
 ```ts
 // schemaContract.ts — PORT of output-schema-contract.test.ts:16-65
@@ -1039,16 +1039,16 @@ export type RouteContract = { id: string; method: "GET"|"POST"|"PUT"|"PATCH"|"DE
 export function defineRouteContract(c: RouteContract): RouteContract;
 ```
 
-Each feature declares contracts in `src/lib/<feature>/<name>.contract.ts` and exports `export const contracts: RouteContract[]`. No central list; the test discovers files by glob, so parallel PRs never conflict.
+Each feature declares contracts in `src/server/<feature>/<name>.contract.ts` and exports `export const contracts: RouteContract[]`. No central list; the test discovers files by glob, so parallel PRs never conflict.
 
-Rules the test enforces (`src/lib/http/routeContract.test.ts`):
+Rules the test enforces (`src/shared/http/routeContract.test.ts`):
 - every discovered contract has a `response` schema and at least one example;
 - `closedOutputPaths(z.toJSONSchema(response, { io: "output" }), id)` is empty, so responses use `z.looseObject`;
 - every example parses with `response`;
 - `file` exists on disk and exports a handler named `method`;
 - `request` and `query` schemas are closed (use `z.strictObject`; §9 "reject unknown fields"), checked with `z.toJSONSchema(request, { io: "input" })` having `additionalProperties: false` at the root.
 
-#### `src/lib/features/flags.ts`, `src/lib/features/names.ts`
+#### `src/server/features/flags.ts`, `src/server/features/names.ts`
 
 ```ts
 // names.ts — each spec appends one entry in its own PR.
@@ -1069,18 +1069,18 @@ Semantics:
 3. If the entry lists spend features, every one must have an enabled `paid_feature_controls` row that admits the brand (`mode = 'all'` or brand in `brand_allowlist`). A missing row, missing service client or read error → false (fail closed).
 4. Results are cached in-process for 30 s per `(name, brandKey)`, bounded at 5,000 entries (expired entries are dropped first, then the whole map). Only the controls' own answer is cached: a control-table read that errors or throws still refuses the feature, but it is an outage, not an answer, so it is never memoized. `PUT /api/ops/spend/controls/[feature]` calls `invalidateFeatureFlagCache()` after a successful write, so a feature an operator has just enabled is not held off for the rest of the window.
 
-#### `src/lib/spend/`
+#### `src/shared/spend/`
 
 | File | Exports |
 |---|---|
 | `features.ts` | Re-exports only: `export { SPEND_FEATURES, isSpendFeature } from "../../shared/spend-features.ts"; export type { SpendFeature } from "../../shared/spend-features.ts";`. The const and the type live in `src/shared/spend-features.ts` (conventions §5): `export const SPEND_FEATURES = ["platform.selftest"] as const; export type SpendFeature = typeof SPEND_FEATURES[number]; export function isSpendFeature(v: string): v is SpendFeature;` Each spec appends its values in the shared file. |
 | `errors.ts` | `export class SpendRefused extends AppError { reason: "feature_disabled"\|"workspace_cap"\|"daily_cap"\|"over_approved_max"; scope?: "feature"\|"workspace"; limitUsd?: number }`; `export class ChargedCallError extends Error { actualUsd: number; provider: string; endpoint: string }` (provider failed after billing); `export class UnbilledCallError extends Error {}` (provider rejected without billing); `export class AmbiguousCallError extends Error {}` (sent, outcome unknown). |
 | `money.ts` | `export function usd6(n: number): number` (round half-up to 6 decimals via integer micro-dollars); `export function toMicros(n: number): number; export function fromMicros(m: number): number;` |
-| `store.ts` | `export function createSpendStore(admin: SupabaseClient): SpendStore`; `SpendStore` = `{ reserve(args): Promise<ReserveResult>; settle(holdId, costs): Promise<SettleResult>; release(holdId, reason): Promise<boolean>; expire(limit): Promise<number>; prune(holdsBefore, ledgerBefore): Promise<{ledger:number;holds:number}> }` — thin RPC wrappers over §6.1 functions. `src/lib/spend/memoryStore.ts` implements the same interface in memory for unit tests (same refusal order). |
+| `store.ts` | `export function createSpendStore(admin: SupabaseClient): SpendStore`; `SpendStore` = `{ reserve(args): Promise<ReserveResult>; settle(holdId, costs): Promise<SettleResult>; release(holdId, reason): Promise<boolean>; expire(limit): Promise<number>; prune(holdsBefore, ledgerBefore): Promise<{ledger:number;holds:number}> }` — thin RPC wrappers over §6.1 functions. `src/shared/spend/memoryStore.ts` implements the same interface in memory for unit tests (same refusal order). |
 | `index.ts` | §5 API below. |
 
 ```ts
-// src/lib/spend/index.ts  (§5 names, plus two additive options and one additive export)
+// src/shared/spend/index.ts  (§5 names, plus two additive options and one additive export)
 export async function reserveSpend(i: { brandKey: string; feature: SpendFeature; estimateUsd: number; maxUsd?: number;
   jobId?: string; idempotencyKey: string; ttlSeconds?: number; subject?: { kind: string; id: string } },
   deps?: SpendDeps): Promise<{ holdId: string; existing: boolean }>;
@@ -1114,7 +1114,7 @@ Behaviour:
 
 There are no retries inside `metered`. Billed calls run once (§6.4 of the conventions). A release failure never escapes `metered`: both `release(…, "not_billed")` and `release(…, "unbilled_error")` run inside a try/catch that logs `console.error("[spend] release failed", { holdId, reason })` and then continues, so a `billed:false` success still returns its value and an `UnbilledCallError` is still rethrown as itself. A failed release is never turned into a settle: the hold expires and is counted at its estimate.
 
-#### `src/lib/jobs/`
+#### `src/server/jobs/`
 
 | File | Exports and responsibility |
 |---|---|
@@ -1150,7 +1150,7 @@ There are no retries inside `metered`. Billed calls run once (§6.4 of the conve
 
 `idempotencyKey` convention for paid calls inside jobs: `jobStepKey(ctx, stepName) = \`job:${ctx.jobId}:${stepName}\``, exported from `runner.ts`.
 
-#### `src/lib/cache/providerCache.ts` (PORT of `r2-cache.ts`)
+#### `src/server/cache/providerCache.ts` (PORT of `r2-cache.ts`)
 
 ```ts
 export async function cached<T>(i: { namespace: string; version: number; keyParts: unknown[]; ttlSeconds: number;
@@ -1167,17 +1167,17 @@ export const CACHE_INLINE_MAX_BYTES = 262_144;
 - Cache read failure (DB down) → treated as a miss; the fetcher still runs (and is metered by the caller).
 - A cached value is not spend: callers must call `metered()` **inside** `fetcher`, so a hit costs nothing.
 
-#### `src/lib/llm/` (PORT of `openseo:src/server/lib/openrouter.ts`, `chatAgent.ts:26-40`)
+#### `src/server/llm/` (PORT of `openseo:src/server/lib/openrouter.ts`, `chatAgent.ts:26-40`)
 
 ```ts
-// src/lib/llm/index.ts — §5 names, plus optional maxOutputTokens/timeoutMs
+// src/server/llm/index.ts — §5 names, plus optional maxOutputTokens/timeoutMs
 export async function llmObject<T>(i: { brandKey: string; feature: SpendFeature; schema: ZodType<T>; system: string;
   prompt: string; model?: string; maxUsd?: number; idempotencyKey: string; maxOutputTokens?: number; timeoutMs?: number },
   deps?: LlmDeps): Promise<{ object: T; usd: number | null; model: string }>;
 export async function llmText(i: { brandKey: string; feature: SpendFeature; system: string; prompt: string; model?: string;
   maxUsd?: number; idempotencyKey: string; maxOutputTokens?: number; timeoutMs?: number },
   deps?: LlmDeps): Promise<{ text: string; usd: number | null; model: string }>;
-// src/lib/llm/openrouter.ts
+// src/server/llm/openrouter.ts
 export function openRouterCostUsd(providerMetadata: unknown): number | null; // zod-parsed providerMetadata.openrouter.usage.cost
 export function buildModel(modelId: string, env): LanguageModel;             // createOpenRouter({ apiKey, baseURL }) + { usage: { include: true } }
 export function estimateLlmUsd(modelId: string, promptChars: number, maxOutputTokens: number, env): number;
@@ -1192,7 +1192,7 @@ type LlmDeps = { env?; model?: LanguageModel; spend?: SpendDeps; generateText?: 
 - Pricing after the call never escapes with the hold open. `resolveCost` throws for an id with no rate and for a gateway that reported no token counts, so the helper settles the hold at the estimate (unknown cost) and then throws `AppError(500,"llm_unpriced")`.
 - Never logs `system`, `prompt`, output text or headers. The only log lines are `[llm] call failed { model, code }`.
 
-#### `src/lib/http/safeFetch.ts` and `src/lib/http/hostPolicy.ts`
+#### `src/shared/http/safeFetch.ts` and `src/shared/http/hostPolicy.ts`
 
 ```ts
 // hostPolicy.ts — PORT of url-policy.ts:4-34 (names and normalisation only)
@@ -1224,7 +1224,7 @@ export async function safeFetch(url: string, init?: Omit<RequestInit, "redirect"
   1. `isCronAuthorized(request, searchParams, { label: "jobs-tick", warned })` → 401 `{error:"Unauthorized", code:"unauthorized"}`.
   2. `isFeatureEnabled("jobs_tick")` false → 200 `{ skipped: "disabled" }`.
   3. `keepAlive(runTick({ jobId: searchParams.get("job_id") ?? undefined, startedAt }), { label: "jobs-tick" })` and return 202 `{ accepted: true }` immediately, so `pg_net`'s 5 s timeout never cuts the work.
-- `/api/jobs/tick` is added to `SELF_GATED` in `src/lib/operatorPerimeter.js` (it authenticates itself with `CRON_SECRET`).
+- `/api/jobs/tick` is added to `SELF_GATED` in `src/server/operatorPerimeter.js` (it authenticates itself with `CRON_SECRET`).
 
 #### 6.3.2 `runTick` order (port of `openseo:src/server.ts:235-259`)
 
@@ -1288,7 +1288,7 @@ Cache namespaces: F01 defines none.
 
 ### 6.5 API routes
 
-All customer routes use `requireWorkspace` and `toErrorResponse`, and declare a contract in `src/lib/jobs/jobs.contract.ts` or `src/lib/spend/spend.contract.ts`.
+All customer routes use `requireWorkspace` and `toErrorResponse`, and declare a contract in `src/server/jobs/jobs.contract.ts` or `src/shared/spend/spend.contract.ts`.
 
 **`GET /api/customer/jobs/[jobId]?brand_key=<key>`** (auth: workspace)
 
@@ -1351,10 +1351,10 @@ None. F01 ships no customer or operator screens. F03 builds the Usage page and t
   - `[spend] release failed` `{ holdId, reason }` — logged when `release_spend` throws **or** answers `false` (the hold was no longer `held`, so the unbilled call is charged at its estimate) — plus `[spend] ambiguous call` `{ holdId, feature }` and `[spend] unclassified call error` — name only — §6.2 `metered`.
   - `[ops] spend control changed` `{ feature, enabled }` (§6.5).
   - `[jobs] periodic claim failed` `{ name, reason }`, `[jobs] periodic failed` `{ name, reason }`, `[jobs] periodic record failed` `{ name, reason }`, `[jobs] watchdog reconcile failed` `{ reason }`, `[jobs] watchdog hold expiry failed` `{ reason }`, `[jobs] finish failed` `{ jobId, code, reason }` — §6.2 `periodic.ts`, `watchdog.ts` and `runner.ts`; `reason` is an error message head, an error name or a type, never a payload or a URL.
-  - `[cache] schema mismatch` `{ namespace, version }` and `[cache] write failed` — namespace only (§6.2 `src/lib/cache/`).
-  - `[llm] call failed` `{ model, code }` (§6.2 `src/lib/llm/`).
+  - `[cache] schema mismatch` `{ namespace, version }` and `[cache] write failed` — namespace only (§6.2 `src/server/cache/`).
+  - `[llm] call failed` `{ model, code }` (§6.2 `src/server/llm/`).
 - **PostHog.** No events (F26 owns telemetry). F01 exposes counts in the tick log line.
-- **Telemetry and email hooks (F25, F26).** F01 accepts one-line calls, added by those specs' PRs, into `src/lib/telemetry/context.ts` from `requireWorkspace` (sets server-event identity), `toErrorResponse` (5xx error capture), `reserveSpend` (cap-reached refusals, which F25 turns into the spend-cap email) and the job runner (job identity and terminal status). F01 itself ships none of these calls; each hook must be a no-op when F26/F25 are disabled and must never throw into the caller.
+- **Telemetry and email hooks (F25, F26).** F01 accepts one-line calls, added by those specs' PRs, into `src/shared/telemetry/context.ts` from `requireWorkspace` (sets server-event identity), `toErrorResponse` (5xx error capture), `reserveSpend` (cap-reached refusals, which F25 turns into the spend-cap email) and the job runner (job identity and terminal status). F01 itself ships none of these calls; each hook must be a no-op when F26/F25 are disabled and must never throw into the caller.
 - **Vault.** The cron secret is stored once in Supabase Vault by the owner (§10). The migration never contains it.
 
 ## 7. Code reuse map
@@ -1362,27 +1362,27 @@ None. F01 ships no customer or operator screens. F03 builds the Usage page and t
 | OpenSEO source | Perceev target | Mode | Adaptation notes |
 |---|---|---|---|
 | `openseo:LICENSE` | `THIRD_PARTY_NOTICES.md` | COPY | Verbatim MIT text, "Copyright (c) 2026 Ben Senescu". |
-| `openseo:src/server/workflows/pgStep.ts:1-29` | `src/lib/jobs/runner.ts` (`step.do`) | PATTERN | Steps memoised in `job_steps` instead of the Workflows engine. No per-step DB client scoping needed (supabase-js is stateless). |
-| `openseo:src/server/workflows/AiVisibilityWorkflow.ts:29-58` | `src/lib/jobs/stepConfigs.ts` | PORT | `SINGLE_ATTEMPT`/`COLLECT_STEP`/`LIVE_STEP` become `SINGLE_ATTEMPT`/`READ_STEP`/`LONG_PAID_STEP`. Timeouts capped at 230 s (Vercel), not 10 minutes. `POLL_INTERVALS` style sleeps become `step.sleep`. |
-| `openseo:src/server/workflows/auditStepConfigs.ts:1-64` | `src/lib/jobs/stepConfigs.ts` | PORT | Explicit timeout and small retry budget per step; `DB_STEP` retries 3 with exponential backoff (capped at 60 s). |
-| `openseo:src/server/features/audit/services/auditReconciler.ts:25-176` | `src/lib/jobs/watchdog.ts` + SQL `reconcile_stale_jobs` | PORT | There is no external instance to query: staleness = lease expired + deadline passed or invocation limit. Oldest first, 100 per batch, per-row isolation kept. |
-| `openseo:src/server.ts:235-259` | `src/lib/jobs/tick.ts` | PATTERN | Watchdog first; hold its error; run the rest; rethrow. Triggered by pg_cron, not Worker `scheduled`. |
+| `openseo:src/server/workflows/pgStep.ts:1-29` | `src/server/jobs/runner.ts` (`step.do`) | PATTERN | Steps memoised in `job_steps` instead of the Workflows engine. No per-step DB client scoping needed (supabase-js is stateless). |
+| `openseo:src/server/workflows/AiVisibilityWorkflow.ts:29-58` | `src/server/jobs/stepConfigs.ts` | PORT | `SINGLE_ATTEMPT`/`COLLECT_STEP`/`LIVE_STEP` become `SINGLE_ATTEMPT`/`READ_STEP`/`LONG_PAID_STEP`. Timeouts capped at 230 s (Vercel), not 10 minutes. `POLL_INTERVALS` style sleeps become `step.sleep`. |
+| `openseo:src/server/workflows/auditStepConfigs.ts:1-64` | `src/server/jobs/stepConfigs.ts` | PORT | Explicit timeout and small retry budget per step; `DB_STEP` retries 3 with exponential backoff (capped at 60 s). |
+| `openseo:src/server/features/audit/services/auditReconciler.ts:25-176` | `src/server/jobs/watchdog.ts` + SQL `reconcile_stale_jobs` | PORT | There is no external instance to query: staleness = lease expired + deadline passed or invocation limit. Oldest first, 100 per batch, per-row isolation kept. |
+| `openseo:src/server.ts:235-259` | `src/server/jobs/tick.ts` | PATTERN | Watchdog first; hold its error; run the rest; rethrow. Triggered by pg_cron, not Worker `scheduled`. |
 | `openseo:src/server/features/ai-visibility/repositories/AiVisibilityRepository.ts:225-243` | SQL `claim_due_periodic` | PORT | CAS on `next_run_at` before start; bounded catch-up as in our migration 032. |
-| `openseo:src/server/features/ai-visibility/services/scheduledAiVisibility.ts:16-83` | `src/lib/jobs/periodic.ts` | PATTERN | Advance first, then start; per-tick deadline; failures recorded on the schedule row, never block the queue. |
+| `openseo:src/server/features/ai-visibility/services/scheduledAiVisibility.ts:16-83` | `src/server/jobs/periodic.ts` | PATTERN | Advance first, then start; per-tick deadline; failures recorded on the schedule row, never block the queue. |
 | `openseo:src/db/pg/ai-visibility.schema.ts:62-93` | `jobs_single_active_idx` | PATTERN | Generalised to `(kind, single_active_key)`. |
-| `openseo:src/server/features/ai-visibility/services/aiVisibilityRuns.ts:126-187` | `src/lib/jobs/enqueue.ts` | PATTERN | Insert conflict = "already running"; return the blocker's id. |
-| `openseo:src/server/lib/dataforseo/client.ts:71-98, 321-430` | `src/lib/spend/index.ts` (`metered`) | PORT | Generic over providers. USD instead of credits. Hold in Postgres instead of Autumn. Settle/release classification via `ChargedCallError`/`UnbilledCallError`/`AmbiguousCallError` (theirs: `DataforseoChargedTaskError`). `waitUntil` → `keepAlive`. |
+| `openseo:src/server/features/ai-visibility/services/aiVisibilityRuns.ts:126-187` | `src/server/jobs/enqueue.ts` | PATTERN | Insert conflict = "already running"; return the blocker's id. |
+| `openseo:src/server/lib/dataforseo/client.ts:71-98, 321-430` | `src/shared/spend/index.ts` (`metered`) | PORT | Generic over providers. USD instead of credits. Hold in Postgres instead of Autumn. Settle/release classification via `ChargedCallError`/`UnbilledCallError`/`AmbiguousCallError` (theirs: `DataforseoChargedTaskError`). `waitUntil` → `keepAlive`. |
 | `openseo:src/server/billing/subscription.ts:209-298` | SQL `reserve_spend` | PORT | Atomic hold under advisory locks instead of Autumn locks; 30-minute default TTL; same "refuse rather than pass on a stale reading" rule. |
 | `openseo:src/server/billing/subscription.ts:313-420` | `settleSpendBatch` + SQL `settle_spend` | PORT | One hold, many cost rows, each recorded separately; earlier holds released on later failure (callers holding several holds use `releaseSpend` in a `finally`). |
 | `openseo:src/server/billing/subscription.ts:435-543` | `settleSpendBatch` | PORT | Never throws; one retry; undershoot logging verbatim in intent (`[spend] estimate undershoot`). |
 | `openseo:src/server/lib/audit/rendering-billing.ts:24-161` | `reserveSpend({ ttlSeconds })` usage pattern | PATTERN | Long-lived job hold (TTL up to 86,340 s) for worst-case jobs (F18 audits, F09 scans). |
-| `openseo:src/server/billing/researchSpend.ts:16-53` | `src/lib/llm/index.ts` | PATTERN | We still reserve an estimate before LLM calls (theirs settles after); settlement uses OpenRouter's reported cost. |
-| `openseo:src/server/lib/r2-cache.ts:1-85` | `src/lib/cache/providerCache.ts` | PORT | R2 → `provider_cache` row (inline ≤ 256 KB) or Storage object; soft TTL in `expires_at`; schema validation built into `cached()` instead of left to callers; workspace scoping added. |
-| `openseo:src/server/lib/openrouter.ts:47-114` | `src/lib/llm/openrouter.ts` | PORT | Keep `usage: { include: true }`. Drop the chat-agent defaults, region fallback and MiniMax routing (not needed here). Model from our env. |
-| `openseo:src/server/lib/chatAgent.ts:26-40` | `src/lib/llm/openrouter.ts` (`openRouterCostUsd`) | COPY | Same zod schema; returns `null` instead of `0` when absent (unknown is not zero, conventions §6.10). |
-| `openseo:src/server/lib/audit/url-policy.ts:4-34` | `src/lib/http/hostPolicy.ts` | PORT | Host-name lists and normalisation only; address checks stay in our `ssrfGuard.js`, which is stricter (fails closed, every hop). |
-| `openseo:src/server/lib/audit/url-policy.test.ts:8-38` | `src/lib/http/safeFetch.test.ts` | PORT | Same cases (`localhost:3000`, `192.168.0.10` blocked; hash stripped) run against our implementation. |
-| `openseo:src/server/mcp/output-schema-contract.test.ts:14-139` | `src/lib/http/schemaContract.ts` + `src/lib/http/routeContract.test.ts` | PORT | Walker copied; applied to route response schemas (and later F21/F22 tools) instead of an MCP server listing. Their walker unit cases ported unchanged. |
+| `openseo:src/server/billing/researchSpend.ts:16-53` | `src/server/llm/index.ts` | PATTERN | We still reserve an estimate before LLM calls (theirs settles after); settlement uses OpenRouter's reported cost. |
+| `openseo:src/server/lib/r2-cache.ts:1-85` | `src/server/cache/providerCache.ts` | PORT | R2 → `provider_cache` row (inline ≤ 256 KB) or Storage object; soft TTL in `expires_at`; schema validation built into `cached()` instead of left to callers; workspace scoping added. |
+| `openseo:src/server/lib/openrouter.ts:47-114` | `src/server/llm/openrouter.ts` | PORT | Keep `usage: { include: true }`. Drop the chat-agent defaults, region fallback and MiniMax routing (not needed here). Model from our env. |
+| `openseo:src/server/lib/chatAgent.ts:26-40` | `src/server/llm/openrouter.ts` (`openRouterCostUsd`) | COPY | Same zod schema; returns `null` instead of `0` when absent (unknown is not zero, conventions §6.10). |
+| `openseo:src/server/lib/audit/url-policy.ts:4-34` | `src/shared/http/hostPolicy.ts` | PORT | Host-name lists and normalisation only; address checks stay in our `ssrfGuard.js`, which is stricter (fails closed, every hop). |
+| `openseo:src/server/lib/audit/url-policy.test.ts:8-38` | `src/shared/http/safeFetch.test.ts` | PORT | Same cases (`localhost:3000`, `192.168.0.10` blocked; hash stripped) run against our implementation. |
+| `openseo:src/server/mcp/output-schema-contract.test.ts:14-139` | `src/shared/http/schemaContract.ts` + `src/shared/http/routeContract.test.ts` | PORT | Walker copied; applied to route response schemas (and later F21/F22 tools) instead of an MCP server listing. Their walker unit cases ported unchanged. |
 
 ## 8. Implementation plan
 
@@ -1393,20 +1393,20 @@ None. F01 ships no customer or operator screens. F03 builds the Usage page and t
 - [x] **P1.T1 TypeScript and dependencies**
   - [x] **P1.T1.S1** Add dependencies. *Files:* `package.json`, `package-lock.json`. *Do:* `npm install zod@^4.1.0 ai@^6.0.0 @openrouter/ai-sdk-provider@^1.2.0 undici@^7.0.0` and `npm install -D @types/node@^22.0.0 @types/react@^19.0.0 @types/react-dom@^19.0.0`. Keep `typescript@6.0.3`. The React 19 type packages match F04's React 19 upgrade; until F04 lands, `skipLibCheck` keeps the React 18 runtime building. Commit the lockfile with the exact resolved versions. If `@openrouter/ai-sdk-provider@^1.2.0` does not declare a peer range that includes `ai@6`, install the newest release whose peer range does, and record the version in the PR. *Verify:* `node -e "import('zod').then(m=>console.log(typeof m.z.looseObject))"` → `function`; `node -e "import('ai').then(m=>console.log(typeof m.generateText))"` → `function`.
   - [x] **P1.T1.S2** Create `tsconfig.json`. *Files:* `tsconfig.json` (new); `jsconfig.json` unchanged. *Do:* `{"compilerOptions":{"target":"ES2022","lib":["dom","dom.iterable","esnext"],"allowJs":true,"checkJs":false,"skipLibCheck":true,"strict":true,"noEmit":true,"esModuleInterop":true,"module":"esnext","moduleResolution":"bundler","resolveJsonModule":true,"isolatedModules":true,"jsx":"preserve","incremental":true,"allowImportingTsExtensions":true,"erasableSyntaxOnly":true,"verbatimModuleSyntax":false,"plugins":[{"name":"next"}],"paths":{"@/*":["./src/*"]}},"include":["next-env.d.ts","src/**/*.ts","src/**/*.tsx",".next/types/**/*.ts"],"exclude":["node_modules","worker","scripts"]}`. Run `npm run build` once and commit the `next-env.d.ts` it generates, plus any edits Next makes to `tsconfig.json`. *Verify:* `npm run build` → exit 0; `git diff --stat` shows only `tsconfig.json`, `next-env.d.ts`, `package*.json`.
-  - [x] **P1.T1.S3** Add scripts. *Files:* `package.json`. *Do:* set `"test"` and `"test:scoring"` to `node --import ./src/lib/liveWriteGuardAuto.mjs --test-concurrency=4 --test "src/**/*.test.mjs" "src/**/*.test.ts"`; add `"typecheck": "tsc --noEmit -p tsconfig.json"`. *Verify:* `npm test` → same pass count as before plus 0 failures; `npm run typecheck` → exit 0.
-  - [x] **P1.T1.S4** Extend the coverage guard. *Files:* `src/lib/testCoverageGuard.test.mjs`. *Do:* `testFilesOnDisk` collects names ending `.test.mjs` **or** `.test.ts`; update the comment and failure message. *Verify:* create a temporary `src/lib/zz.test.ts` with `import test from "node:test"; test("x",()=>{});`, run `node --test src/lib/testCoverageGuard.test.mjs` → pass; temporarily remove `"src/**/*.test.ts"` from the script → guard fails naming `src/lib/zz.test.ts`; restore both and delete the temp file.
-  - [x] **P1.T1.S5** CI. *Files:* `.github/workflows/ci.yml`. *Do:* in job `test`, add a step `typecheck` running `npm run typecheck` before `unit tests`. *Verify:* `node --test src/lib/testCoverageGuard.test.mjs` still passes (it asserts that CI runs `npm run test:scoring`).
-  - [x] **P1.T1.S6** TS setup guard test. *Files:* `src/lib/platform/tsSetup.test.mjs`. *Do:* assert `tsconfig.json` has `allowJs`, `strict`, `noEmit`, `erasableSyntaxOnly`, `allowImportingTsExtensions` true and `paths["@/*"]` equal to `["./src/*"]`; assert `jsconfig.json` still exists; run `node --input-type=module -e` importing `src/lib/http/errors.ts` to prove Node runs `.ts` directly. *Verify:* `node --test src/lib/platform/tsSetup.test.mjs` → pass.
+  - [x] **P1.T1.S3** Add scripts. *Files:* `package.json`. *Do:* set `"test"` and `"test:scoring"` to `node --import ./src/server/liveWriteGuardAuto.mjs --test-concurrency=4 --test "src/**/*.test.mjs" "src/**/*.test.ts"`; add `"typecheck": "tsc --noEmit -p tsconfig.json"`. *Verify:* `npm test` → same pass count as before plus 0 failures; `npm run typecheck` → exit 0.
+  - [x] **P1.T1.S4** Extend the coverage guard. *Files:* `src/server/testCoverageGuard.test.mjs`. *Do:* `testFilesOnDisk` collects names ending `.test.mjs` **or** `.test.ts`; update the comment and failure message. *Verify:* create a temporary `src/server/zz.test.ts` with `import test from "node:test"; test("x",()=>{});`, run `node --test src/server/testCoverageGuard.test.mjs` → pass; temporarily remove `"src/**/*.test.ts"` from the script → guard fails naming `src/server/zz.test.ts`; restore both and delete the temp file.
+  - [x] **P1.T1.S5** CI. *Files:* `.github/workflows/ci.yml`. *Do:* in job `test`, add a step `typecheck` running `npm run typecheck` before `unit tests`. *Verify:* `node --test src/server/testCoverageGuard.test.mjs` still passes (it asserts that CI runs `npm run test:scoring`).
+  - [x] **P1.T1.S6** TS setup guard test. *Files:* `src/server/platform/tsSetup.test.mjs`. *Do:* assert `tsconfig.json` has `allowJs`, `strict`, `noEmit`, `erasableSyntaxOnly`, `allowImportingTsExtensions` true and `paths["@/*"]` equal to `["./src/*"]`; assert `jsconfig.json` still exists; run `node --input-type=module -e` importing `src/shared/http/errors.ts` to prove Node runs `.ts` directly. *Verify:* `node --test src/server/platform/tsSetup.test.mjs` → pass.
 - [x] **P1.T2 Licence notice**
-  - [x] **P1.T2.S1** *Files:* `THIRD_PARTY_NOTICES.md` (new). *Do:* sections "every-app/open-seo (MIT)" with the full text of `openseo:LICENSE` (MIT License / Copyright (c) 2026 Ben Senescu / permission paragraph / conditions paragraph / warranty paragraph, verbatim), the pinned commit `c5f8db19c7ca9e750836b6ed5c8a6491d4f967f4`, and a "Files containing ported portions" list (empty in this phase, then appended per PR). *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
-  - [x] **P1.T2.S2** *Files:* `src/lib/platform/thirdPartyNotices.test.mjs`. *Do:* assert the file contains the exact strings "Permission is hereby granted, free of charge" and "Copyright (c) 2026 Ben Senescu"; walk `src/` (no `.env*`, use `readdir`, skip `node_modules`) for files whose first 5 lines contain "Portions ported from every-app/open-seo@c5f8db1" and assert each path appears in the notices list. *Verify:* adding a dummy header to a temp file without listing it fails the test.
+  - [x] **P1.T2.S1** *Files:* `THIRD_PARTY_NOTICES.md` (new). *Do:* sections "every-app/open-seo (MIT)" with the full text of `openseo:LICENSE` (MIT License / Copyright (c) 2026 Ben Senescu / permission paragraph / conditions paragraph / warranty paragraph, verbatim), the pinned commit `c5f8db19c7ca9e750836b6ed5c8a6491d4f967f4`, and a "Files containing ported portions" list (empty in this phase, then appended per PR). *Verify:* `node --test src/server/platform/thirdPartyNotices.test.mjs` → pass.
+  - [x] **P1.T2.S2** *Files:* `src/server/platform/thirdPartyNotices.test.mjs`. *Do:* assert the file contains the exact strings "Permission is hereby granted, free of charge" and "Copyright (c) 2026 Ben Senescu"; walk `src/` (no `.env*`, use `readdir`, skip `node_modules`) for files whose first 5 lines contain "Portions ported from every-app/open-seo@c5f8db1" and assert each path appears in the notices list. *Verify:* adding a dummy header to a temp file without listing it fails the test.
 - [x] **P1.T3 Errors and workspace auth**
-  - [x] **P1.T3.S1** *Files:* `src/lib/http/errors.ts`. *Do:* implement §6.2 exactly (`SpendRefused` mapping via `instanceof` on a class imported from `../spend/errors.ts`, created in this phase with only the class definitions). *Verify:* `node --test src/lib/http/errors.test.ts` → pass.
-  - [x] **P1.T3.S2** *Files:* `src/lib/http/errors.test.ts`. *Do:* cases: AppError with recovery and details; ZodError → 400 with `issues[].path` joined by "."; each SpendRefused reason → status/code/copy in §6.2; `SyntaxError` → 400 `invalid_json`; plain `Error("secret-ish")` → 500 body not containing `secret-ish`; every response has `cache-control: no-store`. *Verify:* covered by S1.
-  - [x] **P1.T3.S3** *Files:* `src/lib/workspace/requireWorkspace.ts`, `src/lib/workspace/requireWorkspace.test.ts`. *Do:* implement §6.2; tests inject `deps` and cover each table row plus success (`brandKey` from opts, from query, defaulting to first membership; `role`). *Verify:* `node --test src/lib/workspace/requireWorkspace.test.ts` → 9 cases pass (F01-AC-05).
+  - [x] **P1.T3.S1** *Files:* `src/shared/http/errors.ts`. *Do:* implement §6.2 exactly (`SpendRefused` mapping via `instanceof` on a class imported from `../spend/errors.ts`, created in this phase with only the class definitions). *Verify:* `node --test src/shared/http/errors.test.ts` → pass.
+  - [x] **P1.T3.S2** *Files:* `src/shared/http/errors.test.ts`. *Do:* cases: AppError with recovery and details; ZodError → 400 with `issues[].path` joined by "."; each SpendRefused reason → status/code/copy in §6.2; `SyntaxError` → 400 `invalid_json`; plain `Error("secret-ish")` → 500 body not containing `secret-ish`; every response has `cache-control: no-store`. *Verify:* covered by S1.
+  - [x] **P1.T3.S3** *Files:* `src/server/workspace/requireWorkspace.ts`, `src/server/workspace/requireWorkspace.test.ts`. *Do:* implement §6.2; tests inject `deps` and cover each table row plus success (`brandKey` from opts, from query, defaulting to first membership; `role`). *Verify:* `node --test src/server/workspace/requireWorkspace.test.ts` → 9 cases pass (F01-AC-05).
 - [x] **P1.T4 Route contract harness**
-  - [x] **P1.T4.S1** *Files:* `src/lib/http/schemaContract.ts` (licence header), `src/lib/http/routeContract.ts`. *Do:* port `closedOutputPaths` (`output-schema-contract.test.ts:16-65`) unchanged in logic; `defineRouteContract` returns its argument after validating `id` is unique per process. *Verify:* S2.
-  - [x] **P1.T4.S2** *Files:* `src/lib/http/routeContract.test.ts`. *Do:* (a) port the two walker cases from `output-schema-contract.test.ts:104-139` verbatim; (b) `globSync("src/lib/**/*.contract.ts")`, dynamic-import each, collect `contracts`, and assert the §6.2 rules; (c) a fixture contract in `src/lib/http/__fixtures__/closed.contract.fixture.ts` (not matching the glob) proving the test catches `z.object` responses. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass (F01-AC-31).
+  - [x] **P1.T4.S1** *Files:* `src/shared/http/schemaContract.ts` (licence header), `src/shared/http/routeContract.ts`. *Do:* port `closedOutputPaths` (`output-schema-contract.test.ts:16-65`) unchanged in logic; `defineRouteContract` returns its argument after validating `id` is unique per process. *Verify:* S2.
+  - [x] **P1.T4.S2** *Files:* `src/shared/http/routeContract.test.ts`. *Do:* (a) port the two walker cases from `output-schema-contract.test.ts:104-139` verbatim; (b) `globSync("src/server/**, src/shared/**/*.contract.ts")`, dynamic-import each, collect `contracts`, and assert the §6.2 rules; (c) a fixture contract in `src/shared/http/__fixtures__/closed.contract.fixture.ts` (not matching the glob) proving the test catches `z.object` responses. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass (F01-AC-31).
 
 **Checkpoint:** `npm test`, `npm run typecheck`, `npm run build` all exit 0; test count ≥ previous count + new tests; ACs F01-AC-01..05, F01-AC-31 covered.
 
@@ -1416,21 +1416,21 @@ None. F01 ships no customer or operator screens. F03 builds the Usage page and t
 
 - [x] **P2.T1 Migration 041**
   - [x] **P2.T1.S1** *Files:* `supabase/migrations/041_f01_spend.sql`. *Do:* §6.1 verbatim. *Verify:* on a loopback `perceev_qa` database: `psql -X -v ON_ERROR_STOP=1 -f tests/supabase-bootstrap.sql`, then every migration in order, twice (idempotency) → exit 0 both times.
-  - [x] **P2.T1.S2** *Files:* `scripts/setup-supabase.mjs`. *Do:* add the `041_f01_spend.sql` required-objects entry from §6.1. *Verify:* `node --test src/lib/migrationsLedger.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+  - [x] **P2.T1.S2** *Files:* `scripts/setup-supabase.mjs`. *Do:* add the `041_f01_spend.sql` required-objects entry from §6.1. *Verify:* `node --test src/server/migrationsLedger.test.mjs src/server/migrationsRunner.test.mjs` → pass.
   - [x] **P2.T1.S3** *Files:* `tests/customer-uat.sql`. *Do:* add a block inserting one `spend_ledger` and one `workspace_spend_limits` row per workspace (as postgres), then as user `…0001` assert `count(*) = 1` in each table, and as `…0002` likewise. *Verify:* the CI `customer-database` step passes locally with the same commands.
   - [x] **P2.T1.S4** Migration paperwork. *Files:* `README.md` (migration table), `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Do:* add a row for `041_f01_spend.sql` in each (purpose, objects, apply order, not yet applied to production). *Verify:* `npm test` → migration-ledger guard tests pass.
 - [x] **P2.T2 Spend modules**
-  - [x] **P2.T2.S1** *Files:* `src/shared/spend-features.ts`, `src/lib/spend/features.ts` (re-exports), `src/lib/spend/errors.ts` (completed), `src/lib/spend/money.ts`, `src/lib/spend/store.ts`, `src/lib/spend/memoryStore.ts`, `src/lib/spend/index.ts`. *Do:* §6.2. *Verify:* `node --test "src/lib/spend/*.test.ts"` → pass.
-  - [x] **P2.T2.S2** *Files:* `src/lib/spend/spend.test.ts`. *Do:* memory-store cases for reserve validation (estimate ≤ 0, > 1000, ttl bounds), refusal mapping, idempotent reserve, duplicate after settle → 409, default caps from env (`"5"` → 5, `""` → null, `"abc"` → 500 `spend_config_invalid`), DB error → 503 `spend_unavailable`. *Verify:* pass.
-  - [x] **P2.T2.S3** *Files:* `src/lib/spend/metered.test.ts`. *Do:* table-driven over the five outcome rows in §6.2; assert the store calls and the thrown value; undershoot logs exactly one `console.error` whose first argument is `"[spend] estimate undershoot"` and whose second contains only `feature, provider, endpoint, estimateUsd, actualUsd`; `keepAlive` injected and asserted called once; caller rejection after `keepAlive` still settles. *Verify:* pass (F01-AC-09, F01-AC-10).
+  - [x] **P2.T2.S1** *Files:* `src/shared/spend-features.ts`, `src/shared/spend/features.ts` (re-exports), `src/shared/spend/errors.ts` (completed), `src/shared/spend/money.ts`, `src/shared/spend/store.ts`, `src/shared/spend/memoryStore.ts`, `src/shared/spend/index.ts`. *Do:* §6.2. *Verify:* `node --test "src/shared/spend/*.test.ts"` → pass.
+  - [x] **P2.T2.S2** *Files:* `src/shared/spend/spend.test.ts`. *Do:* memory-store cases for reserve validation (estimate ≤ 0, > 1000, ttl bounds), refusal mapping, idempotent reserve, duplicate after settle → 409, default caps from env (`"5"` → 5, `""` → null, `"abc"` → 500 `spend_config_invalid`), DB error → 503 `spend_unavailable`. *Verify:* pass.
+  - [x] **P2.T2.S3** *Files:* `src/shared/spend/metered.test.ts`. *Do:* table-driven over the five outcome rows in §6.2; assert the store calls and the thrown value; undershoot logs exactly one `console.error` whose first argument is `"[spend] estimate undershoot"` and whose second contains only `feature, provider, endpoint, estimateUsd, actualUsd`; `keepAlive` injected and asserted called once; caller rejection after `keepAlive` still settles. *Verify:* pass (F01-AC-09, F01-AC-10).
 - [x] **P2.T3 Feature flags**
-  - [x] **P2.T3.S1** *Files:* `src/lib/features/names.ts`, `src/lib/features/flags.ts`, `src/lib/features/flags.test.ts`. *Do:* §6.2; tests: production + unset → false; dev + unset → true; `on`/`off`/`allowlist` with and without brand; linked spend feature disabled → false; read error → false; 30 s cache honoured with injected `now`. *Verify:* `node --test src/lib/features/flags.test.ts` → pass (F01-AC-12).
+  - [x] **P2.T3.S1** *Files:* `src/server/features/names.ts`, `src/server/features/flags.ts`, `src/server/features/flags.test.ts`. *Do:* §6.2; tests: production + unset → false; dev + unset → true; `on`/`off`/`allowlist` with and without brand; linked spend feature disabled → false; read error → false; 30 s cache honoured with injected `now`. *Verify:* `node --test src/server/features/flags.test.ts` → pass (F01-AC-12).
 - [x] **P2.T4 DB harness (spend)**
   - [x] **P2.T4.S1** *Files:* `scripts/qa/check-f01-db.mjs` (new, same loopback guard as `check-repair-workflows.mjs:13-18`). *Do:* groups `spend-defaults` (no enabled control rows), `spend-refusals` (each reason, no hold created), `spend-concurrency` (20 parallel `reserve_spend(1)` against daily cap 10 on separate pool clients → exactly 10 granted, `sum(estimate_usd) = 10`), `spend-idempotency`, `spend-settle` (multi-row settle; unknown row counted at estimate share; undershoot flag), `spend-expiry` (`expires_at` back-dated → `expire_spend_holds` writes one `reservation` row), `spend-rls` (customer reads own rows only). Each test uses fresh `qa-<uuid>.example` brands and deletes them at the end. *Verify:* `PGHOST=localhost PGDATABASE=perceev_qa node scripts/qa/check-f01-db.mjs --only spend` → `PASS` per group, exit 0 (F01-AC-06..08, F01-AC-11, F01-AC-12).
   - [x] **P2.T4.S2** *Files:* `.github/workflows/ci.yml`. *Do:* add `node scripts/qa/check-f01-db.mjs` after `check-repair-workflows.mjs` in the `customer-database` job. *Verify:* CI green on the PR.
 - [x] **P2.T5 Operator spend routes**
-  - [x] **P2.T5.S1** *Files:* `src/app/api/ops/spend/controls/route.ts`, `src/app/api/ops/spend/controls/[feature]/route.ts`, `src/app/api/ops/spend/limits/route.ts`, `src/app/api/ops/spend/limits/[brandKey]/route.ts`, `src/lib/spend/spend.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass; `node --test src/lib/operatorPerimeter.middleware.test.mjs` → pass (paths are perimeter-gated, not public).
-  - [x] **P2.T5.S2** *Files:* `src/lib/spend/opsRoutes.route.test.mjs` (hooks: `src/lib/customerRoutes.test.hooks.mjs` pattern with a fake admin). *Do:* PUT with `confirm` mismatch → 400; unknown feature → 404; valid PUT → upsert called with exact columns. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/spend/opsRoutes.route.test.mjs` → pass.
+  - [x] **P2.T5.S1** *Files:* `src/app/api/ops/spend/controls/route.ts`, `src/app/api/ops/spend/controls/[feature]/route.ts`, `src/app/api/ops/spend/limits/route.ts`, `src/app/api/ops/spend/limits/[brandKey]/route.ts`, `src/shared/spend/spend.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass; `node --test src/server/operatorPerimeter.middleware.test.mjs` → pass (paths are perimeter-gated, not public).
+  - [x] **P2.T5.S2** *Files:* `src/shared/spend/opsRoutes.route.test.mjs` (hooks: `src/server/customerRoutes.test.hooks.mjs` pattern with a fake admin). *Do:* PUT with `confirm` mismatch → 400; unknown feature → 404; valid PUT → upsert called with exact columns. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/shared/spend/opsRoutes.route.test.mjs` → pass.
 - [x] **P2.T6 Env names**
   - [x] **P2.T6.S1** *Files:* `.env.example`. *Do:* add commented names with one-line explanations: `# SPEND_DEFAULT_DAILY_CAP_USD=`, `# SPEND_DEFAULT_MONTHLY_CAP_USD=`. *Verify:* `npm run check:secrets` → pass.
 
@@ -1445,13 +1445,13 @@ None. F01 ships no customer or operator screens. F03 builds the Usage page and t
   - [x] **P3.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`. *Do:* required objects for 040 and 043; RLS block: a job per workspace plus one system job; user `…0001` sees exactly 1 job, user `…0002` sees exactly 1. *Verify:* CI database step commands locally → pass.
   - [x] **P3.T1.S3** Migration paperwork. *Files:* `README.md` (migration table), `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Do:* rows for `040_f01_jobs.sql` and `043_f01_jobs_cron.sql`; the 043 row notes the Vault secrets the owner must create before the cron schedule fires. *Verify:* `npm test` → migration-ledger guard tests pass.
 - [x] **P3.T2 Runner modules**
-  - [x] **P3.T2.S1** *Files:* `src/lib/jobs/types.ts`, `registry.ts`, `stepConfigs.ts` (licence header), `store.ts`, `memoryStore.ts`, `enqueue.ts`, `runner.ts`, `status.ts`, `cancel.ts`, `periodic.ts`, `watchdog.ts` (licence header), `tick.ts`, `maintenance.ts`, `kinds.ts`, `index.ts` (re-exports §5 names: `defineJob`, `enqueueJob`, `enqueueSystemJob`, `getJobStatus`, `cancelJob`, `definePeriodic`, `jobStepKey`, `STEP` presets). *Do:* §6.2 and §6.3. *Verify:* `node --test "src/lib/jobs/*.test.ts"` → pass.
-  - [x] **P3.T2.S2** *Files:* `src/lib/jobs/runner.test.ts`. *Do:* with `memoryStore` and an injected clock: memoise; billed+retries rejected; billed interrupted on replay; retry with backoff then exhausted; sleep yields and resumes; budget yield + self-continue fired once; output too large / not JSON; cancellation before next step; `ctx.cancelRequested()` false then true after `cancelJob` (cache expired via injected clock); `StepFailedError` caught by handler → `partial`; unknown kind; invalid payload; lost lease stops without writes. *Verify:* pass (F01-AC-13..19, F01-AC-22).
-  - [x] **P3.T2.S3** *Files:* `src/lib/jobs/status.test.ts`, `src/lib/jobs/periodic.test.ts`, `src/lib/jobs/watchdog.test.ts`. *Do:* poll rules table in §6.3.5; periodic advance-before-run with a throwing `run` (next slot still advanced; `last_error` set); watchdog continues after one store call throws and rethrows after. *Verify:* pass (F01-AC-21, F01-AC-23, F01-AC-26).
+  - [x] **P3.T2.S1** *Files:* `src/server/jobs/types.ts`, `registry.ts`, `stepConfigs.ts` (licence header), `store.ts`, `memoryStore.ts`, `enqueue.ts`, `runner.ts`, `status.ts`, `cancel.ts`, `periodic.ts`, `watchdog.ts` (licence header), `tick.ts`, `maintenance.ts`, `kinds.ts`, `index.ts` (re-exports §5 names: `defineJob`, `enqueueJob`, `enqueueSystemJob`, `getJobStatus`, `cancelJob`, `definePeriodic`, `jobStepKey`, `STEP` presets). *Do:* §6.2 and §6.3. *Verify:* `node --test "src/server/jobs/*.test.ts"` → pass.
+  - [x] **P3.T2.S2** *Files:* `src/server/jobs/runner.test.ts`. *Do:* with `memoryStore` and an injected clock: memoise; billed+retries rejected; billed interrupted on replay; retry with backoff then exhausted; sleep yields and resumes; budget yield + self-continue fired once; output too large / not JSON; cancellation before next step; `ctx.cancelRequested()` false then true after `cancelJob` (cache expired via injected clock); `StepFailedError` caught by handler → `partial`; unknown kind; invalid payload; lost lease stops without writes. *Verify:* pass (F01-AC-13..19, F01-AC-22).
+  - [x] **P3.T2.S3** *Files:* `src/server/jobs/status.test.ts`, `src/server/jobs/periodic.test.ts`, `src/server/jobs/watchdog.test.ts`. *Do:* poll rules table in §6.3.5; periodic advance-before-run with a throwing `run` (next slot still advanced; `last_error` set); watchdog continues after one store call throws and rethrows after. *Verify:* pass (F01-AC-21, F01-AC-23, F01-AC-26).
 - [x] **P3.T3 Routes**
-  - [x] **P3.T3.S1** *Files:* `src/app/api/jobs/tick/route.ts`, `src/lib/operatorPerimeter.js` (add `/^\/api\/jobs\/tick\/?$/` to `SELF_GATED` with a comment "F01 — cronAuth gate, pg_cron every minute"). *Verify:* `node --test src/lib/operatorPerimeter.test.mjs src/lib/operatorPerimeter.middleware.test.mjs` → pass.
-  - [x] **P3.T3.S2** *Files:* `src/app/api/customer/jobs/[jobId]/route.ts`, `src/app/api/customer/jobs/[jobId]/cancel/route.ts`, `src/app/api/ops/jobs/route.ts`, `src/lib/jobs/jobs.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [x] **P3.T3.S3** *Files:* `src/lib/jobs/tick.route.test.mjs` (hooks: `src/lib/cronAuth.route.hooks.mjs`), `src/lib/jobs/jobsRoutes.route.test.mjs` (hooks: `customerRoutes.test.hooks.mjs`). *Do:* tick 401 / disabled / 202 and `keepAlive` called; status 404 for other workspace and system job, 200 shape for own; cancel idempotent. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/jobs/*.route.test.mjs` → pass (F01-AC-24, F01-AC-25).
+  - [x] **P3.T3.S1** *Files:* `src/app/api/jobs/tick/route.ts`, `src/server/operatorPerimeter.js` (add `/^\/api\/jobs\/tick\/?$/` to `SELF_GATED` with a comment "F01 — cronAuth gate, pg_cron every minute"). *Verify:* `node --test src/server/operatorPerimeter.test.mjs src/server/operatorPerimeter.middleware.test.mjs` → pass.
+  - [x] **P3.T3.S2** *Files:* `src/app/api/customer/jobs/[jobId]/route.ts`, `src/app/api/customer/jobs/[jobId]/cancel/route.ts`, `src/app/api/ops/jobs/route.ts`, `src/server/jobs/jobs.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass.
+  - [x] **P3.T3.S3** *Files:* `src/server/jobs/tick.route.test.mjs` (hooks: `src/server/cronAuth.route.hooks.mjs`), `src/server/jobs/jobsRoutes.route.test.mjs` (hooks: `customerRoutes.test.hooks.mjs`). *Do:* tick 401 / disabled / 202 and `keepAlive` called; status 404 for other workspace and system job, 200 shape for own; cancel idempotent. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/server/jobs/*.route.test.mjs` → pass (F01-AC-24, F01-AC-25).
 - [x] **P3.T4 DB harness (jobs)**
   - [x] **P3.T4.S1** *Files:* `scripts/qa/check-f01-db.mjs`. *Do:* groups `jobs-enqueue` (dedupe, single-active conflict returns blocker), `jobs-leases` (two concurrent `claim_due_jobs` with limit 5 over 6 due jobs → disjoint sets; fenced `job_step_complete` returns false after back-dating `lease_until`), `jobs-steps` (billed `running` row → `billed_step_interrupted`; sleep/wake), `jobs-watchdog`, `jobs-cancel`, `jobs-periodic` (two concurrent `claim_due_periodic` → one true), `jobs-cron` (`jobs_tick_http()` returns NULL with a NOTICE when vault is absent; skipped if `vault` schema missing). *Verify:* `node scripts/qa/check-f01-db.mjs --only jobs` → PASS per group (F01-AC-13, F01-AC-15, F01-AC-17, F01-AC-20..22, F01-AC-26, F01-AC-27).
 - [x] **P3.T5 Env names**
@@ -1466,18 +1466,18 @@ None. F01 ships no customer or operator screens. F03 builds the Usage page and t
 - [x] **P4.T1 Cache**
   - [x] **P4.T1.S1** *Files:* `supabase/migrations/042_f01_provider_cache.sql`, `scripts/setup-supabase.mjs`. *Do:* §6.1. *Verify:* migrations apply twice → exit 0.
   - [x] **P4.T1.S1a** Migration paperwork. *Files:* `README.md` (migration table), `docs/OPERATOR_LEDGER.md` § C, `docs/PROD_MIGRATIONS.md`. *Do:* row for `042_f01_provider_cache.sql`. *Verify:* `npm test` → migration-ledger guard tests pass.
-  - [x] **P4.T1.S2** *Files:* `src/lib/cache/providerCache.ts` (licence header), `src/lib/cache/store.ts`, `src/lib/cache/memoryStore.ts`, `src/lib/cache/providerCache.test.ts`. *Do:* §6.2; tests: key stability across key order (`{b:1,a:2}` vs `{a:2,b:1}`), different brands → different keys, global ignores brand, miss→store, hit, expired→refetch, schema-invalid→refetch, fetcher-invalid→throw and nothing stored, > 256 KB → storage path, single-flight (two concurrent misses call fetcher once), read error → miss. *Verify:* `node --test src/lib/cache/providerCache.test.ts` → pass (F01-AC-28).
-  - [x] **P4.T1.S2a** *Files:* `src/lib/jobs/maintenance.ts`, `src/lib/jobs/maintenance.test.ts`. *Do:* register the `cache.retention` kind and its hourly periodic (hour-scoped dedupe key) in `maintenance.ts` (§6.3.6); `prune_provider_cache(now − 7 days, 1000)` via `step.do`, then delete the returned Storage paths from `provider-cache` in batches of 100, step names `prune-1`…; unit-test the periodic. *Verify:* `node --test src/lib/jobs/maintenance.test.ts` → pass.
+  - [x] **P4.T1.S2** *Files:* `src/server/cache/providerCache.ts` (licence header), `src/server/cache/store.ts`, `src/server/cache/memoryStore.ts`, `src/server/cache/providerCache.test.ts`. *Do:* §6.2; tests: key stability across key order (`{b:1,a:2}` vs `{a:2,b:1}`), different brands → different keys, global ignores brand, miss→store, hit, expired→refetch, schema-invalid→refetch, fetcher-invalid→throw and nothing stored, > 256 KB → storage path, single-flight (two concurrent misses call fetcher once), read error → miss. *Verify:* `node --test src/server/cache/providerCache.test.ts` → pass (F01-AC-28).
+  - [x] **P4.T1.S2a** *Files:* `src/server/jobs/maintenance.ts`, `src/server/jobs/maintenance.test.ts`. *Do:* register the `cache.retention` kind and its hourly periodic (hour-scoped dedupe key) in `maintenance.ts` (§6.3.6); `prune_provider_cache(now − 7 days, 1000)` via `step.do`, then delete the returned Storage paths from `provider-cache` in batches of 100, step names `prune-1`…; unit-test the periodic. *Verify:* `node --test src/server/jobs/maintenance.test.ts` → pass.
   - [x] **P4.T1.S3** *Files:* `scripts/qa/check-f01-db.mjs`. *Do:* group `cache` (check constraints: both bodies → error; workspace without brand → error; prune returns storage paths). *Verify:* `--only cache` → PASS.
 - [x] **P4.T2 safeFetch**
-  - [x] **P4.T2.S1** *Files:* `src/lib/http/hostPolicy.ts` (licence header), `src/lib/http/safeFetch.ts`. *Do:* §6.2. *Verify:* S2.
-  - [x] **P4.T2.S2** *Files:* `src/lib/http/safeFetch.test.ts`. *Do:* ported OpenSEO cases; every `BLOCKED_HOSTS` and suffix; redirect to `http://169.254.169.254/` refused at the hop; 6 redirects refused; `maxRedirects: 0` against a local 301 → returns status 301 with `location` header and makes no second request; body over `maxBytes` → 422 `response_too_large`; same body with `truncate: true` → `truncated: true` and `body.length === maxBytes`; pinning: inject `lookup` that returns `93.184.216.34` for the vetting call and `127.0.0.1` for any later call, run a local `node:http` server bound to 127.0.0.1, assert the connection target used is the vetted address (the request does not reach the local server). *Verify:* `node --test src/lib/http/safeFetch.test.ts` → pass (F01-AC-30); `node --test src/lib/ssrfGuard.test.mjs src/lib/crawlabilitySsrf.route.test.mjs` → still pass.
+  - [x] **P4.T2.S1** *Files:* `src/shared/http/hostPolicy.ts` (licence header), `src/shared/http/safeFetch.ts`. *Do:* §6.2. *Verify:* S2.
+  - [x] **P4.T2.S2** *Files:* `src/shared/http/safeFetch.test.ts`. *Do:* ported OpenSEO cases; every `BLOCKED_HOSTS` and suffix; redirect to `http://169.254.169.254/` refused at the hop; 6 redirects refused; `maxRedirects: 0` against a local 301 → returns status 301 with `location` header and makes no second request; body over `maxBytes` → 422 `response_too_large`; same body with `truncate: true` → `truncated: true` and `body.length === maxBytes`; pinning: inject `lookup` that returns `93.184.216.34` for the vetting call and `127.0.0.1` for any later call, run a local `node:http` server bound to 127.0.0.1, assert the connection target used is the vetted address (the request does not reach the local server). *Verify:* `node --test src/shared/http/safeFetch.test.ts` → pass (F01-AC-30); `node --test src/server/ssrfGuard.test.mjs src/server/crawlabilitySsrf.route.test.mjs` → still pass.
 - [x] **P4.T3 LLM helper**
-  - [x] **P4.T3.S1** *Files:* `src/lib/llm/openrouter.ts` (licence header), `src/lib/llm/index.ts`. *Do:* §6.2. *Verify:* S2.
-  - [x] **P4.T3.S2** *Files:* `src/lib/llm/llm.test.ts`, `tests/fixtures/f01/openrouter-generate-usage.json`, `tests/fixtures/f01/openrouter-no-usage.json`. *Do:* inject `generateText` stub returning fixture metadata; assert `maxRetries: 0`, `maxOutputTokens: 4000`, the `usage.include` model setting, settle with 0.000042 `provider_reported`; no-usage on OpenRouter → `null` settle (reservation); non-OpenRouter gateway with token counts → `price_table`; schema failure → settled then `llm_bad_output`; abort → ambiguous; 401 → released; missing key → 503; spy on `console.*` and assert no call contains the prompt or answer strings. *Verify:* `node --test src/lib/llm/llm.test.ts` → pass (F01-AC-29).
+  - [x] **P4.T3.S1** *Files:* `src/server/llm/openrouter.ts` (licence header), `src/server/llm/index.ts`. *Do:* §6.2. *Verify:* S2.
+  - [x] **P4.T3.S2** *Files:* `src/server/llm/llm.test.ts`, `tests/fixtures/f01/openrouter-generate-usage.json`, `tests/fixtures/f01/openrouter-no-usage.json`. *Do:* inject `generateText` stub returning fixture metadata; assert `maxRetries: 0`, `maxOutputTokens: 4000`, the `usage.include` model setting, settle with 0.000042 `provider_reported`; no-usage on OpenRouter → `null` settle (reservation); non-OpenRouter gateway with token counts → `price_table`; schema failure → settled then `llm_bad_output`; abort → ambiguous; 401 → released; missing key → 503; spy on `console.*` and assert no call contains the prompt or answer strings. *Verify:* `node --test src/server/llm/llm.test.ts` → pass (F01-AC-29).
   - [x] **P4.T3.S3** *Files:* `scripts/qa/check-f01-live.mjs`, `.env.example` (`# LLM_HELPER_MODEL=`, `# LLM_HELPER_UNPRICED_ESTIMATE_USD=0.05`). *Do:* §6.4; refuses without `--max-spend-usd 0.01 --brand <key>`; never run in CI. *Verify:* `node scripts/qa/check-f01-live.mjs` (no flags) → exits 2 with "refusing: --max-spend-usd 0.01 and --brand are required".
 - [x] **P4.T4 Notices**
-  - [x] **P4.T4.S1** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* list every file with a licence header added in phases 1–4. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass (F01-AC-03).
+  - [x] **P4.T4.S1** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* list every file with a licence header added in phases 1–4. *Verify:* `node --test src/server/platform/thirdPartyNotices.test.mjs` → pass (F01-AC-03).
 
 **Checkpoint:** full suite, typecheck, build, `check-f01-db.mjs` (all groups) pass; F01-AC-28..30, F01-AC-03 covered; `features/README.md` F01 status set to **Merged** in the last PR.
 
@@ -1485,23 +1485,23 @@ None. F01 ships no customer or operator screens. F03 builds the Usage page and t
 
 | Test file | Cases | ACs |
 |---|---|---|
-| `src/lib/platform/tsSetup.test.mjs` | tsconfig flags; jsconfig kept; Node imports a `.ts` module | 01 |
-| `src/lib/testCoverageGuard.test.mjs` | `.test.ts` collected; npm test == test:scoring; CI runs suite | 02 |
-| `src/lib/platform/thirdPartyNotices.test.mjs` | MIT text present; every ported file listed | 03 |
-| `src/lib/http/errors.test.ts` | mapping table, no-store, no leak | 04 |
-| `src/lib/workspace/requireWorkspace.test.ts` | 7 error rows + 2 success | 05 |
-| `src/lib/spend/spend.test.ts` | validation, refusals, idempotency, env defaults, fail-closed | 06, 08 |
-| `src/lib/spend/metered.test.ts` | five outcomes, undershoot log, keepAlive settle | 09, 10 |
-| `src/lib/features/flags.test.ts` | env modes, prod default, linked spend features, cache | 12 |
-| `src/lib/jobs/runner.test.ts` | step semantics (§6.2 runner list) | 13–19, 22 |
-| `src/lib/jobs/status.test.ts` | `pollAfterSeconds` rules | 23 |
-| `src/lib/jobs/periodic.test.ts`, `watchdog.test.ts` | advance-first, error isolation | 21, 26 |
-| `src/lib/jobs/tick.route.test.mjs` | 401, disabled, 202 + keepAlive | 24 |
-| `src/lib/jobs/jobsRoutes.route.test.mjs` | tenant 404, shape, cancel | 25 |
-| `src/lib/cache/providerCache.test.ts` | keys, TTL, schema, storage, single-flight | 28 |
-| `src/lib/llm/llm.test.ts` | cost sources, retries 0, no body logging | 29 |
-| `src/lib/http/safeFetch.test.ts` | host policy, redirects, size, pinning | 30 |
-| `src/lib/http/routeContract.test.ts` | walker, discovered contracts | 31 |
+| `src/server/platform/tsSetup.test.mjs` | tsconfig flags; jsconfig kept; Node imports a `.ts` module | 01 |
+| `src/server/testCoverageGuard.test.mjs` | `.test.ts` collected; npm test == test:scoring; CI runs suite | 02 |
+| `src/server/platform/thirdPartyNotices.test.mjs` | MIT text present; every ported file listed | 03 |
+| `src/shared/http/errors.test.ts` | mapping table, no-store, no leak | 04 |
+| `src/server/workspace/requireWorkspace.test.ts` | 7 error rows + 2 success | 05 |
+| `src/shared/spend/spend.test.ts` | validation, refusals, idempotency, env defaults, fail-closed | 06, 08 |
+| `src/shared/spend/metered.test.ts` | five outcomes, undershoot log, keepAlive settle | 09, 10 |
+| `src/server/features/flags.test.ts` | env modes, prod default, linked spend features, cache | 12 |
+| `src/server/jobs/runner.test.ts` | step semantics (§6.2 runner list) | 13–19, 22 |
+| `src/server/jobs/status.test.ts` | `pollAfterSeconds` rules | 23 |
+| `src/server/jobs/periodic.test.ts`, `watchdog.test.ts` | advance-first, error isolation | 21, 26 |
+| `src/server/jobs/tick.route.test.mjs` | 401, disabled, 202 + keepAlive | 24 |
+| `src/server/jobs/jobsRoutes.route.test.mjs` | tenant 404, shape, cancel | 25 |
+| `src/server/cache/providerCache.test.ts` | keys, TTL, schema, storage, single-flight | 28 |
+| `src/server/llm/llm.test.ts` | cost sources, retries 0, no body logging | 29 |
+| `src/shared/http/safeFetch.test.ts` | host policy, redirects, size, pinning | 30 |
+| `src/shared/http/routeContract.test.ts` | walker, discovered contracts | 31 |
 | `scripts/qa/check-f01-db.mjs` | groups `spend-*`, `jobs-*`, `cache` | 06–08, 11–13, 15, 17, 20–22, 26–28 |
 | CI `customer-database` (existing + new steps) | migrations without pg_cron; P0 checks unchanged | 27, 32 |
 
@@ -1544,10 +1544,10 @@ Fixtures: `tests/fixtures/f01/openrouter-generate-usage.json` and `openrouter-no
 5. `reserveSpend`/`metered` inputs gain `ttlSeconds?: number` (default 1,800, max 86,340). `reserveSpend` also gains `subject?: { kind: string; id: string }` and returns `{ holdId, existing }`; `metered` refuses `existing: true` with `AppError 409 duplicate_paid_call` instead of re-running the paid call.
 6. New `settleSpendBatch(holdId, costs[])`.
 7. `AppError` constructor is `(status, code, message, { recovery?, details?, cause? })`. Error bodies may include `details`.
-8. New error classes in `src/lib/spend/errors.ts`: `ChargedCallError`, `UnbilledCallError`, `AmbiguousCallError`.
-9. `isFeatureEnabled` feature names are registered in `src/lib/features/names.ts` with their linked spend features.
-10. Import rule: modules under `src/lib/**` use relative imports with explicit extensions (no `@/`).
-11. Route contracts live in `src/lib/<feature>/*.contract.ts` and export `contracts`. Response schemas use `z.looseObject`; request schemas use `z.strictObject`.
+8. New error classes in `src/shared/spend/errors.ts`: `ChargedCallError`, `UnbilledCallError`, `AmbiguousCallError`.
+9. `isFeatureEnabled` feature names are registered in `src/server/features/names.ts` with their linked spend features.
+10. Import rule: modules under `src/server/**` and `src/shared/**` use relative imports with explicit extensions (no `@/`).
+11. Route contracts live in `src/server/<feature>/*.contract.ts` and export `contracts`. Response schemas use `z.looseObject`; request schemas use `z.strictObject`.
 
 ## 12. Definition of done
 

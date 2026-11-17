@@ -2,7 +2,7 @@
 
 > <!-- doc-status -->
 > **Status: LIVE.** Implemented in
-> [`src/lib/providers/dataforseo/`](../../src/lib/providers/dataforseo/);
+> [`src/shared/providers/dataforseo/`](../../src/shared/providers/dataforseo/);
 > decision record
 > [`docs/decisions/2026-11-10-dataforseo-answer-provider.md`](../decisions/2026-11-10-dataforseo-answer-provider.md).
 
@@ -71,9 +71,9 @@ engine adapters hand to `classifyProviderFailure`.
 
 Prices live in F03, not here: `src/shared/ai-visibility-pricing.ts:42-92`
 (one queued answer 0.0012, one live answer 0.004, LLM-responses table) and
-`src/lib/pricing/dataforseo.ts:14-29` (estimators are upper bounds; the
+`src/shared/pricing/dataforseo.ts:14-29` (estimators are upper bounds; the
 metering seam reserves the estimate and settles on the provider's reported
-`cost`). No price constant appears under `src/lib/providers/dataforseo/`
+`cost`). No price constant appears under `src/shared/providers/dataforseo/`
 (`noPrices.test.mjs`). A 30-question × 3-engine queued scan costs about
 USD 0.11 at these prices.
 

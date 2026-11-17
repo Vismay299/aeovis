@@ -1,5 +1,5 @@
-import { collectGrid } from "../../../../../../lib/local/grid.ts";
-import { gridIdParams, localBrandQuery } from "../../../../../../lib/local/local.contract.ts";
+import { collectGrid } from "../../../../../../server/local/grid.ts";
+import { gridIdParams, localBrandQuery } from "../../../../../../server/local/local.contract.ts";
 import {
   gate,
   jsonOk,
@@ -8,7 +8,7 @@ import {
   respond,
   type LocalRouteDeps,
   type RouteContext,
-} from "../../../../../../lib/local/routeKit.ts";
+} from "../../../../../../server/local/routeKit.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

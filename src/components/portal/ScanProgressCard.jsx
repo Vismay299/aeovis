@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { Radar, Play } from "lucide-react";
 import { usePortal } from "./PortalShell";
 import { PANEL_NOT_APPROVED, SCAN_STAGES } from "./useScanTracker";
-import { scanCompletionNotice } from "@/lib/scanCompletion";
+import { scanCompletionNotice } from "@/shared/scanCompletion";
 import { Banner, Badge, Button, ProgressBar, StageSteps, formatDuration } from "./ui";
 
 function useElapsed(since, running) {

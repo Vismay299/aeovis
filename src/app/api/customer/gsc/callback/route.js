@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { getCustomerContext } from "@/lib/supabase/customer";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { handleOAuthCallback } from "@/lib/gsc/oauthFlow";
-import { customerSessionBinding } from "@/lib/supabase/sessionBinding";
+import { getCustomerContext } from "@/shared/supabase/customer";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { handleOAuthCallback } from "@/server/gsc/oauthFlow";
+import { customerSessionBinding } from "@/shared/supabase/sessionBinding";
 
 export const dynamic = "force-dynamic";
 

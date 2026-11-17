@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useCallback, useSyncExternalStore } from "react";
-import { prefStorageKey, readPref, writePref } from "@/lib/query/localPrefs";
+import { prefStorageKey, readPref, writePref } from "@/shared/query/localPrefs";
 
 const PREF_CHANGE_EVENT = "perceev:pref-change";
 const memoryPrefs = new Map<string, unknown>();

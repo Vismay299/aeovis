@@ -32,10 +32,10 @@ import {
 } from "@/components/ui/tooltip";
 import { QueryState } from "@/components/app/QueryState";
 import { Skeleton } from "@/components/ui/skeleton";
-import { exportRows } from "@/lib/export/exportRows";
-import { downloadFile } from "@/lib/export/download";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { exportRows } from "@/shared/export/exportRows";
+import { downloadFile } from "@/shared/export/download";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 import { googleSerpUrl } from "@/shared/google-serp-url";
 import { formatLocationLabel, LOCATION_OPTIONS } from "@/shared/keyword-locations";
 import { csvChange, type ComparePeriod } from "@/shared/rank-tracking";

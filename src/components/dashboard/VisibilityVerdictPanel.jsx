@@ -1,6 +1,6 @@
 import { formatPercent, isFiniteNumber } from "@/components/perceev/charts/chartMath";
 import { SectionStrap } from "./SectionStrap";
-import { describeRosterState } from "@/lib/scoring/rosterContinuity";
+import { describeRosterState } from "@/shared/scoring/rosterContinuity";
 
 // Only 2 engines are configured today (aio, perplexity), but this map is
 // deliberately not the source of truth for which engines exist — it only

@@ -13,7 +13,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CardShell } from "@/components/app/CardShell";
 import { ConfirmDialog } from "@/components/app/ConfirmDialog";
 import { QueryError } from "@/components/app/QueryState";
-import { describeError } from "@/lib/query/errors";
+import { describeError } from "@/shared/query/errors";
 import { usePortal } from "@/components/portal/PortalShell";
 import { Ga4ConnectedState } from "./Ga4ConnectedState";
 import { Ga4EmptyState } from "./Ga4EmptyState";

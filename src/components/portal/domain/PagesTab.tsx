@@ -14,7 +14,7 @@ import {
 import { TablePagination } from "@/components/app/table/TablePagination";
 import { useExportRows } from "@/components/app/export/useExportRows";
 import { QueryError } from "@/components/app/QueryState";
-import type { ExportFormat } from "@/lib/export/exportRows";
+import type { ExportFormat } from "@/shared/export/exportRows";
 import {
   PAGE_FILTER_FIELDS,
   buildPagesSearchUpdate,

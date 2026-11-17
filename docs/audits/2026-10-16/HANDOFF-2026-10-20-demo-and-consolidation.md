@@ -23,7 +23,7 @@ Before working in the Drive copy, run `npm ci` (and `npm --prefix worker ci` for
 
 The reported problem was "scans run but only 5–10 questions show up". Causes found and fixed:
 
-1. **Dispatch was strictly serial and engine-first** inside a ~75 s chunk, so a stalled hand-off left only one engine's first few questions. Each engine now has its own serial lane (`src/lib/workers/durableProbing.js`); SQL claims still serialize.
+1. **Dispatch was strictly serial and engine-first** inside a ~75 s chunk, so a stalled hand-off left only one engine's first few questions. Each engine now has its own serial lane (`src/server/workers/durableProbing.js`); SQL claims still serialize.
 2. **Short provider backoffs stalled the scan** until a portal poll or the daily cron. Work due within 10 minutes is now bridged inside the function lifetime (`deferredResumeWaitMs` in `scanWorker.js`).
 3. **The report listed only questions with a stored row.** Finalize records `planned_questions`; the customer report lists every planned question in panel order and names engines not collected.
 4. **Google AI Overview collection was nearly dead.** Bright Data's rendered-AIO mode (`brd_ai_overview=2`) fails with `No ready cookies`; the adapter now falls back to the standard SERP in the same deadline, remembers the empty pool for 10 minutes, and records `aio_capture_mode` on every row.

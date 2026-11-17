@@ -1,5 +1,5 @@
-import { customerRouteContext } from "@/lib/supabase/customerRoute";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { customerRouteContext } from "@/shared/supabase/customerRoute";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
 export const dynamic = "force-dynamic";
 const fail = (message, status) =>
   new Response(message, { status, headers: { "Cache-Control": "no-store" } });

@@ -38,7 +38,7 @@ A working Next.js prototype already exists with:
 - Strong design system (serif + sans, #D9531E accent, clean cards, data-testid coverage).
 
 **Current limitations (the gaps this plan closes first)**:
-- Prompts are static + generic (only 3 per industry in `src/data/industries.js`).
+- Prompts are static + generic (only 3 per industry in `src/shared/industries.js`).
 - No website content analysis or brand-specific prompt generation.
 - Crude string-match analysis (no citations, weak position/sentiment).
 - No persistence of multiple runs, no trends, no brand entities.
@@ -204,7 +204,7 @@ We are extending the existing Next.js codebase.
 - Next.js App Router API routes (`/api/scan`, future `/api/brands`, etc.)
 - Supabase (Postgres + client) for storing scan records, brands (simple), and results. Start with JSONB for flexibility in `scans` or new `scan_runs` table.
 - LLM Client: `@google/generative-ai` only (Gemini). Use structured JSON output where possible.
-- Prompt Generation Service (new): Use Firecrawl (when key configured) or basic fetch to get clean website content, then LLM to generate 15-25 targeted prompts. See `src/lib/firecrawl.js` and `src/lib/prompts.js`.
+- Prompt Generation Service (new): Use Firecrawl (when key configured) or basic fetch to get clean website content, then LLM to generate 15-25 targeted prompts. See `src/server/firecrawl.js` and `src/server/prompts.js`.
 - Analysis Service: Current crude logic → upgraded to ask Gemini for structured extraction (mentioned, position category, cited URLs, sentiment).
 - Scoring: Simple % mentioned. Store per-scan.
 - Frontend: Existing polished React components + extend dashboard with tabs or sections for history, opportunities.
@@ -247,10 +247,10 @@ We are extending the existing Next.js codebase.
 This is critical for good user experience on day one and the highest-leverage feature for the pitch MVP.
 
 **Current Implementation**:
-- Dedicated scraper in `src/lib/firecrawl.js`
+- Dedicated scraper in `src/server/firecrawl.js`
 - Uses Firecrawl (`@mendable/firecrawl-js`) when `FIRECRAWL_API_KEY` is configured for clean, JS-rendered markdown + metadata (title, description).
 - Falls back to basic `fetch` + HTML stripping.
-- Called from `src/lib/prompts.js` → `generatePromptsForBrand()`
+- Called from `src/server/prompts.js` → `generatePromptsForBrand()`
 - Integrated in `/api/scan` (dynamic prompts first, static industry fallback)
 
 Steps (for reference):

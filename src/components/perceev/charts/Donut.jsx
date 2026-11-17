@@ -2,7 +2,7 @@
 
 import { formatPercent, neutralRampVar } from './chartMath';
 import { SHARE_STATE, NOT_AVAILABLE_LABEL } from './shareOfVoice';
-import { describeRosterState } from '@/lib/scoring/rosterContinuity';
+import { describeRosterState } from '@/shared/scoring/rosterContinuity';
 
 /**
  * Share of the line.

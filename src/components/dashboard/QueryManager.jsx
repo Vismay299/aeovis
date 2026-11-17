@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Plus, CheckCircle2, AlertCircle, Sparkles } from "lucide-react";
-import { normalizeTopic } from "@/lib/scoring/topics";
+import { normalizeTopic } from "@/shared/scoring/topics";
 
 const INTENT_LABELS = {
   high_intent: "High Intent",

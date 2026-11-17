@@ -1,4 +1,4 @@
-import { PRIVATE_ROUTE_PREFIXES, getRouteIndexingPolicy } from "./src/lib/publicSite.js";
+import { PRIVATE_ROUTE_PREFIXES, getRouteIndexingPolicy } from "./src/server/publicSite.js";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -33,11 +33,11 @@ const nextConfig = {
     // so the .md files must be included explicitly or content routes break
     // in production.
     outputFileTracingIncludes: {
-      "/api/customer/content/**": ["./src/lib/content/skills/*.md"],
-      "/api/content": ["./src/lib/content/skills/*.md"],
-      "/api/content/**": ["./src/lib/content/skills/*.md"],
-      "/api/content-items/**": ["./src/lib/content/skills/*.md"],
-      "/api/scan/worker": ["./src/lib/content/skills/*.md"],
+      "/api/customer/content/**": ["./src/shared/content/skills/*.md"],
+      "/api/content": ["./src/shared/content/skills/*.md"],
+      "/api/content/**": ["./src/shared/content/skills/*.md"],
+      "/api/content-items/**": ["./src/shared/content/skills/*.md"],
+      "/api/scan/worker": ["./src/shared/content/skills/*.md"],
     },
 };
 

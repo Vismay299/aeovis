@@ -2,41 +2,41 @@
 //   src/serverFunctions/keywords.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../lib/workspace/requireWorkspace.ts";
-import { keywordResearchRequestBody } from "../../../../../lib/keywords/keywords.contract.ts";
+} from "../../../../../server/workspace/requireWorkspace.ts";
+import { keywordResearchRequestBody } from "../../../../../server/keywords/keywords.contract.ts";
 import {
   research,
   researchCacheInput,
   type ResearchDeps,
-} from "../../../../../lib/keywords/research.ts";
-import { peekCached } from "../../../../../lib/research/cache.ts";
+} from "../../../../../server/keywords/research.ts";
+import { peekCached } from "../../../../../server/research/cache.ts";
 import {
   normalizeKeyword,
   toMetricUpsertRow,
-} from "../../../../../lib/keywords/helpers.ts";
+} from "../../../../../server/keywords/helpers.ts";
 import {
   researchKey,
   resolveResearchMarket,
-} from "../../../../../lib/keywords/market.ts";
-import { upsertKeywordMetrics } from "../../../../../lib/keywords/metricsStore.ts";
+} from "../../../../../server/keywords/market.ts";
+import { upsertKeywordMetrics } from "../../../../../server/keywords/metricsStore.ts";
 import {
   requireApprovedPrice,
   type PricingContext,
-} from "../../../../../lib/pricing/pricedActions.ts";
-import "../../../../../lib/pricing/actions/index.ts";
-import { createLabsClient } from "../../../../../lib/providers/dataforseo/labs.ts";
-import { createGoogleAdsClient } from "../../../../../lib/providers/dataforseo/google-ads.ts";
-import { assertLocalResearchLocation } from "../../../../../lib/keywords/localVolume.ts";
-import { appendResearch } from "../../../../../lib/projectContext/service.ts";
-import { toResearchError } from "../../../../../lib/research/providerErrors.ts";
-import { keepAlive as defaultKeepAlive } from "../../../../../lib/keepAlive.js";
-import type { CacheDeps } from "../../../../../lib/cache/providerCache.ts";
+} from "../../../../../shared/pricing/pricedActions.ts";
+import "../../../../../shared/pricing/actions/index.ts";
+import { createLabsClient } from "../../../../../shared/providers/dataforseo/labs.ts";
+import { createGoogleAdsClient } from "../../../../../shared/providers/dataforseo/google-ads.ts";
+import { assertLocalResearchLocation } from "../../../../../server/keywords/localVolume.ts";
+import { appendResearch } from "../../../../../server/projectContext/service.ts";
+import { toResearchError } from "../../../../../server/research/providerErrors.ts";
+import { keepAlive as defaultKeepAlive } from "../../../../../server/keepAlive.js";
+import type { CacheDeps } from "../../../../../server/cache/providerCache.ts";
 
 export const dynamic = "force-dynamic";
 

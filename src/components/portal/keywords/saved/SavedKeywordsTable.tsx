@@ -36,7 +36,7 @@ import type {
 } from "./hooks/useSavedKeywordsQuery";
 import type { TagManageController } from "./hooks/useTagManage";
 import type { SavedKeywordsFilterValues } from "@/shared/saved-keywords-filters";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 function unknownNumber(value: number | null) {
   return value == null ? "—" : value.toLocaleString();

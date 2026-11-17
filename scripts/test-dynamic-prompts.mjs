@@ -7,7 +7,7 @@
  *   npm run test:prompts -- --brand="Stripe" --website="stripe.com" --industry="saas"
  */
 
-import { generatePromptsForBrand } from '../src/lib/prompts.js'; // ESM needs extension for direct node runs outside Next
+import { generatePromptsForBrand } from '../src/server/prompts.js'; // ESM needs extension for direct node runs outside Next
 
 // Note: When run via `npm run test:prompts`, --env-file=.env.local populates process.env before execution.
 // No dotenv package required.

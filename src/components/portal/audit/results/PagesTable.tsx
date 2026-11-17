@@ -30,8 +30,8 @@ import {
 import { TablePagination } from "@/components/app/table/TablePagination";
 import { usePortal } from "@/components/portal/PortalShell";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
-import { exportFilename } from "@/lib/export/filenames";
-import type { ExportFormat } from "@/lib/export/exportRows";
+import { exportFilename } from "@/shared/export/filenames";
+import type { ExportFormat } from "@/shared/export/exportRows";
 import {
   useAuditPages,
   type AuditPageRow,

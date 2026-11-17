@@ -51,7 +51,7 @@ ALTER TABLE schema_migrations
  * What each migration must leave behind, checked against the Postgres catalog.
  *
  * Keyed by migration file so a new migration without an entry fails the guard
- * test in src/lib/migrationsLedger.test.mjs — the stale-list failure (finding
+ * test in src/server/migrationsLedger.test.mjs — the stale-list failure (finding
  * C10) was this list silently ending at 005 while four more migrations shipped.
  *
  * `to_regclass` covers tables and indexes; functions need pg_proc, because a
@@ -339,7 +339,7 @@ const EXPECTED_OBJECTS = {
   // THE RESIDUAL GAP, STATED PLAINLY: `npm run setup:db` cannot tell you
   // whether 014 is applied: it reaches its final green verdict on a database
   // that is missing this migration. (That verdict sentence is deliberately not
-  // quoted here — a guard in src/lib/migrationsLedger.test.mjs requires the
+  // quoted here — a guard in src/server/migrationsLedger.test.mjs requires the
   // only occurrence of it in this file to sit after the catalog check, and a
   // comment repeating it above would be indistinguishable from a claim.)
   // The query that settles 014 by hand is in
@@ -1138,7 +1138,7 @@ async function main() {
  * The dangerous failure of an entrypoint guard is that it silently declines to
  * run and the operator reads exit 0 as "migrations applied", so the mismatch
  * branch below is loud and fatal instead of quiet. The guard itself is exercised
- * on every run of src/lib/migrationsRunner.test.mjs, which spawns this script as
+ * on every run of src/server/migrationsRunner.test.mjs, which spawns this script as
  * a subprocess: if the comparison ever stops matching, those tests go red rather
  * than the runner going quiet in production.
  */

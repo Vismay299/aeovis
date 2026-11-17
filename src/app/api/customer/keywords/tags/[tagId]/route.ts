@@ -2,25 +2,25 @@
 //   src/server/features/keywords/services/research/saved-keywords.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { AppError } from "../../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../../lib/workspace/requireWorkspace.ts";
+} from "../../../../../../server/workspace/requireWorkspace.ts";
 import {
   tagPatchBody,
   tagDeleteQuery,
-} from "../../../../../../lib/keywords/keywords.contract.ts";
+} from "../../../../../../server/keywords/keywords.contract.ts";
 import {
   updateSavedKeywordTag,
   deleteSavedKeywordTag,
-} from "../../../../../../lib/keywords/savedKeywords.ts";
+} from "../../../../../../server/keywords/savedKeywords.ts";
 import {
   createSavedKeywordsRepository,
   type SavedKeywordsRepository,
-} from "../../../../../../lib/keywords/repository.ts";
+} from "../../../../../../server/keywords/repository.ts";
 
 export const dynamic = "force-dynamic";
 

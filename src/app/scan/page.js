@@ -19,7 +19,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
 import { Wordmark } from '@/components/landing/SiteNav';
-import { runScan, saveScan, fetchIndustries, loadScan, clearScan } from '@/services/api';
+import { runScan, saveScan, fetchIndustries, loadScan, clearScan } from '@/shared/api';
 import {
   initialScanProgress,
   beginScanProgress,
@@ -28,9 +28,9 @@ import {
   isReconnecting,
   progressLabel,
   progressFraction,
-} from '@/lib/scanProgress';
-import { SAMPLE_RESULT } from '@/data/mockData';
-import { scanCompletionNotice } from '@/lib/scanCompletion';
+} from '@/shared/scanProgress';
+import { SAMPLE_RESULT } from '@/shared/mockData';
+import { scanCompletionNotice } from '@/shared/scanCompletion';
 
 const STAGES = [
   { label: 'Brand accepted', detail: 'the domain is resolved and the run is queued' },

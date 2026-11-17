@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { customerRouteContext } from "@/lib/supabase/customerRoute";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { customerRouteContext } from "@/shared/supabase/customerRoute";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
 export const dynamic = "force-dynamic";
 const MAX_OBSERVATIONS = 800;
 export async function GET(request) {

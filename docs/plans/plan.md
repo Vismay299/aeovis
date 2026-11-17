@@ -100,7 +100,7 @@ answer-engine analytics platform, while respecting our locked contracts:
 | Gap analysis | ⚠️ implicit in AnswersView gap rows | Domain/URL gap tables + gap score (P3) |
 | Sentiment UI | ❌ | Score trend + themes + summaries (P4) |
 | Crawlability | ❌ | robots.txt audit + URL tester + rival compare (P5) |
-| GSC integration | ⚠️ `src/lib/engines/gsc.js` built (service-account, query-level), unwired; no date dimension yet | Wire per-brand, add date dimension, organic-overlap column, AI-vs-organic view (P6) |
+| GSC integration | ⚠️ `src/shared/engines/gsc.js` built (service-account, query-level), unwired; no date dimension yet | Wire per-brand, add date dimension, organic-overlap column, AI-vs-organic view (P6) |
 | Exports | ⚠️ print stylesheet only | CSV exports: answers, citations (P6) |
 | Typed opportunities | ⚠️ one-line LLM recs | Typed cards w/ evidence chips (P7) |
 | Outreach agent | ❌ | Author extraction + pitch, as `content_agents` base (P7) |
@@ -117,7 +117,7 @@ The current storage model (one `raw_results` JSONB blob per scan, duplicated int
 trend charts, per-prompt tables, citation intelligence, or competitor symmetry.
 Fix the foundation first. **Order inside P0 matters — packages are numbered.**
 
-### P0.0 — Job-store rewrite in `src/lib/db.js` (hard prerequisite)
+### P0.0 — Job-store rewrite in `src/server/db.js` (hard prerequisite)
 
 Today's job store poisons any checkpoint design (reviewer finding D4):
 
@@ -420,7 +420,7 @@ checkpoint/idempotency tests.
   strings, themes table (theme → sentiment → occurrences → expandable quotes).
 
 ### Phase 5 — Crawlability (independent; zero API cost)
-- Registry `src/lib/crawlers/bots.js`: ~50 AI bots (name, operator, purpose:
+- Registry `src/server/crawlers/bots.js`: ~50 AI bots (name, operator, purpose:
   training/search/agent) — GPTBot, OAI-SearchBot, ChatGPT-User, anthropic-ai,
   ClaudeBot, Google-Extended, PerplexityBot, Bytespider, CCBot, Amazonbot,
   Applebot-Extended, Meta-ExternalAgent, cohere-ai, DeepSeekBot, ….
@@ -571,11 +571,11 @@ P7 action layer — after P3 (needs gap + citation data)
 
 - [x] **P0.0** db.js job-store rewrite (DB-authoritative, fail-loud, heartbeat) — reviewed, content-job heartbeat blocker fixed
 - [x] **P0.1** migration 005 (+content_jobs.heartbeat_at, indexes) · backfill (upsert, IST buckets, union 'all' row, guarded deletes) · setup-db self-verify · dry-run clean (55 scans, 0 errors, 674 pr/3667 cit/82 metrics)
-- [x] **P0.1b** analytics DB access layer (src/lib/db/analytics.js) — 40 tests, wired into test:scoring glob (257 green)
+- [x] **P0.1b** analytics DB access layer (src/server/db/analytics.js) — 40 tests, wired into test:scoring glob (257 green)
 - [x] **DB APPLY** migration 005 applied (17 tables ✓, both heartbeat_at cols verified) · backfill live (674 pr / 3667 cit / 34 metrics, 0 errors) · D4 union proven in data
 - [x] **P0.2** chunk worker · poll rescue · cron resume+scheduler · maxDuration — 24 tests, build clean · reviewed (scoring parity + prompt-set hash parity CONFIRMED)
 - [x] **P0.2-hardening** ALL 7 reviewer defects closed. D5 (api.js `?? r.references` — new AIO scans rendered empty sources) · D4 (CRON_SECRET gate on /api/scan/worker + self-continue auth) · D1+D2 (citations materialized at finalize from `raw`, delete-by-job_id — the loss window no longer exists and duplication is impossible) · D3+D6 (`claimJobStatus` compare-and-set single-flight for sourcing/finalize + heartbeat before the finalize LLM call; concurrency test empirically fails against unfixed code) · D7 (scheduler bumps next_run_at BEFORE the kick).
-- [x] **Consolidation** `summarizeEngineSlice`/`domainMatches` exported from enginePipeline (worker copies deleted) · new `src/lib/analytics/rollup.js` is the single source of truth for brand_metrics_daily math, imported by BOTH worker and backfill — live-vs-backfill drift is now structurally impossible. 343 tests green.
+- [x] **Consolidation** `summarizeEngineSlice`/`domainMatches` exported from enginePipeline (worker copies deleted) · new `src/shared/analytics/rollup.js` is the single source of truth for brand_metrics_daily math, imported by BOTH worker and backfill — live-vs-backfill drift is now structurally impossible. 343 tests green.
 - [x] **P1.4a** Results Night chart library — TrendChart (dashed-white threshold), RankTable (tally bars, transform-animated), PerformanceMatrix (self=teal ramp / rivals=neutral ramp, verified 0 role-color leaks), Donut, DeltaChip + 46 chartMath tests. Zero hardcoded hex. Verified live in DOM against DESIGN.md.
 - [ ] **Cleanup** remove/dev-gate the temporary `/chart-preview` harness once charts are wired into real views
 - [x] **Docs** README rewritten to real architecture (was describing the dead v1 SerpAPI/Gemini pipeline) · PRODUCT.md capabilities amended (per-brand prompt_target, chunked scans, real engine set)

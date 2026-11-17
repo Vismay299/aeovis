@@ -30,59 +30,59 @@ SOFTWARE.
 
 ### Files containing ported portions
 
-- `src/lib/http/schemaContract.ts`
-- `src/lib/http/routeContract.test.ts`
-- `src/lib/http/hostPolicy.ts`
-- `src/lib/jobs/stepConfigs.ts`
-- `src/lib/jobs/watchdog.ts`
-- `src/lib/spend/index.ts`
-- `src/lib/cache/providerCache.ts`
-- `src/lib/llm/openrouter.ts`
-- `src/lib/pricing/dataforseo.ts`
-- `src/lib/pricing/dataforseo.test.ts`
+- `src/shared/http/schemaContract.ts`
+- `src/shared/http/routeContract.test.ts`
+- `src/shared/http/hostPolicy.ts`
+- `src/server/jobs/stepConfigs.ts`
+- `src/server/jobs/watchdog.ts`
+- `src/shared/spend/index.ts`
+- `src/server/cache/providerCache.ts`
+- `src/server/llm/openrouter.ts`
+- `src/shared/pricing/dataforseo.ts`
+- `src/shared/pricing/dataforseo.test.ts`
 - `src/shared/ai-visibility-pricing.ts`
 - `src/shared/ai-visibility-pricing.test.ts`
 - `src/shared/money.ts`
-- `src/lib/telemetry/server.ts` (and `server.test.ts` message-stripping cases)
+- `src/shared/telemetry/server.ts` (and `server.test.ts` message-stripping cases)
 - `src/shared/privacy-choices.ts` (and `privacy-choices.test.ts`)
-- `src/lib/telemetry/sanitize.ts` (and `sanitize.test.ts`)
-- `src/lib/telemetry/client.ts` (and `client.test.ts` buffer/opt-in cases)
+- `src/shared/telemetry/sanitize.ts` (and `sanitize.test.ts`)
+- `src/shared/telemetry/client.ts` (and `client.test.ts` buffer/opt-in cases)
 - `src/components/app/telemetry/TelemetryBootstrap.tsx`
 - `src/components/portal/privacy/PrivacySettings.tsx`
 - `supabase/migrations/041_f01_spend.sql`
 - `src/shared/project-context.ts`
 - `src/shared/project-context.test.ts`
-- `src/lib/projectContext/normalize.ts`
-- `src/lib/projectContext/normalize.test.ts`
-- `src/lib/projectContext/contextUpdateOps.ts`
-- `src/lib/projectContext/contextUpdateOps.test.ts`
-- `src/lib/projectContext/repository.ts`
-- `src/lib/projectContext/service.ts`
-- `src/lib/projectContext/service.test.ts`
+- `src/server/projectContext/normalize.ts`
+- `src/server/projectContext/normalize.test.ts`
+- `src/server/projectContext/contextUpdateOps.ts`
+- `src/server/projectContext/contextUpdateOps.test.ts`
+- `src/server/projectContext/repository.ts`
+- `src/server/projectContext/service.ts`
+- `src/server/projectContext/service.test.ts`
 - `scripts/qa/check-f07-db.mjs`
 - `supabase/migrations/070_f07_project_memory.sql`
-- `src/lib/providers/dataforseo/core.ts`
-- `src/lib/providers/dataforseo/core.test.ts`
-- `src/lib/providers/dataforseo/envelope.ts`
-- `src/lib/providers/dataforseo/envelope.test.ts`
-- `src/lib/providers/dataforseo/billingClassification.ts`
-- `src/lib/providers/dataforseo/shared.ts`
-- `src/lib/providers/dataforseo/llmSchemas.ts`
-- `src/lib/providers/dataforseo/llm-models.ts`
-- `src/lib/providers/dataforseo/llm-models.test.ts`
-- `src/lib/providers/dataforseo/ai-tracking.ts`
-- `src/lib/providers/dataforseo/ai-tracking.test.ts`
-- `src/lib/providers/dataforseo/ai.ts`
-- `src/lib/providers/dataforseo/ai.test.ts`
-- `src/lib/providers/dataforseo/appendix.ts`
-- `src/lib/providers/dataforseo/dataforseoEvidence.ts`
-- `src/lib/providers/dataforseo/dataforseoEvidence.test.ts`
-- `src/lib/providers/dataforseo/locations.ts`
-- `src/lib/providers/dataforseo/bakeoffLib.ts`
-- `src/lib/providers/dataforseo/bakeoffLib.test.ts`
+- `src/shared/providers/dataforseo/core.ts`
+- `src/shared/providers/dataforseo/core.test.ts`
+- `src/shared/providers/dataforseo/envelope.ts`
+- `src/shared/providers/dataforseo/envelope.test.ts`
+- `src/shared/providers/dataforseo/billingClassification.ts`
+- `src/shared/providers/dataforseo/shared.ts`
+- `src/shared/providers/dataforseo/llmSchemas.ts`
+- `src/shared/providers/dataforseo/llm-models.ts`
+- `src/shared/providers/dataforseo/llm-models.test.ts`
+- `src/shared/providers/dataforseo/ai-tracking.ts`
+- `src/shared/providers/dataforseo/ai-tracking.test.ts`
+- `src/shared/providers/dataforseo/ai.ts`
+- `src/shared/providers/dataforseo/ai.test.ts`
+- `src/shared/providers/dataforseo/appendix.ts`
+- `src/shared/providers/dataforseo/dataforseoEvidence.ts`
+- `src/shared/providers/dataforseo/dataforseoEvidence.test.ts`
+- `src/shared/providers/dataforseo/locations.ts`
+- `src/shared/providers/dataforseo/bakeoffLib.ts`
+- `src/shared/providers/dataforseo/bakeoffLib.test.ts`
 - `src/shared/web-search-countries.ts`
 - `src/shared/safe-url.ts`- `src/styles/app-theme.css` (from `src/client/styles/app.css`)
-- `src/lib/theme/theme.ts` (from `src/client/lib/theme.ts`)
+- `src/shared/theme/theme.ts` (from `src/client/lib/theme.ts`)
 - `src/components/ui/accordion.tsx` (from `src/client/components/ui/accordion.tsx`)
 - `src/components/ui/alert-dialog.tsx` (from `src/client/components/ui/alert-dialog.tsx`)
 - `src/components/ui/alert.tsx` (from `src/client/components/ui/alert.tsx`)
@@ -163,9 +163,9 @@ SOFTWARE.
 - `src/components/app/ErrorBoundaryCard.tsx` (from `src/client/components/DefaultCatchBoundary.tsx`)
 - `src/components/app/NavTabs.tsx` (from `src/client/components/NavTabs.tsx`)
 - `src/components/app/QueryState.tsx` (from `src/client/components/QueryState.tsx`)
-- `src/lib/pricing/pricedActions.ts`
-- `src/lib/pricing/actions/scanRun.ts`
-- `src/lib/costs/usage.ts` (from `src/server/billing/usage.ts`)
+- `src/shared/pricing/pricedActions.ts`
+- `src/shared/pricing/actions/scanRun.ts`
+- `src/server/costs/usage.ts` (from `src/server/billing/usage.ts`)
 - `src/components/app/navigation/navModel.ts` (from `src/client/navigation/items.ts`)
 - `src/components/app/navigation/navModel.test.ts` (from `src/client/navigation/items.ts`)
 - `src/components/app/navigation/items.ts` (from `src/client/navigation/items.ts`)
@@ -186,8 +186,8 @@ SOFTWARE.
 - `supabase/migrations/155_f24_signup_guard.sql` (from `src/server/auth/disposable-email.ts`)
 - `src/shared/schedule.ts`
 - `src/shared/schedule.test.ts`
-- `src/lib/schedules/runDue.ts`
-- `src/lib/schedules/runDue.test.ts`
+- `src/server/schedules/runDue.ts`
+- `src/server/schedules/runDue.test.ts`
 - `src/components/auth/useGoogleAuth.ts` (from `src/client/features/auth/useGoogleAuth.ts`)
 - `src/components/auth/TurnstileWidget.tsx` (from `src/client/features/auth/TurnstileWidget.tsx`)
 - `src/components/auth/AuthMethodChooser.tsx` (from `src/client/features/auth/AuthMethodChooser.tsx`)
@@ -201,29 +201,29 @@ SOFTWARE.
 - `src/components/auth/VerifyEmailCard.tsx` (from `src/routes/_auth.verify.tsx`)
 - `src/app/auth/verify/page.jsx` (from `src/routes/_auth.verify.tsx`)
 - `src/components/app/table/DataTable.tsx` (from `src/client/components/table/DataTable.tsx`)
-- `src/lib/table/tableSelection.ts` (from `src/client/components/table/tableSelection.ts`)
-- `src/lib/table/tableSelection.test.ts` (from `src/client/features/rank-tracking/tableSelection.test.ts`)
+- `src/shared/table/tableSelection.ts` (from `src/client/components/table/tableSelection.ts`)
+- `src/shared/table/tableSelection.test.ts` (from `src/client/features/rank-tracking/tableSelection.test.ts`)
 - `src/components/app/table/DataTableToolbar.tsx` (from `src/client/components/table/DataTableToolbar.tsx`)
 - `src/components/app/table/TableBulkActionBar.tsx` (from `src/client/components/table/TableBulkActionBar.tsx`)
 - `src/components/app/table/TablePagination.tsx` (from `src/client/components/table/TablePagination.tsx`)
 - `src/components/app/table/SortableHeader.tsx` (from `src/client/components/table/SortableHeader.tsx`)
 - `src/components/app/table/ScoreBadge.tsx` (from `src/client/components/table/ScoreBadge.tsx`)
-- `src/lib/table/nullSafeSort.ts` (from `src/client/components/table/nullSafeSort.ts`)
-- `src/lib/table/nullSafeSort.test.ts` (from `src/client/components/table/nullSafeSort.ts`)
-- `src/lib/table/url.ts` (from `src/client/components/table/url.tsx`)
-- `src/lib/table/url.test.ts` (from `src/client/components/table/url.test.ts`)
+- `src/shared/table/nullSafeSort.ts` (from `src/client/components/table/nullSafeSort.ts`)
+- `src/shared/table/nullSafeSort.test.ts` (from `src/client/components/table/nullSafeSort.ts`)
+- `src/shared/table/url.ts` (from `src/client/components/table/url.tsx`)
+- `src/shared/table/url.test.ts` (from `src/client/components/table/url.test.ts`)
 - `src/components/app/table/ExternalUrlCell.tsx` (from `src/client/components/table/url.tsx`)
 - `src/components/app/table/ExportToSheetsModal.tsx` (from `src/client/components/table/ExportToSheetsModal.tsx`)
 - `src/components/app/MetricsTable.tsx` (from `src/client/components/MetricsTable.tsx`)
 - `src/components/app/ExportMenu.tsx` (from `src/client/components/ExportMenu.tsx`)
-- `src/lib/export/csv.ts` (from `src/client/lib/csv.ts`)
-- `src/lib/export/csv.test.ts` (from `src/client/lib/csv.test.ts`)
-- `src/lib/export/clipboard.ts` (from `src/client/lib/clipboard.ts`)
-- `src/lib/export/clipboard.test.ts` (from `src/client/lib/clipboard.test.ts`)
-- `src/lib/export/download.ts` (from `src/client/lib/download.ts`)
-- `src/lib/export/sheetsModalStore.ts` (from `src/client/lib/exportToSheets.ts`)
-- `src/lib/export/exportRows.ts` (from `src/client/lib/exportRows.ts`)
-- `src/lib/export/exportRows.test.ts` (from `src/client/lib/exportRows.test.ts`)
+- `src/shared/export/csv.ts` (from `src/client/lib/csv.ts`)
+- `src/shared/export/csv.test.ts` (from `src/client/lib/csv.test.ts`)
+- `src/shared/export/clipboard.ts` (from `src/client/lib/clipboard.ts`)
+- `src/shared/export/clipboard.test.ts` (from `src/client/lib/clipboard.test.ts`)
+- `src/shared/export/download.ts` (from `src/client/lib/download.ts`)
+- `src/shared/export/sheetsModalStore.ts` (from `src/client/lib/exportToSheets.ts`)
+- `src/shared/export/exportRows.ts` (from `src/client/lib/exportRows.ts`)
+- `src/shared/export/exportRows.test.ts` (from `src/client/lib/exportRows.test.ts`)
 - `src/components/app/export/useExportRows.ts` (from `src/client/lib/exportRows.ts`)
 - `src/components/auth/ForgotPasswordForm.tsx` (from `src/routes/_auth.forgot-password.tsx`)
 - `src/app/auth/forgot/page.jsx` (from `src/routes/_auth.forgot-password.tsx`)
@@ -232,67 +232,67 @@ SOFTWARE.
 - `src/app/auth/error/page.jsx` (from `src/routes/_auth.auth-error.tsx`)
 - `src/app/auth/callback/route.js` (from `src/routes/api.auth.callback.ts`)
 - `supabase/migrations/085_f10_customer_schedules.sql` (from `src/db/ai-visibility.schema.ts`, `src/server/features/ai-visibility/repositories/AiVisibilityRepository.ts`)
-- `src/lib/query/queryClient.ts` (from `src/client/tanstack-db/queryClient.ts`)
-- `src/lib/query/queryClient.test.ts` (from `src/client/tanstack-db/queryClient.test.ts`)
-- `src/lib/query/errors.ts` (from `src/client/lib/error-messages.ts`)
-- `src/lib/query/errors.test.ts` (from `src/client/lib/error-messages.test.ts`)
+- `src/shared/query/queryClient.ts` (from `src/client/tanstack-db/queryClient.ts`)
+- `src/shared/query/queryClient.test.ts` (from `src/client/tanstack-db/queryClient.test.ts`)
+- `src/shared/query/errors.ts` (from `src/client/lib/error-messages.ts`)
+- `src/shared/query/errors.test.ts` (from `src/client/lib/error-messages.test.ts`)
 - `src/components/app/SpendRefusedError.tsx` (from `src/client/features/billing/InsufficientCreditsError.tsx`)
-- `src/lib/query/polling.ts` (from `src/client/features/ai-visibility/shared.tsx`)
-- `src/lib/query/polling.test.ts` (from `src/client/features/ai-visibility/shared.tsx`)
+- `src/shared/query/polling.ts` (from `src/client/features/ai-visibility/shared.tsx`)
+- `src/shared/query/polling.test.ts` (from `src/client/features/ai-visibility/shared.tsx`)
 - `src/components/app/hooks/useServerPacedQuery.ts` (from `src/client/features/ai-visibility/shared.tsx`)
 - `src/components/app/hooks/useJobStatus.ts` (from `src/client/features/audit/AuditDetail.tsx`)
-- `src/lib/query/optimistic.ts` (from `src/client/features/rank-tracking/useSetKeywordPinned.ts`)
-- `src/lib/query/optimistic.test.ts` (from `src/client/features/rank-tracking/useSetKeywordPinned.ts`)
+- `src/shared/query/optimistic.ts` (from `src/client/features/rank-tracking/useSetKeywordPinned.ts`)
+- `src/shared/query/optimistic.test.ts` (from `src/client/features/rank-tracking/useSetKeywordPinned.ts`)
 - `src/components/app/hooks/useOptimisticMutation.ts` (from `src/client/features/rank-tracking/useSetKeywordPinned.ts`)
-- `src/lib/query/filterSearchParams.ts` (from `src/client/lib/filterSearchParams.ts`)
-- `src/lib/query/filterSearchParams.test.ts` (from `src/client/lib/filterSearchParams.ts`)
-- `src/lib/query/urlState.ts` (from `src/routes/_app/p/$projectId/saved.tsx`)
-- `src/lib/query/urlState.test.ts` (from `src/routes/_app/p/$projectId/saved.tsx`)
+- `src/shared/query/filterSearchParams.ts` (from `src/client/lib/filterSearchParams.ts`)
+- `src/shared/query/filterSearchParams.test.ts` (from `src/client/lib/filterSearchParams.ts`)
+- `src/shared/query/urlState.ts` (from `src/routes/_app/p/$projectId/saved.tsx`)
+- `src/shared/query/urlState.test.ts` (from `src/routes/_app/p/$projectId/saved.tsx`)
 - `src/components/app/hooks/useUrlSearchState.ts` (from `src/routes/_app/p/$projectId/saved.tsx`)
 - `src/components/app/hooks/useDebouncedDraft.ts` (from `src/client/hooks/useDebouncedDraft.ts`)
 - `src/components/app/hooks/useDebouncedFilters.ts` (from `src/routes/_app/p/$projectId/saved.tsx`)
-- `src/lib/query/localPrefs.ts` (from `src/client/features/keywords/hooks/usePreferredKeywordLocation.ts`)
-- `src/lib/query/localPrefs.test.ts` (from `src/client/features/keywords/hooks/usePreferredKeywordLocation.ts`)
+- `src/shared/query/localPrefs.ts` (from `src/client/features/keywords/hooks/usePreferredKeywordLocation.ts`)
+- `src/shared/query/localPrefs.test.ts` (from `src/client/features/keywords/hooks/usePreferredKeywordLocation.ts`)
 - `src/components/app/hooks/useLocalPref.ts` (from `src/client/features/keywords/hooks/usePreferredKeywordLocation.ts`)
-- `src/lib/query/searchTabsState.ts` (from `src/client/features/search-tabs/useSearchTabs.ts`)
-- `src/lib/query/searchTabsState.test.ts` (from `src/client/features/search-tabs/useSearchTabs.test.ts`)
+- `src/shared/query/searchTabsState.ts` (from `src/client/features/search-tabs/useSearchTabs.ts`)
+- `src/shared/query/searchTabsState.test.ts` (from `src/client/features/search-tabs/useSearchTabs.test.ts`)
 - `src/components/app/search-tabs/useSearchTabs.ts` (from `src/client/features/search-tabs/useSearchTabs.ts`)
 - `src/components/app/search-tabs/useSearchTabNavigation.ts` (from `src/client/features/search-tabs/useSearchTabNavigation.ts`)
 - `src/components/app/search-tabs/SearchTabStrip.tsx` (from `src/client/features/search-tabs/SearchTabStrip.tsx`)
 - `src/shared/json.ts` (from `src/shared/json.ts`)
-- `src/lib/providers/loops/client.ts` (from `src/server/email/loops-client.ts`, `src/server/email/loops.ts`, `src/server/billing/loops-sync.ts`)
-- `src/lib/query/localHistory.ts` (from `src/client/hooks/useLocalHistoryStore.ts`)
-- `src/lib/query/localHistory.test.ts` (from `src/client/hooks/useLocalHistoryStore.ts`)
+- `src/shared/providers/loops/client.ts` (from `src/server/email/loops-client.ts`, `src/server/email/loops.ts`, `src/server/billing/loops-sync.ts`)
+- `src/shared/query/localHistory.ts` (from `src/client/hooks/useLocalHistoryStore.ts`)
+- `src/shared/query/localHistory.test.ts` (from `src/client/hooks/useLocalHistoryStore.ts`)
 - `src/components/app/hooks/useLocalHistoryStore.ts` (from `src/client/hooks/useLocalHistoryStore.ts`)
 - `src/components/app/hooks/useTimestampedSearchHistory.ts` (from `src/client/hooks/useTimestampedSearchHistory.ts`)
 - `src/components/app/RecentSearches.tsx` (from `src/client/components/RecentSearches.tsx`)
 - `src/components/app/PrefetchLink.tsx` (from `src/router.tsx`)
-- `src/lib/schedules/aiVisibilitySchedules.ts` (from `src/server/features/ai-visibility/services/scheduledAiVisibility.ts`, `AiVisibilityRepository.ts`)
-- `src/lib/schedules/aiVisibilitySchedules.jobs.ts` (from `src/server/features/ai-visibility/services/scheduledAiVisibility.ts`)
-- `src/lib/schedules/customerSchedule.ts` (from `src/server/features/ai-visibility/services/aiVisibilitySchedule.ts`)
+- `src/server/schedules/aiVisibilitySchedules.ts` (from `src/server/features/ai-visibility/services/scheduledAiVisibility.ts`, `AiVisibilityRepository.ts`)
+- `src/server/schedules/aiVisibilitySchedules.jobs.ts` (from `src/server/features/ai-visibility/services/scheduledAiVisibility.ts`)
+- `src/server/schedules/customerSchedule.ts` (from `src/server/features/ai-visibility/services/aiVisibilitySchedule.ts`)
 - `src/app/api/customer/schedule/route.ts` (from `src/server/features/ai-visibility/services/aiVisibilitySchedule.ts`)
 - `src/components/portal/schedule/ScheduleField.tsx` (from `src/client/features/rank-tracking/ScheduleField.tsx`, `scheduleTime.ts`)
 - `src/components/portal/schedule/ScheduleSummary.tsx` (from `src/client/features/ai-visibility/TrackingScheduleSummary.tsx`)
 
-- `src/lib/questions/workspaceQuestions.ts` (from `src/shared/ai-prompt-suggestions.ts`)
-- `src/lib/questions/applyQuestionPatch.ts` (from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts`)
-- `src/lib/questions/applyQuestionPatch.test.ts` (cases ported from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.test.ts`)
-- `src/lib/questions/panel.ts` (from `src/shared/ai-prompt-suggestions.ts`)
-- `src/lib/questions/state.ts` (from `src/server/features/ai-visibility/services/aiResearchKeywords.ts`)
-- `src/lib/questions/tools.ts` (from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts`)
-- `src/lib/questions/jobs.ts`
-- `src/lib/questions/questions.contract.ts`
+- `src/server/questions/workspaceQuestions.ts` (from `src/shared/ai-prompt-suggestions.ts`)
+- `src/server/questions/applyQuestionPatch.ts` (from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts`)
+- `src/server/questions/applyQuestionPatch.test.ts` (cases ported from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.test.ts`)
+- `src/server/questions/panel.ts` (from `src/shared/ai-prompt-suggestions.ts`)
+- `src/server/questions/state.ts` (from `src/server/features/ai-visibility/services/aiResearchKeywords.ts`)
+- `src/server/questions/tools.ts` (from `src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts`)
+- `src/server/questions/jobs.ts`
+- `src/server/questions/questions.contract.ts`
 - `src/app/api/customer/questions/route.ts`
 - `src/app/api/customer/questions/approve/route.ts`
-- `src/lib/questions/setup/readSite.ts` (from `src/server/lib/scrape.ts`)
-- `src/lib/questions/setup/promptgenSource.ts` (from `src/server/features/ai-visibility/services/promptGen.ts`)
-- `src/lib/questions/setup/prompts.ts`
-- `src/lib/questions/setup/schemas.ts`
-- `src/lib/questions/setup/research.ts` (from `src/server/features/projects/services/websiteResearch.ts`)
-- `src/lib/questions/setup/candidates.ts` (from `src/server/features/ai-visibility/services/websiteTrackingSetup.ts`)
-- `src/lib/questions/setup/save.ts` (from `src/server/features/projects/services/ProjectWebsiteService.ts`, `websiteTrackingSetup.ts`)
-- `src/lib/questions/generate.ts` (from `src/server/features/ai-visibility/services/aiPromptSuggestions.ts`)
-- `src/lib/questions/promptResearch.ts` (from `src/server/features/ai-visibility/services/aiPromptResearch.ts`)
+- `src/server/questions/setup/readSite.ts` (from `src/server/lib/scrape.ts`)
+- `src/server/questions/setup/promptgenSource.ts` (from `src/server/features/ai-visibility/services/promptGen.ts`)
+- `src/server/questions/setup/prompts.ts`
+- `src/server/questions/setup/schemas.ts`
+- `src/server/questions/setup/research.ts` (from `src/server/features/projects/services/websiteResearch.ts`)
+- `src/server/questions/setup/candidates.ts` (from `src/server/features/ai-visibility/services/websiteTrackingSetup.ts`)
+- `src/server/questions/setup/save.ts` (from `src/server/features/projects/services/ProjectWebsiteService.ts`, `websiteTrackingSetup.ts`)
+- `src/server/questions/generate.ts` (from `src/server/features/ai-visibility/services/aiPromptSuggestions.ts`)
+- `src/server/questions/promptResearch.ts` (from `src/server/features/ai-visibility/services/aiPromptResearch.ts`)
 - `src/app/api/customer/questions/setup/route.ts`
 - `src/app/api/customer/questions/setup/save/route.ts`
 - `src/app/api/customer/questions/generate/route.ts`
@@ -302,22 +302,22 @@ SOFTWARE.
 - `src/shared/audit-issues.ts` (from `src/shared/audit-issues.ts`)
 - `src/shared/audit-limits.ts` (from `src/shared/audit-limits.ts`)
 - `src/shared/lighthouse.ts` (from `src/shared/lighthouse.ts`)
-- `src/lib/audit/classifyFetch.ts` (from `src/server/lib/audit/classify-fetch.ts`)
-- `src/lib/audit/crawlThrottle.ts` (from `src/server/lib/audit/crawl-throttle.ts`)
-- `src/lib/audit/crawlWindow.ts` (from `src/server/lib/audit/crawl-window.ts`)
-- `src/lib/audit/discovery.ts` (from `src/server/lib/audit/discovery.ts`)
-- `src/lib/audit/fetchPage.ts` (from `src/server/workflows/site-audit-workflow-helpers.ts`)
-- `src/lib/audit/htmlResponse.ts` (from `src/server/lib/audit/html-response.ts`)
-- `src/lib/audit/hreflang.ts`
-- `src/lib/audit/ids.ts` (from `src/server/lib/audit/ids.ts`)
-- `src/lib/audit/issues/multipageChecks.ts` (from `src/server/lib/audit/issues/multipage-checks.ts`)
-- `src/lib/audit/issues/pageReporters.ts` (from `src/server/lib/audit/issues/page-reporters.ts`)
-- `src/lib/audit/pageAnalyzer.ts` (from `src/server/lib/audit/page-analyzer.ts`)
-- `src/lib/audit/robotsFile.ts` (from `src/server/lib/audit/discovery.ts`)
-- `src/lib/audit/structuredData.ts`
-- `src/lib/audit/types.ts` (from `src/server/lib/audit/types.ts`)
-- `src/lib/audit/urlPolicy.ts` (from `src/server/lib/audit/url-policy.ts`)
-- `src/lib/audit/urlUtils.ts` (from `src/server/lib/audit/url-utils.ts`)
+- `src/server/audit/classifyFetch.ts` (from `src/server/lib/audit/classify-fetch.ts`)
+- `src/server/audit/crawlThrottle.ts` (from `src/server/lib/audit/crawl-throttle.ts`)
+- `src/server/audit/crawlWindow.ts` (from `src/server/lib/audit/crawl-window.ts`)
+- `src/server/audit/discovery.ts` (from `src/server/lib/audit/discovery.ts`)
+- `src/server/audit/fetchPage.ts` (from `src/server/workflows/site-audit-workflow-helpers.ts`)
+- `src/server/audit/htmlResponse.ts` (from `src/server/lib/audit/html-response.ts`)
+- `src/server/audit/hreflang.ts`
+- `src/server/audit/ids.ts` (from `src/server/lib/audit/ids.ts`)
+- `src/server/audit/issues/multipageChecks.ts` (from `src/server/lib/audit/issues/multipage-checks.ts`)
+- `src/server/audit/issues/pageReporters.ts` (from `src/server/lib/audit/issues/page-reporters.ts`)
+- `src/server/audit/pageAnalyzer.ts` (from `src/server/lib/audit/page-analyzer.ts`)
+- `src/server/audit/robotsFile.ts` (from `src/server/lib/audit/discovery.ts`)
+- `src/server/audit/structuredData.ts`
+- `src/server/audit/types.ts` (from `src/server/lib/audit/types.ts`)
+- `src/server/audit/urlPolicy.ts` (from `src/server/lib/audit/url-policy.ts`)
+- `src/server/audit/urlUtils.ts` (from `src/server/lib/audit/url-utils.ts`)
 - `tests/fixtures/site-audit/types.ts` (from `tests/badseo/src/fixtures/types.ts`)
 - `tests/fixtures/site-audit/sites.ts`
 - `tests/fixtures/site-audit/fixtures/content.ts` (from `tests/badseo/src/fixtures/content.ts`)
@@ -329,29 +329,29 @@ SOFTWARE.
 - `tests/fixtures/site-audit/fixtures/performance.ts` (from `tests/badseo/src/fixtures/performance.ts`)
 - `tests/fixtures/site-audit/fixtures/redirects.ts` (from `tests/badseo/src/fixtures/redirects.ts`)
 - `tests/fixtures/site-audit/fixtures/structure.ts` (from `tests/badseo/src/fixtures/structure.ts`)
-- `src/lib/audit/crawlThrottle.test.ts` (from `src/server/lib/audit/crawl-throttle.test.ts`)
-- `src/lib/audit/crawlWindow.test.ts` (from `src/server/lib/audit/crawl-window.test.ts`)
-- `src/lib/audit/discovery.test.ts` (from `src/server/lib/audit/discovery.test.ts`)
-- `src/lib/audit/fetchPage.test.ts` (from `src/server/workflows/site-audit-workflow-helpers.test.ts`)
-- `src/lib/audit/issues/multipageChecks.test.ts` (from `src/server/lib/audit/issues/multipage-checks.ts`)
+- `src/server/audit/crawlThrottle.test.ts` (from `src/server/lib/audit/crawl-throttle.test.ts`)
+- `src/server/audit/crawlWindow.test.ts` (from `src/server/lib/audit/crawl-window.test.ts`)
+- `src/server/audit/discovery.test.ts` (from `src/server/lib/audit/discovery.test.ts`)
+- `src/server/audit/fetchPage.test.ts` (from `src/server/workflows/site-audit-workflow-helpers.test.ts`)
+- `src/server/audit/issues/multipageChecks.test.ts` (from `src/server/lib/audit/issues/multipage-checks.ts`)
 - `src/shared/ga4.ts` (from `src/shared/ga4.ts`, `src/shared/google-link.ts`)
-- `src/lib/ga4/config.ts` (from `src/server/features/google/oauth-config.ts`)
-- `src/lib/ga4/errors.ts` (from `src/server/lib/ga4Errors.ts`)
-- `src/lib/ga4/tokens.ts` (from `src/server/features/google/googleOAuth.ts`)
-- `src/lib/ga4/grants.ts` (from `src/server/features/google/GoogleAccountRepository.ts`)
-- `src/lib/ga4/accounts.ts` (from `src/server/features/google/GoogleAccountService.ts`, `googleDataRetention.ts`)
-- `src/lib/ga4/oauth.ts` (from `src/server/features/google/googleOAuth.ts`)
-- `src/lib/ga4/client.ts` (from `src/server/lib/ga4Client.ts`)
-- `src/lib/ga4/connection.ts` (from `src/server/features/ga4/services/Ga4Service.ts`, `src/server/features/ga4/repositories/Ga4ConnectionRepository.ts`)
-- `src/lib/ga4/client.test.ts` (from `src/server/lib/ga4Client.test.ts`)
+- `src/server/ga4/config.ts` (from `src/server/features/google/oauth-config.ts`)
+- `src/server/ga4/errors.ts` (from `src/server/lib/ga4Errors.ts`)
+- `src/server/ga4/tokens.ts` (from `src/server/features/google/googleOAuth.ts`)
+- `src/server/ga4/grants.ts` (from `src/server/features/google/GoogleAccountRepository.ts`)
+- `src/server/ga4/accounts.ts` (from `src/server/features/google/GoogleAccountService.ts`, `googleDataRetention.ts`)
+- `src/server/ga4/oauth.ts` (from `src/server/features/google/googleOAuth.ts`)
+- `src/server/ga4/client.ts` (from `src/server/lib/ga4Client.ts`)
+- `src/server/ga4/connection.ts` (from `src/server/features/ga4/services/Ga4Service.ts`, `src/server/features/ga4/repositories/Ga4ConnectionRepository.ts`)
+- `src/server/ga4/client.test.ts` (from `src/server/lib/ga4Client.test.ts`)
 - `src/components/portal/settings/integrations/Ga4ConnectionCard.tsx` (from `src/client/features/integrations/GoogleConnectionCard.tsx`)
 - `src/components/portal/settings/integrations/Ga4PropertyPicker.tsx` (from `src/client/features/integrations/GooglePropertyPicker.tsx`)
 - `src/components/portal/settings/integrations/Ga4LinkErrorAlert.tsx` (from `src/client/features/integrations/googleAuthErrorCopy.ts`)
 - `src/components/portal/settings/integrations/GoogleAccountRemovalDialog.tsx` (from `src/client/features/integrations/GoogleAccountRemovalDialog.tsx`)
 - `src/shared/indexnow.ts` (from `src/client/features/settings/IndexNowSettings.tsx`)
-- `src/lib/indexnow/keys.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
-- `src/lib/indexnow/keyFile.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
-- `src/lib/indexnow/submit.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
+- `src/server/indexnow/keys.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
+- `src/server/indexnow/keyFile.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
+- `src/server/indexnow/submit.ts` (from `src/server/features/indexnow/services/IndexNowService.ts`)
 - `src/components/portal/indexnow/IndexNowPanel.tsx` (from `src/client/features/settings/IndexNowSettings.tsx`)
 - `src/components/portal/indexnow/IndexNowSettings.tsx` (from `src/client/features/settings/IndexNowSettings.tsx`)
 - `src/components/portal/indexnow/KeyFileStep.tsx` (from `src/client/features/settings/IndexNowSettings.tsx`)
@@ -372,43 +372,43 @@ SOFTWARE.
 - `src/components/portal/context/hooks/useProjectContext.ts` (from `src/client/features/projects/project-context/shared.tsx`)
 - `src/components/portal/context/editableList.ts` (from `src/client/features/projects/project-context/EditableListSection.tsx`)
 - `src/components/portal/context/editableList.test.ts` (from `src/client/features/projects/project-context/EditableListSection.test.ts`)
-- `src/lib/email/sweeps.ts` (from `src/server/features/audit/services/firstAuditEmails.ts`, `src/server/email/onboarding-drip.ts`)
-- `src/lib/email/spendCap.ts` (from `src/server/email/onboarding-drip.ts`)
-- `src/lib/email/signup.ts` (from `src/server/email/loops.ts`)
+- `src/server/email/sweeps.ts` (from `src/server/features/audit/services/firstAuditEmails.ts`, `src/server/email/onboarding-drip.ts`)
+- `src/server/email/spendCap.ts` (from `src/server/email/onboarding-drip.ts`)
+- `src/server/email/signup.ts` (from `src/server/email/loops.ts`)
 
-- `src/lib/audit/store.ts` (from `src/server/features/audit/AuditScratchpad.ts`, `src/server/features/audit/AuditRepository.ts`)
-- `src/lib/audit/memoryStore.ts` (from `src/server/features/audit/AuditScratchpad.ts`, `src/server/features/audit/AuditRepository.ts`)
-- `src/lib/audit/store.test.ts` (from `src/server/features/audit/AuditScratchpad.test.ts`)
-- `src/lib/audit/job.ts` (from `src/server/workflows/SiteAuditWorkflow.ts`, `src/server/workflows/auditStepConfigs.ts`)
-- `src/lib/audit/job.test.ts` (from `src/server/workflows/SiteAuditWorkflow.test.ts`)
-- `src/lib/audit/crawlPhase.ts` (from `src/server/workflows/siteAuditWorkflowCrawl.ts`)
-- `src/lib/audit/crawlPhase.test.ts` (from `src/server/workflows/siteAuditWorkflowCrawl.test.ts`)
-- `src/lib/audit/phases.ts` (from `src/server/workflows/siteAuditWorkflowPhases.ts`)
-- `src/lib/audit/errors.ts` (from `src/server/lib/audit/audit-errors.ts`)
-- `src/lib/audit/reconcile.ts` (from `src/server/features/audit/auditReconciler.ts`)
-- `src/lib/audit/reconcile.test.ts` (from `src/server/features/audit/auditReconciler.test.ts`)
-- `src/lib/audit/issues/multipage.ts` (from `src/server/lib/audit/issues/multipage.ts`)
-- `src/lib/audit/cancel.ts` (from `src/server/features/audit/services/AuditService.ts`)
-- `src/lib/audit/retention.ts` (from `src/server/workflows/SiteAuditWorkflow.ts`)
-- `src/lib/audit/retention.test.ts` (from `src/server/workflows/SiteAuditWorkflow.test.ts`)
-- `src/lib/audit/telemetry.ts` (from `src/server/features/audit/telemetry.ts`)
+- `src/server/audit/store.ts` (from `src/server/features/audit/AuditScratchpad.ts`, `src/server/features/audit/AuditRepository.ts`)
+- `src/server/audit/memoryStore.ts` (from `src/server/features/audit/AuditScratchpad.ts`, `src/server/features/audit/AuditRepository.ts`)
+- `src/server/audit/store.test.ts` (from `src/server/features/audit/AuditScratchpad.test.ts`)
+- `src/server/audit/job.ts` (from `src/server/workflows/SiteAuditWorkflow.ts`, `src/server/workflows/auditStepConfigs.ts`)
+- `src/server/audit/job.test.ts` (from `src/server/workflows/SiteAuditWorkflow.test.ts`)
+- `src/server/audit/crawlPhase.ts` (from `src/server/workflows/siteAuditWorkflowCrawl.ts`)
+- `src/server/audit/crawlPhase.test.ts` (from `src/server/workflows/siteAuditWorkflowCrawl.test.ts`)
+- `src/server/audit/phases.ts` (from `src/server/workflows/siteAuditWorkflowPhases.ts`)
+- `src/server/audit/errors.ts` (from `src/server/lib/audit/audit-errors.ts`)
+- `src/server/audit/reconcile.ts` (from `src/server/features/audit/auditReconciler.ts`)
+- `src/server/audit/reconcile.test.ts` (from `src/server/features/audit/auditReconciler.test.ts`)
+- `src/server/audit/issues/multipage.ts` (from `src/server/lib/audit/issues/multipage.ts`)
+- `src/server/audit/cancel.ts` (from `src/server/features/audit/services/AuditService.ts`)
+- `src/server/audit/retention.ts` (from `src/server/workflows/SiteAuditWorkflow.ts`)
+- `src/server/audit/retention.test.ts` (from `src/server/workflows/SiteAuditWorkflow.test.ts`)
+- `src/server/audit/telemetry.ts` (from `src/server/features/audit/telemetry.ts`)
 - `scripts/qa/check-f18-db.mjs` (from `src/server/features/audit/AuditScratchpad.test.ts`)
-- `src/lib/audit/crawlerAccess.ts` (from `src/shared/crawler-access.ts`, `src/server/features/audit/services/CrawlerCredentialService.ts`, `src/server/features/audit/repositories/CrawlerCredentialRepository.ts`)
-- `src/lib/audit/shopifySignature.ts` (from `src/server/features/audit/services/shopifySignature.ts`)
-- `src/lib/audit/crawlerAccess.test.ts` (from `src/shared/crawler-access.test.ts`, `src/server/features/audit/services/CrawlerCredentialService.test.ts`, `src/server/features/audit/services/AuditService.crawlerAccess.test.ts`)
+- `src/server/audit/crawlerAccess.ts` (from `src/shared/crawler-access.ts`, `src/server/features/audit/services/CrawlerCredentialService.ts`, `src/server/features/audit/repositories/CrawlerCredentialRepository.ts`)
+- `src/server/audit/shopifySignature.ts` (from `src/server/features/audit/services/shopifySignature.ts`)
+- `src/server/audit/crawlerAccess.test.ts` (from `src/shared/crawler-access.test.ts`, `src/server/features/audit/services/CrawlerCredentialService.test.ts`, `src/server/features/audit/services/AuditService.crawlerAccess.test.ts`)
 - `src/components/portal/audit/crawlerAccess/ShopifyCrawlWarning.tsx` (from `src/client/features/audit/results/ShopifyCrawlWarning.tsx`)
-- `src/lib/providers/dataforseo/client.ts`
-- `src/lib/providers/dataforseo/client.test.ts`
-- `src/lib/providers/dataforseo/serp.ts`
-- `src/lib/providers/dataforseo/serp.test.ts`
-- `src/lib/providers/dataforseo/index.ts`
-- `src/lib/providers/dataforseo/labs.ts` (from `src/server/lib/dataforseo/labs.ts`)
-- `src/lib/providers/dataforseo/google-ads.ts` (from `src/server/lib/dataforseo/google-ads.ts`)
-- `src/lib/providers/dataforseo/keyword-metrics.ts` (from `src/server/lib/dataforseo/keyword-metrics.ts`)
-- `src/lib/providers/dataforseo/keyword-metrics.test.ts` (from `src/server/lib/dataforseo/keyword-metrics.test.ts`)
-- `src/lib/providers/dataforseo/filters.ts` (from `src/server/lib/dataforseo/filters.ts`)
-- `src/lib/providers/dataforseo/researchScopeFilters.ts` (from `src/server/lib/dataforseo/researchScopeFilters.ts`)
-- `src/lib/research/target.ts` (from `src/server/lib/domainUtils.ts`)
+- `src/shared/providers/dataforseo/client.ts`
+- `src/shared/providers/dataforseo/client.test.ts`
+- `src/shared/providers/dataforseo/serp.ts`
+- `src/shared/providers/dataforseo/serp.test.ts`
+- `src/shared/providers/dataforseo/index.ts`
+- `src/shared/providers/dataforseo/labs.ts` (from `src/server/lib/dataforseo/labs.ts`)
+- `src/shared/providers/dataforseo/google-ads.ts` (from `src/server/lib/dataforseo/google-ads.ts`)
+- `src/shared/providers/dataforseo/keyword-metrics.ts` (from `src/server/lib/dataforseo/keyword-metrics.ts`)
+- `src/shared/providers/dataforseo/keyword-metrics.test.ts` (from `src/server/lib/dataforseo/keyword-metrics.test.ts`)
+- `src/shared/providers/dataforseo/filters.ts` (from `src/server/lib/dataforseo/filters.ts`)
+- `src/shared/providers/dataforseo/researchScopeFilters.ts` (from `src/server/lib/dataforseo/researchScopeFilters.ts`)
+- `src/server/research/target.ts` (from `src/server/lib/domainUtils.ts`)
 - `src/shared/researchScope.ts` (from `src/shared/researchScope.ts`)
 - `src/shared/keyword-locations.ts` (from `src/shared/keyword-locations.ts`)
 - `src/shared/keywords.ts` (from `src/shared/keywords.ts`)
@@ -420,73 +420,73 @@ SOFTWARE.
 - `src/components/app/SearchCard.tsx` (from `src/client/components/SearchCard.tsx`)
 - `src/app/api/customer/keywords/research/route.ts` (from `src/serverFunctions/keywords.ts`)
 - `src/app/api/customer/keywords/serp/route.ts` (from `src/serverFunctions/serp-locations.ts`)
-- `src/lib/keywords/helpers.ts` (from `src/server/features/keywords/services/research/helpers.ts`)
-- `src/lib/keywords/keywords.contract.ts` (from `src/types/schemas/keywords.ts`)
-- `src/lib/keywords/research.ts` (from `src/server/features/keywords/services/research/research.ts`)
-- `src/lib/keywords/research.test.ts` (from `src/server/features/keywords/services/research/research.test.ts`)
-- `src/lib/keywords/researchData.ts` (from `src/server/features/keywords/services/research/research-data.ts`)
-- `src/lib/keywords/selection.ts` (from `src/server/features/keywords/services/research/selection.ts`)
-- `src/lib/keywords/serp.ts` (from `src/server/features/keywords/services/research/serp.ts`)
-- `src/lib/keywords/serp.test.ts` (from `src/server/features/keywords/services/research/serp.test.ts`)
-- `src/lib/keywords/tools.ts` (from `src/server/mcp/tools/`)
+- `src/server/keywords/helpers.ts` (from `src/server/features/keywords/services/research/helpers.ts`)
+- `src/server/keywords/keywords.contract.ts` (from `src/types/schemas/keywords.ts`)
+- `src/server/keywords/research.ts` (from `src/server/features/keywords/services/research/research.ts`)
+- `src/server/keywords/research.test.ts` (from `src/server/features/keywords/services/research/research.test.ts`)
+- `src/server/keywords/researchData.ts` (from `src/server/features/keywords/services/research/research-data.ts`)
+- `src/server/keywords/selection.ts` (from `src/server/features/keywords/services/research/selection.ts`)
+- `src/server/keywords/serp.ts` (from `src/server/features/keywords/services/research/serp.ts`)
+- `src/server/keywords/serp.test.ts` (from `src/server/features/keywords/services/research/serp.test.ts`)
+- `src/server/keywords/tools.ts` (from `src/server/mcp/tools/`)
 - `src/app/api/customer/keywords/saved/route.ts` (from `src/serverFunctions/keywords.ts`, `src/server/features/keywords/services/research/saved-keywords.ts`)
 - `src/app/api/customer/keywords/saved/remove/route.ts` (from `src/server/features/keywords/services/research/saved-keywords.ts`)
 - `src/app/api/customer/keywords/saved/tags/route.ts` (from `src/server/features/keywords/services/research/saved-keywords.ts`)
 - `src/app/api/customer/keywords/tags/[tagId]/route.ts` (from `src/server/features/keywords/services/research/saved-keywords.ts`)
 - `src/app/api/customer/keywords/saved/export/route.ts` (from `src/serverFunctions/keywords.ts`, `src/server/features/keywords/services/research/saved-keywords.ts`)
-- `src/lib/providers/dataforseo/serp-locations.ts` (from `src/server/lib/dataforseo/serp-locations.ts`)
+- `src/shared/providers/dataforseo/serp-locations.ts` (from `src/server/lib/dataforseo/serp-locations.ts`)
 - `src/shared/serp-location-search.ts` (from `src/shared/serp-location-search.ts`)
-- `src/lib/keywords/localVolume.ts` (from `src/server/features/keywords/services/research/local-volume.ts`)
+- `src/server/keywords/localVolume.ts` (from `src/server/features/keywords/services/research/local-volume.ts`)
 - `src/app/api/customer/keywords/locations/route.ts` (from `src/serverFunctions/serp-locations.ts`)
 - `src/shared/serp-location-search.test.ts` (from `src/shared/serp-location-search.test.ts`)
-- `src/lib/keywords/localVolume.test.ts` (from `src/server/features/keywords/services/research/research.test.ts`)
+- `src/server/keywords/localVolume.test.ts` (from `src/server/features/keywords/services/research/research.test.ts`)
 - `src/components/portal/keywords/research/SerpLocationCombobox.tsx` (from `src/client/components/SerpLocationCombobox.tsx`)
 - `src/components/portal/keywords/research/usePrewarmSerpLocations.tsx` (from `src/client/components/usePrewarmSerpLocations.ts`)
 - `src/components/portal/keywords/research/KeywordAreaField.tsx` (from `src/client/features/keywords/page/KeywordAreaField.tsx`)
 - `src/app/api/customer/keywords/saved/refresh/route.ts` (from `src/server/features/keywords/services/research/refresh-metrics.ts`)
-- `src/lib/keywords/repository.ts` (from `src/server/features/keywords/repositories/KeywordResearchRepository.ts`, `src/server/features/keywords/repositories/SavedKeywordTagsRepository.ts`)
-- `src/lib/keywords/memoryRepository.ts` (from `src/server/features/keywords/repositories/KeywordResearchRepository.ts`, `src/server/features/keywords/repositories/SavedKeywordTagsRepository.ts`)
-- `src/lib/keywords/savedKeywords.ts` (from `src/server/features/keywords/services/research/saved-keywords.ts`)
-- `src/lib/keywords/refreshMetrics.ts` (from `src/server/features/keywords/services/research/refresh-metrics.ts`)
-- `src/lib/keywords/jobs.ts` (from `src/server/features/keywords/services/research/refresh-metrics.ts`, `src/server/workflows/auditStepConfigs.ts`)
-- `src/lib/domain/domain.contract.ts` (from `src/types/schemas/domain.ts`)
-- `src/lib/domain/domainKeywordFilters.ts` (from `src/server/features/domain/services/domainKeywordFilters.ts`)
-- `src/lib/domain/domainKeywordMapper.ts` (from `src/server/features/domain/services/domainKeywordMapper.ts`)
-- `src/lib/domain/domainPagesFilters.ts` (from `src/server/features/domain/services/domainPagesPage.ts`)
-- `src/lib/domain/domainService.ts` (from `src/server/features/domain/services/DomainService.ts`, `domainKeywordsPage.ts`, `domainPagesPage.ts`)
-- `src/lib/domain/pagination.ts` (from `src/server/features/domain/services/pagination.ts`)
-- `src/lib/pricing/actions/domain.ts` (from `src/serverFunctions/domain.ts`)
-- `src/lib/domain/serpCompetitors.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`)
+- `src/server/keywords/repository.ts` (from `src/server/features/keywords/repositories/KeywordResearchRepository.ts`, `src/server/features/keywords/repositories/SavedKeywordTagsRepository.ts`)
+- `src/server/keywords/memoryRepository.ts` (from `src/server/features/keywords/repositories/KeywordResearchRepository.ts`, `src/server/features/keywords/repositories/SavedKeywordTagsRepository.ts`)
+- `src/server/keywords/savedKeywords.ts` (from `src/server/features/keywords/services/research/saved-keywords.ts`)
+- `src/server/keywords/refreshMetrics.ts` (from `src/server/features/keywords/services/research/refresh-metrics.ts`)
+- `src/server/keywords/jobs.ts` (from `src/server/features/keywords/services/research/refresh-metrics.ts`, `src/server/workflows/auditStepConfigs.ts`)
+- `src/server/domain/domain.contract.ts` (from `src/types/schemas/domain.ts`)
+- `src/server/domain/domainKeywordFilters.ts` (from `src/server/features/domain/services/domainKeywordFilters.ts`)
+- `src/server/domain/domainKeywordMapper.ts` (from `src/server/features/domain/services/domainKeywordMapper.ts`)
+- `src/server/domain/domainPagesFilters.ts` (from `src/server/features/domain/services/domainPagesPage.ts`)
+- `src/server/domain/domainService.ts` (from `src/server/features/domain/services/DomainService.ts`, `domainKeywordsPage.ts`, `domainPagesPage.ts`)
+- `src/server/domain/pagination.ts` (from `src/server/features/domain/services/pagination.ts`)
+- `src/shared/pricing/actions/domain.ts` (from `src/serverFunctions/domain.ts`)
+- `src/server/domain/serpCompetitors.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`)
 
-- `src/lib/providers/dataforseo/backlinks.ts` (from `src/server/lib/dataforseo/backlinks.ts`)
-- `src/lib/providers/dataforseo/backlinks.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)
-- `src/lib/providers/dataforseo/backlinksTarget.ts` (from `src/server/lib/dataforseoBacklinksTarget.ts`)
-- `src/lib/providers/dataforseo/backlinksTarget.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)
-- `src/lib/providers/dataforseo/business.ts` (from `src/server/lib/dataforseo/business.ts`)
-- `src/lib/providers/dataforseo/business.test.ts` (from `src/server/lib/dataforseo/business.test.ts`)
-- `src/lib/local/shared.ts` (from `src/server/mcp/tools/local-seo-shared.ts`, `src/server/mcp/table.ts`, `src/server/mcp/tools/dataforseo-research-tools.ts`)
-- `src/lib/local/shared.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
-- `src/lib/local/rowFields.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`, `src/server/mcp/tools/local-seo-tools.ts`)
-- `src/lib/local/rowFields.test.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`, `src/server/mcp/tools/local-seo-tools.ts`)
-- `src/lib/local/grid.ts` (from `src/server/mcp/tools/local-seo-tools.ts`)
-- `src/lib/local/grid.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
+- `src/shared/providers/dataforseo/backlinks.ts` (from `src/server/lib/dataforseo/backlinks.ts`)
+- `src/shared/providers/dataforseo/backlinks.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)
+- `src/shared/providers/dataforseo/backlinksTarget.ts` (from `src/server/lib/dataforseoBacklinksTarget.ts`)
+- `src/shared/providers/dataforseo/backlinksTarget.test.ts` (from `src/server/lib/dataforseo/backlinks.test.ts`)
+- `src/shared/providers/dataforseo/business.ts` (from `src/server/lib/dataforseo/business.ts`)
+- `src/shared/providers/dataforseo/business.test.ts` (from `src/server/lib/dataforseo/business.test.ts`)
+- `src/server/local/shared.ts` (from `src/server/mcp/tools/local-seo-shared.ts`, `src/server/mcp/table.ts`, `src/server/mcp/tools/dataforseo-research-tools.ts`)
+- `src/server/local/shared.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
+- `src/server/local/rowFields.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`, `src/server/mcp/tools/local-seo-tools.ts`)
+- `src/server/local/rowFields.test.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`, `src/server/mcp/tools/local-seo-tools.ts`)
+- `src/server/local/grid.ts` (from `src/server/mcp/tools/local-seo-tools.ts`)
+- `src/server/local/grid.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
 - `src/shared/backlinks.ts` (from `src/types/schemas/backlinks.ts`, `src/client/features/backlinks/backlinksFilterTypes.ts`, `src/client/features/backlinks/backlinksPageUtils.ts`, `src/client/features/backlinks/export.ts`, `src/client/features/backlinks/backlinksPageTypes.ts`)
-- `src/lib/backlinks/backlinksApiFilters.ts` (from `src/server/features/backlinks/services/backlinksApiFilters.ts`)
-- `src/lib/backlinks/backlinksOverviewSchema.ts` (from `src/server/features/backlinks/services/backlinksOverviewSchema.ts`)
-- `src/lib/backlinks/backlinksRowMappers.ts` (from `src/server/features/backlinks/services/backlinksRowMappers.ts`)
-- `src/lib/backlinks/backlinksSubfolderOverview.ts` (from `src/server/features/backlinks/services/backlinksSubfolderOverview.ts`)
-- `src/lib/backlinks/backlinksService.ts` (from `src/server/features/backlinks/services/BacklinksService.ts`, `backlinksServiceData.ts`)
-- `src/lib/backlinks/backlinks.contract.ts` (from `src/types/schemas/backlinks.ts`)
-- `src/lib/workers/queuedCollection.js` (from `src/server/features/ai-visibility/services/aiVisibilityCollection.ts`, `src/server/workflows/AiVisibilityWorkflow.ts`)
-- `src/lib/engines/dataforseo.ts` (from `src/server/features/ai-visibility/services/aiVisibilityCollection.ts`)
-- `src/lib/local/profile.ts` (from `src/server/mcp/tools/local-seo-tools.ts`)
-- `src/lib/local/listings.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`, `src/server/mcp/tools/local-seo-tools.ts`)
-- `src/lib/local/listings.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
-- `src/lib/local/fetches.ts` (from `src/server/mcp/tools/local-seo-tools.ts`, `src/server/mcp/tools/dataforseo-research-tools.ts`)
-- `src/lib/local/fetches.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
-- `src/lib/local/grid.service.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
-- `src/lib/local/localSerp.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`)
-- `src/lib/local/localSerp.test.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`)
+- `src/server/backlinks/backlinksApiFilters.ts` (from `src/server/features/backlinks/services/backlinksApiFilters.ts`)
+- `src/server/backlinks/backlinksOverviewSchema.ts` (from `src/server/features/backlinks/services/backlinksOverviewSchema.ts`)
+- `src/server/backlinks/backlinksRowMappers.ts` (from `src/server/features/backlinks/services/backlinksRowMappers.ts`)
+- `src/server/backlinks/backlinksSubfolderOverview.ts` (from `src/server/features/backlinks/services/backlinksSubfolderOverview.ts`)
+- `src/server/backlinks/backlinksService.ts` (from `src/server/features/backlinks/services/BacklinksService.ts`, `backlinksServiceData.ts`)
+- `src/server/backlinks/backlinks.contract.ts` (from `src/types/schemas/backlinks.ts`)
+- `src/server/workers/queuedCollection.js` (from `src/server/features/ai-visibility/services/aiVisibilityCollection.ts`, `src/server/workflows/AiVisibilityWorkflow.ts`)
+- `src/shared/engines/dataforseo.ts` (from `src/server/features/ai-visibility/services/aiVisibilityCollection.ts`)
+- `src/server/local/profile.ts` (from `src/server/mcp/tools/local-seo-tools.ts`)
+- `src/server/local/listings.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`, `src/server/mcp/tools/local-seo-tools.ts`)
+- `src/server/local/listings.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
+- `src/server/local/fetches.ts` (from `src/server/mcp/tools/local-seo-tools.ts`, `src/server/mcp/tools/dataforseo-research-tools.ts`)
+- `src/server/local/fetches.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
+- `src/server/local/grid.service.test.ts` (from `src/server/mcp/tools/local-seo-tools.test.ts`)
+- `src/server/local/localSerp.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`)
+- `src/server/local/localSerp.test.ts` (from `src/server/mcp/tools/dataforseo-research-tools.ts`)
 - `src/components/portal/backlinks/BacklinksPage.tsx` (from `src/client/features/backlinks/BacklinksPage.tsx`)
 - `src/components/portal/backlinks/BacklinksSearchCard.tsx` (from `src/client/features/backlinks/BacklinksSearchCard.tsx`)
 - `src/components/portal/backlinks/BacklinksPageContent.tsx` (from `src/client/features/backlinks/BacklinksPageContent.tsx`)
@@ -579,26 +579,26 @@ SOFTWARE.
 - src/shared/rank-tracking.ts
 - src/shared/rank-tracking-filters.ts
 - src/shared/google-serp-url.ts
-- src/lib/rank-tracking/cost.ts
-- src/lib/rank-tracking/market.ts
-- src/lib/rank-tracking/retries.ts
-- src/lib/rank-tracking/schedules.ts
-- src/lib/rank-tracking/repository.ts
-- src/lib/rank-tracking/memoryRepository.ts
+- src/shared/rank-tracking/cost.ts
+- src/shared/rank-tracking/market.ts
+- src/shared/rank-tracking/retries.ts
+- src/shared/rank-tracking/schedules.ts
+- src/shared/rank-tracking/repository.ts
+- src/shared/rank-tracking/memoryRepository.ts
 - supabase/migrations/110_f15_rank_tracking.sql
 - supabase/migrations/111_f15_rank_tracking_functions.sql
 - src/shared/rank-tracking.test.ts
 - src/shared/rank-tracking-filters.test.ts
 - src/shared/google-serp-url.test.ts
-- src/lib/rank-tracking/cost.test.ts
-- src/lib/rank-tracking/retries.test.ts
-- src/lib/rank-tracking/schedules.test.ts
+- src/shared/rank-tracking/cost.test.ts
+- src/shared/rank-tracking/retries.test.ts
+- src/shared/rank-tracking/schedules.test.ts
 
 ### F06 Phase 3 ports
-- src/lib/export/serverCsv.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
-- src/lib/export/serverExport.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
-- src/lib/export/kinds/workspaceAnswers.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
-- src/lib/export/kinds/siteAudit.ts (from `src/client/features/audit/results/export.ts`)
+- src/shared/export/serverCsv.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/shared/export/serverExport.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/shared/export/kinds/workspaceAnswers.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
+- src/shared/export/kinds/siteAudit.ts (from `src/client/features/audit/results/export.ts`)
 - src/app/api/customer/exports/route.ts (from `src/server/features/ai-visibility/services/aiVisibilityExport.ts`)
 
 ### F08 Phase 4 ports
@@ -633,39 +633,39 @@ SOFTWARE.
 - `src/app/portal/audit/[auditId]/page.tsx` (from `openseo:src/routes/_app/p/$projectId/audit/index.tsx`)
 
 ### F20 Phase 3 ports
-- `src/lib/ga4/dates.ts` (from `openseo:src/server/features/ga4/services/Ga4Dates.ts`)
-- `src/lib/ga4/reportDefinitions.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportDefinitions.ts`)
-- `src/lib/ga4/normalization.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportNormalization.ts`)
-- `src/lib/ga4/enhancements.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportEnhancements.ts`)
-- `src/lib/ga4/reporting.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportingService.ts`)
-- `src/lib/ga4/overview.ts` (from `openseo:src/server/features/ga4/services/Ga4OrganicOverviewService.ts`)
-- `src/lib/ga4/measurementHealth.ts` (from `openseo:src/server/features/ga4/services/Ga4MeasurementHealthService.ts`)
-- `src/lib/ga4/reportDefinitions.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportDefinitions.ts`)
-- `src/lib/ga4/normalization.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportNormalization.ts`)
-- `src/lib/ga4/enhancements.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportEnhancements.test.ts`)
-- `src/lib/ga4/reporting.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportingService.test.ts`)
-- `src/lib/ga4/overview.test.ts` (from `openseo:src/server/features/ga4/services/Ga4OrganicOverviewService.test.ts`)
-- `src/lib/ga4/measurementHealth.test.ts` (from `openseo:src/server/features/ga4/services/Ga4MeasurementHealthService.test.ts`)
+- `src/server/ga4/dates.ts` (from `openseo:src/server/features/ga4/services/Ga4Dates.ts`)
+- `src/server/ga4/reportDefinitions.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportDefinitions.ts`)
+- `src/server/ga4/normalization.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportNormalization.ts`)
+- `src/server/ga4/enhancements.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportEnhancements.ts`)
+- `src/server/ga4/reporting.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportingService.ts`)
+- `src/server/ga4/overview.ts` (from `openseo:src/server/features/ga4/services/Ga4OrganicOverviewService.ts`)
+- `src/server/ga4/measurementHealth.ts` (from `openseo:src/server/features/ga4/services/Ga4MeasurementHealthService.ts`)
+- `src/server/ga4/reportDefinitions.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportDefinitions.ts`)
+- `src/server/ga4/normalization.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportNormalization.ts`)
+- `src/server/ga4/enhancements.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportEnhancements.test.ts`)
+- `src/server/ga4/reporting.test.ts` (from `openseo:src/server/features/ga4/services/Ga4ReportingService.test.ts`)
+- `src/server/ga4/overview.test.ts` (from `openseo:src/server/features/ga4/services/Ga4OrganicOverviewService.test.ts`)
+- `src/server/ga4/measurementHealth.test.ts` (from `openseo:src/server/features/ga4/services/Ga4MeasurementHealthService.test.ts`)
 
 ### F20 Phase 4 ports
-- `src/lib/ga4/gscPages.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.ts` (GSC half))
-- `src/lib/ga4/opportunities.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.ts`)
-- `src/lib/ga4/opportunities.test.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.test.ts:68-202`)
+- `src/server/ga4/gscPages.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.ts` (GSC half))
+- `src/server/ga4/opportunities.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.ts`)
+- `src/server/ga4/opportunities.test.ts` (from `openseo:src/server/features/ga4/services/SearchOpportunityService.test.ts:68-202`)
 - `src/app/api/customer/ga4/opportunities/route.ts` (from `openseo:src/serverFunctions/ga4.ts`, `openseo:src/server/features/ga4/services/SearchOpportunityService.ts:246-290`)
 
 ### F13 Phase 6 ports
-- `src/lib/keywords/clustering.ts` (ideas only from `openseo:.agents/skills/keyword-clustering/SKILL.md`)
+- `src/server/keywords/clustering.ts` (ideas only from `openseo:.agents/skills/keyword-clustering/SKILL.md`)
 - `src/app/api/customer/keywords/cluster/route.ts` (from `openseo:src/serverFunctions/keywords.ts`)
 
 
 ### F18 Phase 5 ports
-- src/lib/providers/dataforseo/lighthouse.ts (from src/server/lib/dataforseo/lighthouse.ts)
-- src/lib/audit/lighthouse.ts (from src/server/lib/audit/lighthouse.ts)
-- src/lib/audit/lighthousePayload.ts (from src/server/lib/lighthousePayload.ts, src/server/lib/lighthouseStoredPayload.ts, src/server/lib/dataforseoLighthousePayload.ts)
-- src/lib/providers/dataforseo/lighthouse.test.ts (from src/server/lib/dataforseo/lighthouse.test.ts)
-- src/lib/audit/lighthouse.test.ts (from src/server/lib/audit/lighthouse.test.ts)
-- src/lib/audit/lighthousePayload.test.ts (from src/server/lib/lighthousePayload.test.ts, src/server/lib/lighthouseStoredPayload.test.ts, src/server/lib/dataforseoLighthousePayload.test.ts)
-- src/lib/audit/lighthousePhase.test.ts (from src/server/workflows/siteAuditWorkflowPhases.test.ts)
+- src/shared/providers/dataforseo/lighthouse.ts (from src/server/lib/dataforseo/lighthouse.ts)
+- src/server/audit/lighthouse.ts (from src/server/lib/audit/lighthouse.ts)
+- src/server/audit/lighthousePayload.ts (from src/server/lib/lighthousePayload.ts, src/server/lib/lighthouseStoredPayload.ts, src/server/lib/dataforseoLighthousePayload.ts)
+- src/shared/providers/dataforseo/lighthouse.test.ts (from src/server/lib/dataforseo/lighthouse.test.ts)
+- src/server/audit/lighthouse.test.ts (from src/server/lib/audit/lighthouse.test.ts)
+- src/server/audit/lighthousePayload.test.ts (from src/server/lib/lighthousePayload.test.ts, src/server/lib/lighthouseStoredPayload.test.ts, src/server/lib/dataforseoLighthousePayload.test.ts)
+- src/server/audit/lighthousePhase.test.ts (from src/server/workflows/siteAuditWorkflowPhases.test.ts)
 - src/components/portal/audit/lighthouse/LighthouseIssuesScreen.tsx (from src/client/features/lighthouse/issues/LighthouseIssuesScreen.tsx)
 - src/components/portal/audit/lighthouse/LighthouseIssuesParts.tsx (from src/client/features/lighthouse/issues/LighthouseIssuesParts.tsx)
 - src/components/portal/audit/lighthouse/LighthouseIssueRow.tsx (from src/client/features/lighthouse/issues/LighthouseIssueRow.tsx)
@@ -675,35 +675,35 @@ SOFTWARE.
 - src/app/portal/audit/[auditId]/lighthouse/[resultId]/page.tsx (from src/routes/_app/p/$projectId/audit/issues/$resultId.tsx)
 
 ### F15 Phase 2 ports
-- `src/lib/rank-tracking/service.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.ts`)
-- `src/lib/rank-tracking/runGuards.ts` (from `openseo:src/server/features/rank-tracking/services/rankCheckRunGuards.ts`)
-- `src/lib/rank-tracking/checkPaths.ts` (from `openseo:src/server/workflows/rankCheckPaths.ts`)
-- `src/lib/rank-tracking/retries.ts` (from `openseo:src/server/workflows/rankCheckRetries.ts`)
-- `src/lib/rank-tracking/checkJob.ts` (from `openseo:src/server/workflows/RankCheckWorkflow.ts`)
-- `src/lib/rank-tracking/results.ts` (from `openseo:src/server/features/rank-tracking/services/rankTrackingResults.ts`)
-- `src/lib/pricing/actions/rankTracking.ts` (from `openseo:src/shared/rank-tracking.ts`)
-- `src/lib/rank-tracking/jobs.ts` (from `openseo:src/server/features/rank-tracking/jobs`)
-- `src/lib/rank-tracking/service.test.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.test.ts`)
-- `src/lib/rank-tracking/rankTracking.contract.ts` (from `openseo:src/types/schemas/rank-tracking.ts`)
+- `src/shared/rank-tracking/service.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.ts`)
+- `src/shared/rank-tracking/runGuards.ts` (from `openseo:src/server/features/rank-tracking/services/rankCheckRunGuards.ts`)
+- `src/shared/rank-tracking/checkPaths.ts` (from `openseo:src/server/workflows/rankCheckPaths.ts`)
+- `src/shared/rank-tracking/retries.ts` (from `openseo:src/server/workflows/rankCheckRetries.ts`)
+- `src/shared/rank-tracking/checkJob.ts` (from `openseo:src/server/workflows/RankCheckWorkflow.ts`)
+- `src/shared/rank-tracking/results.ts` (from `openseo:src/server/features/rank-tracking/services/rankTrackingResults.ts`)
+- `src/shared/pricing/actions/rankTracking.ts` (from `openseo:src/shared/rank-tracking.ts`)
+- `src/shared/rank-tracking/jobs.ts` (from `openseo:src/server/features/rank-tracking/jobs`)
+- `src/shared/rank-tracking/service.test.ts` (from `openseo:src/server/features/rank-tracking/services/RankTrackingService.test.ts`)
+- `src/shared/rank-tracking/rankTracking.contract.ts` (from `openseo:src/types/schemas/rank-tracking.ts`)
 
 ### F25 Phase 3 ports
 - `src/components/portal/email/EmailSettings.tsx` (from `src/client/features/settings/PrivacySettings.tsx`)
 - `src/components/portal/email/ProductUpdatesSwitch.tsx` (from `src/client/features/settings/PrivacySettings.tsx`, `src/client/features/onboarding/AnalyticsOnboardingStep.tsx`)
 
 ### F16 Phase 4 ports
-- `src/lib/backlinks/ahrefsDomainRating.ts` (from `src/serverFunctions/ahrefs.ts`)
+- `src/server/backlinks/ahrefsDomainRating.ts` (from `src/serverFunctions/ahrefs.ts`)
 - `src/app/api/customer/backlinks/ahrefs-dr/route.ts` (from `src/serverFunctions/ahrefs.ts`)
 
 ### F18 Phase 6 ports
-- src/lib/audit/renderedPage.ts (from src/server/lib/audit/rendered-page.ts)
-- src/lib/audit/renderedPage.test.ts (from src/server/lib/audit/rendered-page.test.ts)
-- src/lib/audit/renderSettle.ts (from src/server/lib/audit/rendering-billing.ts)
+- src/server/audit/renderedPage.ts (from src/server/lib/audit/rendered-page.ts)
+- src/server/audit/renderedPage.test.ts (from src/server/lib/audit/rendered-page.test.ts)
+- src/server/audit/renderSettle.ts (from src/server/lib/audit/rendering-billing.ts)
 
 ### F12 Phase 2 ports
 - `src/shared/question-history.ts` (from `openseo:src/client/features/ai-visibility/PromptDateRange.tsx`, `openseo:src/client/features/ai-visibility/shared.tsx`)
-- `src/lib/questions/history/summary.ts` (from `openseo:src/shared/ai-visibility-results.ts`)
-- `src/lib/questions/history/history.ts` (from `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts`)
-- `src/lib/questions/history/answer.ts` (from `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts`)
+- `src/server/questions/history/summary.ts` (from `openseo:src/shared/ai-visibility-results.ts`)
+- `src/server/questions/history/history.ts` (from `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts`)
+- `src/server/questions/history/answer.ts` (from `openseo:src/server/features/ai-visibility/services/aiVisibilityResults.ts`)
 
 ### F15 Phase 4 ports
 - `src/components/portal/rank-tracking/CostEstimateBox.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingConfigModal.tsx:378-412`)
@@ -717,18 +717,18 @@ SOFTWARE.
 - `src/components/portal/rank-tracking/RankTrackingPage.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingDomainList.tsx:55-328`)
 - `src/components/portal/rank-tracking/SearchTargetingField.tsx` (from `openseo:src/client/features/rank-tracking/SearchTargetingField.tsx`)
 - `src/components/portal/rank-tracking/telemetry.ts` (from `openseo:src/client/lib/posthog.ts (rank-tracking event names)`)
-- `src/lib/rank-tracking/suggestions.ts` (from `src/server/features/domain/services/DomainService.ts:122-216`)
-- `src/lib/rank-tracking/metrics.ts` (from `src/server/features/rank-tracking/services/RankTrackingService.ts:328-380`)
+- `src/shared/rank-tracking/suggestions.ts` (from `src/server/features/domain/services/DomainService.ts:122-216`)
+- `src/shared/rank-tracking/metrics.ts` (from `src/server/features/rank-tracking/services/RankTrackingService.ts:328-380`)
 
 ### F20 Phase 5 ports
 - `src/components/portal/analytics/OrganicOverviewCard.tsx` (from `openseo:src/client/features/dashboard/Ga4Card.tsx:43-180`)
 
 ### F11 Phase 2 ports
 - `src/shared/explore.ts` (from `openseo:src/types/schemas/ai-search.ts:156-243`, `openseo:src/shared/prompt-explorer-labels.ts`)
-- `src/lib/explore/shape.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:198-359`)
-- `src/lib/explore/routes.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:104-182`)
-- `src/lib/explore/job.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:53-94`)
-- `src/lib/explore/service.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:104-182`)
+- `src/server/explore/shape.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:198-359`)
+- `src/server/explore/routes.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:104-182`)
+- `src/server/explore/job.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:53-94`)
+- `src/server/explore/service.ts` (from `openseo:src/server/features/ai-search/services/promptExplorer.ts:104-182`)
 - `src/app/api/customer/explore/route.ts` (from `openseo:src/serverFunctions/ai-search.ts:19-24`)
 
 ### F12 Phase 3 ports
@@ -744,7 +744,7 @@ SOFTWARE.
 - `src/components/portal/questions/history/hooks/useQuestionHistory.ts` (from `openseo:src/client/features/ai-visibility/usePromptHistory.ts`)
 
 ### F15 Phase 5 ports
-- `src/lib/rank-tracking/runPolling.ts` (from `openseo:src/client/features/rank-tracking/useRankRunPolling.ts:9-47`)
+- `src/shared/rank-tracking/runPolling.ts` (from `openseo:src/client/features/rank-tracking/useRankRunPolling.ts:9-47`)
 - `src/components/portal/rank-tracking/AddKeywordsPanel.tsx` (from `openseo:src/client/features/rank-tracking/AddKeywordsModal.tsx`)
 - `src/components/portal/rank-tracking/AiOverviewStrip.tsx` (from `openseo:src/client/features/rank-tracking/RankTrackingDomainDetail.tsx`)
 - `src/components/portal/rank-tracking/KeywordTrendModal.tsx` (from `openseo:src/client/features/rank-tracking/KeywordTrendModal.tsx`)
@@ -767,19 +767,19 @@ SOFTWARE.
 - `src/components/portal/rank-tracking/hooks/useSetKeywordPinned.ts` (from `openseo:src/client/features/rank-tracking/useSetKeywordPinned.ts`)
 
 ### F15 Phase 6 ports
-- `src/lib/rank-tracking/tools.ts` (from `openseo:src/server/mcp/tools/`)
+- `src/shared/rank-tracking/tools.ts` (from `openseo:src/server/mcp/tools/`)
 - `src/components/portal/rank-tracking/AiVisibilityCell.tsx` (from `openseo:src/client/features/rank-tracking/`)
 - `src/components/portal/rank-tracking/TrackAiQuestionDialog.tsx` (from `openseo:src/client/features/rank-tracking/`)
 
 ### F20 Phase 6 ports
-- `src/lib/ga4/tools.ts` (from `openseo:src/server/mcp/tools/google-analytics-tools.ts`)
+- `src/server/ga4/tools.ts` (from `openseo:src/server/mcp/tools/google-analytics-tools.ts`)
 
 ### F27 Phase 1 ports
 - `src/shared/onboarding.ts` (from `openseo:src/client/features/onboarding/onboardingModel.ts:4-19`)
 - `src/shared/setup-steps.ts` (from `openseo:src/client/features/dashboard/dashboardSteps.ts:1-79`)
-- `src/lib/onboarding/website.ts` (from `openseo:src/serverFunctions/projects.ts:67-81`, `openseo:src/server/features/dashboard/services/DashboardFirstAuditService.ts:11-90`)
-- `src/lib/onboarding/steps.ts` (from `openseo:src/serverFunctions/onboarding.ts:77-136`)
-- `src/lib/onboarding/setup.ts` (from `openseo:src/server/features/dashboard/services/DashboardService.ts:52-98`, `openseo:src/serverFunctions/dashboard.ts:55-66`)
+- `src/server/onboarding/website.ts` (from `openseo:src/serverFunctions/projects.ts:67-81`, `openseo:src/server/features/dashboard/services/DashboardFirstAuditService.ts:11-90`)
+- `src/server/onboarding/steps.ts` (from `openseo:src/serverFunctions/onboarding.ts:77-136`)
+- `src/server/onboarding/setup.ts` (from `openseo:src/server/features/dashboard/services/DashboardService.ts:52-98`, `openseo:src/serverFunctions/dashboard.ts:55-66`)
 
 ### F11 Phase 3 ports
 - `src/components/portal/explore/ExplorePage.tsx` (from `openseo:src/client/features/ai-search/PromptExplorerPage.tsx`)
@@ -804,24 +804,24 @@ SOFTWARE.
 - `src/components/portal/PortalShell.jsx` (from `src/client/features/onboarding/useOnboardingRedirect.ts:12-61`, `src/routes/_app/route.tsx:34-39`)
 
 ### F22 Phase 1 ports
-- `src/lib/tools/links.ts` (from `src/server/mcp/urls.ts`)
-- `src/lib/tools/capOutput.ts` (from `src/server/features/sam/samToolOutput.ts`)
-- `src/lib/tools/capOutput.test.ts` (three parity cases from `src/server/features/sam/samToolOutput.test.ts`)
-- `src/lib/tools/errors.ts` (from `src/server/mcp/tool-error-message.ts`, `src/server/mcp/instrumentation.ts`)
-- `src/lib/tools/run.ts` (from `src/server/features/sam/samChatTools.ts`)
-- `src/lib/tools/waiting.ts` and `src/lib/tools/waiting.test.ts` (from `src/server/features/sam/samChatTools.ts`)
-- `src/lib/tools/format.ts` (from `src/server/mcp/formatters.ts`)
-- `src/lib/tools/mcp.ts` (from `src/server/mcp/output-schemas.ts`, `src/server/mcp/server.ts`)
+- `src/server/tools/links.ts` (from `src/server/mcp/urls.ts`)
+- `src/server/tools/capOutput.ts` (from `src/server/features/sam/samToolOutput.ts`)
+- `src/server/tools/capOutput.test.ts` (three parity cases from `src/server/features/sam/samToolOutput.test.ts`)
+- `src/server/tools/errors.ts` (from `src/server/mcp/tool-error-message.ts`, `src/server/mcp/instrumentation.ts`)
+- `src/server/tools/run.ts` (from `src/server/features/sam/samChatTools.ts`)
+- `src/server/tools/waiting.ts` and `src/server/tools/waiting.test.ts` (from `src/server/features/sam/samChatTools.ts`)
+- `src/server/tools/format.ts` (from `src/server/mcp/formatters.ts`)
+- `src/server/tools/mcp.ts` (from `src/server/mcp/output-schemas.ts`, `src/server/mcp/server.ts`)
 
 ### F27 Phase 3 ports
 - `src/components/portal/overview/SetupChecklist.tsx` (from `openseo:src/client/features/dashboard/DashboardOnboarding.tsx:24-180`)
 
 ### F22 Phase 2 ports
-- `src/lib/assistant/sessions.ts` (from `src/server/features/sam/SamSessionRepository.ts`, the title rule in `src/server/features/sam/SamChatAgent.ts` and the session schema in `src/db/pg/sam.schema.ts`)
+- `src/server/assistant/sessions.ts` (from `src/server/features/sam/SamSessionRepository.ts`, the title rule in `src/server/features/sam/SamChatAgent.ts` and the session schema in `src/db/pg/sam.schema.ts`)
 - `supabase/migrations/145_f22_assistant_sessions.sql` (session/message schema from `src/db/pg/sam.schema.ts`; rewind rule from `src/server/features/sam/SamChatAgent.ts`)
 
 ### F04 Phase 6 ports
 - `src/components/portal/AuthLayout.jsx` (from `src/client/features/auth/AuthPage.tsx:131-175`)
 
 ### F22 Phase 3 ports
-- `src/lib/tools/own/siteReading.ts` (from `src/server/lib/scrape.ts`, `src/server/features/sam/samChatTools.ts`)
+- `src/server/tools/own/siteReading.ts` (from `src/server/lib/scrape.ts`, `src/server/features/sam/samChatTools.ts`)

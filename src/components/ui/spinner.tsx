@@ -4,7 +4,7 @@
 //   src/client/components/ui/spinner.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 import { Loader2Icon } from "lucide-react";
 
 function Spinner({ className, ...props }: React.ComponentProps<"svg">) {

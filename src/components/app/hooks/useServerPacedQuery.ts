@@ -6,7 +6,7 @@
 
 import { useEffect, useRef } from "react";
 import { useQuery, type UseQueryOptions, type UseQueryResult } from "@tanstack/react-query";
-import { pollIntervalMs, pacedStaleTime, finishTransition } from "@/lib/query/polling";
+import { pollIntervalMs, pacedStaleTime, finishTransition } from "@/shared/query/polling";
 
 export type UseServerPacedQueryOptions<TData = unknown, TError = Error> = Omit<
   UseQueryOptions<TData, TError>,

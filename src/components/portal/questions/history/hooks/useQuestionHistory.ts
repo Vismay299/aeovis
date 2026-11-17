@@ -5,12 +5,12 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { questionHistoryKeys } from "@/lib/query/keys";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { questionHistoryKeys } from "@/shared/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import type {
   historyResponse,
   answerResponse,
-} from "@/lib/questions/history/history.contract";
+} from "@/server/questions/history/history.contract";
 import type { z } from "zod";
 
 export type QuestionHistory = z.infer<typeof historyResponse>;

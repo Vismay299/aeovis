@@ -2,7 +2,7 @@ import { TrendChart, DeltaChip } from "@/components/perceev/charts";
 import { formatPercent, isFiniteNumber } from "@/components/perceev/charts/chartMath";
 import { Skeleton } from "@/components/perceev/Skeleton";
 import { SectionStrap } from "./SectionStrap";
-import { comparableVisibilityTail } from "@/lib/analytics/visibilitySeries";
+import { comparableVisibilityTail } from "@/shared/analytics/visibilitySeries";
 
 /**
  * Overview's "Visibility Trend" block (P1.4). Wraps the finished TrendChart

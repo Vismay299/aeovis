@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { customerRouteContext } from "@/lib/supabase/customerRoute";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { runFactCheck } from "@/lib/content/steps/factCheck";
-import { draftCheck } from "@/lib/repairs/workflow";
+import { customerRouteContext } from "@/shared/supabase/customerRoute";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { runFactCheck } from "@/shared/content/steps/factCheck";
+import { draftCheck } from "@/server/repairs/workflow";
 export const dynamic = "force-dynamic";
 export async function POST(request, { params }) {
   const { id } = await params;

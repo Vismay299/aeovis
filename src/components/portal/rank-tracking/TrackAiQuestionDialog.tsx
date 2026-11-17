@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { fetchJson, isApiError } from "@/lib/query/fetchJson";
+import { fetchJson, isApiError } from "@/shared/query/fetchJson";
 import { trackRankEvent, buildTrackQuestionPayload } from "./telemetry";
 
 export function TrackAiQuestionDialog({

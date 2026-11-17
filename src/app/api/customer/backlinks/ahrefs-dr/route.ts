@@ -2,21 +2,21 @@
 //   src/serverFunctions/ahrefs.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../lib/workspace/requireWorkspace.ts";
+} from "../../../../../server/workspace/requireWorkspace.ts";
 import {
   backlinksBrandQuery,
   ahrefsDomainRatingsRequestBody,
-} from "../../../../../lib/backlinks/backlinks.contract.ts";
+} from "../../../../../server/backlinks/backlinks.contract.ts";
 import {
   getAhrefsDomainRatings,
   type AhrefsDomainRatingDeps,
-} from "../../../../../lib/backlinks/ahrefsDomainRating.ts";
+} from "../../../../../server/backlinks/ahrefsDomainRating.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;

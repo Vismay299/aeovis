@@ -1,12 +1,12 @@
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
 import { NextResponse } from "next/server";
 import {
   getContentItem,
-} from "@/lib/db/content";
-import { reviseContentItem } from "@/lib/content/contentWorker";
-import { runLearn } from "@/lib/content/steps/learn";
-import { keepAlive } from "@/lib/keepAlive";
-import { decideItemStatus, jobStatusForItemStatus } from "@/lib/content/stages";
+} from "@/server/db/content";
+import { reviseContentItem } from "@/shared/content/contentWorker";
+import { runLearn } from "@/shared/content/steps/learn";
+import { keepAlive } from "@/server/keepAlive";
+import { decideItemStatus, jobStatusForItemStatus } from "@/shared/content/stages";
 
 export const dynamic = "force-dynamic";
 

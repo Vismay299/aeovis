@@ -185,14 +185,14 @@ The untracked (`??`) list should now contain **only** these entries:
 ?? docs/plans/2026-07-15-aio-unbranded-30-prompt-rebuild.md
 ?? docs/plans/2026-07-18-post-rebuild-cleanup-and-integration.md
 ?? docs/profound-flow.mmd
-?? src/lib/llm.js
-?? src/lib/openrouter.js
-?? src/lib/openrouter.test.mjs
-?? src/lib/scoring/competitorExtract.js
-?? src/lib/scoring/competitorExtract.test.mjs
-?? src/lib/scoring/promptGen.js
-?? src/lib/scoring/promptGen.test.mjs
-?? src/lib/scoring/summarize.test.mjs
+?? src/server/llm.js
+?? src/server/openrouter.js
+?? src/server/openrouter.test.mjs
+?? src/shared/scoring/competitorExtract.js
+?? src/shared/scoring/competitorExtract.test.mjs
+?? src/shared/scoring/promptGen.js
+?? src/shared/scoring/promptGen.test.mjs
+?? src/shared/scoring/summarize.test.mjs
 ```
 
 Then confirm the ignore rule does the right thing in both directions:
@@ -239,7 +239,7 @@ report it.
 Remove-Item src/lib/scoring/aioPrompts.js -Force
 ```
 
-Then remove the now-stale comment reference. **File:** `src/lib/scoring/promptGen.js`,
+Then remove the now-stale comment reference. **File:** `src/shared/scoring/promptGen.js`,
 lines 10–14.
 
 Find:
@@ -294,13 +294,13 @@ does not look like a regression.
 Find:
 
 ```js
-import { createScanJob, getScanJob, globalMemoryJobs } from "@/lib/db";
+import { createScanJob, getScanJob, globalMemoryJobs } from "@/server/db";
 ```
 
 Replace with:
 
 ```js
-import { createScanJob, globalMemoryJobs } from "@/lib/db";
+import { createScanJob, globalMemoryJobs } from "@/server/db";
 ```
 
 **Do not remove `globalMemoryJobs` yet** — it is still used by `hasActiveScanForBrand` on
@@ -309,7 +309,7 @@ matters here; doing 3.2 first then 2.3 would leave a broken intermediate state.
 
 ### Step 2.4 — Drop the dead parameter on `citationMatchesCompetitor`
 
-**File:** `src/lib/scoring/coMentions.js`, line 351.
+**File:** `src/shared/scoring/coMentions.js`, line 351.
 
 The fourth parameter `brandDomainForComp` is declared but never read anywhere in the
 function body. `competitorExtract.js` (line 129) already calls this function with only
@@ -389,16 +389,16 @@ Find lines 1–3:
 
 ```js
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/db";
-import { startScanJob } from "@/lib/workers/scanWorker";
+import { supabase } from "@/server/db";
+import { startScanJob } from "@/server/workers/scanWorker";
 ```
 
 Replace with:
 
 ```js
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/db";
-import { startScanJob } from "@/lib/workers/scanWorker";
+import { supabase } from "@/server/db";
+import { startScanJob } from "@/server/workers/scanWorker";
 
 // This route has side effects (it launches real Bright Data scans). Without
 // force-dynamic, Next prerenders it during `next build` and actually executes
@@ -422,7 +422,7 @@ change. Routes exporting `GET` that touch Supabase or an external API **do** nee
 
 ### Step 3.2 — Make the duplicate-scan guard actually work in production
 
-**Files:** `src/lib/db.js` (add function), `src/app/api/scan/route.js` (use it)
+**Files:** `src/server/db.js` (add function), `src/app/api/scan/route.js` (use it)
 
 **The bug.** The current guard in `src/app/api/scan/route.js` lines 8–19 iterates
 `globalMemoryJobs`, which is `global.memoryJobs` — an in-process `Map`. On Vercel's
@@ -434,7 +434,7 @@ than protection.
 
 The check must consult the shared source of truth: the `scan_jobs` table.
 
-**3.2a — Add the function to `src/lib/db.js`.**
+**3.2a — Add the function to `src/server/db.js`.**
 
 Insert immediately **after** the `createScanJob` function (which ends at line 223 with its
 closing `}`) and **before** `export async function getScanJob(jobId) {` on line 225:
@@ -497,7 +497,7 @@ Notes for the executor:
   re-picks jobs after 5 minutes. That ordering is intentional: the cron gets three chances
   to resume a stalled job before the guard stops treating it as active.
 
-**3.2b — Now remove `globalMemoryJobs` from `src/lib/db.js`.**
+**3.2b — Now remove `globalMemoryJobs` from `src/server/db.js`.**
 
 It only existed to support the broken in-route check. Find line 186:
 
@@ -516,8 +516,8 @@ after Step 2.3 reads):
 
 ```js
 import { NextResponse } from "next/server";
-import { createScanJob, globalMemoryJobs } from "@/lib/db";
-import { startScanJob } from "@/lib/workers/scanWorker";
+import { createScanJob, globalMemoryJobs } from "@/server/db";
+import { startScanJob } from "@/server/workers/scanWorker";
 
 // Returns true if a scan job for this brand is already active (pending or
 // probing/scoring). Used to avoid stacking parallel scans that overload the
@@ -540,8 +540,8 @@ Replace with:
 
 ```js
 import { NextResponse } from "next/server";
-import { createScanJob, hasActiveScanForBrand } from "@/lib/db";
-import { startScanJob } from "@/lib/workers/scanWorker";
+import { createScanJob, hasActiveScanForBrand } from "@/server/db";
+import { startScanJob } from "@/server/workers/scanWorker";
 ```
 
 Then find line 32 (the call site, currently synchronous):
@@ -827,9 +827,9 @@ Open the dashboard for an existing v8 scan and confirm:
 There are now two different implementations that produce a number called "competitor
 visibility":
 
-- **Server (v8, authoritative):** `src/lib/scoring/competitorExtract.js` →
+- **Server (v8, authoritative):** `src/shared/scoring/competitorExtract.js` →
   `extractCompetitors()`, one batched LLM call. Called by `scanWorker.js` line 137.
-- **Client (v7 legacy fallback):** `src/services/api.js` line 182 →
+- **Client (v7 legacy fallback):** `src/shared/api.js` line 182 →
   `buildCompetitorLeaderboard()` from `coMentions.js`, the regex/stopword heuristic the
   rebuild plan said to *"retire."*
 
@@ -844,7 +844,7 @@ Deleting it would blank the competitor table for every pre-v8 scan in the databa
 cost of keeping it is that two definitions of one metric coexist, which will confuse the
 next reader.
 
-**Add this comment** in `src/services/api.js`. Find lines 165–168:
+**Add this comment** in `src/shared/api.js`. Find lines 165–168:
 
 ```js
 /**
@@ -878,7 +878,7 @@ Replace with:
 
 No code change unless the owner disagrees. **Flag this in your report.**
 
-`src/lib/scoring/aioConstants.js` changed two thresholds:
+`src/shared/scoring/aioConstants.js` changed two thresholds:
 
 - `AIO_MIN_NON_BRANDED_COVERAGE`: `0.30` → `0.15`
 - `AIO_COVERAGE_WARNING_PCT`: `50` → `30`
@@ -923,14 +923,14 @@ Expected untracked list — exactly these, nothing else:
 ?? docs/plans/2026-07-15-aio-unbranded-30-prompt-rebuild.md
 ?? docs/plans/2026-07-18-post-rebuild-cleanup-and-integration.md
 ?? docs/profound-flow.mmd
-?? src/lib/llm.js
-?? src/lib/openrouter.js
-?? src/lib/openrouter.test.mjs
-?? src/lib/scoring/competitorExtract.js
-?? src/lib/scoring/competitorExtract.test.mjs
-?? src/lib/scoring/promptGen.js
-?? src/lib/scoring/promptGen.test.mjs
-?? src/lib/scoring/summarize.test.mjs
+?? src/server/llm.js
+?? src/server/openrouter.js
+?? src/server/openrouter.test.mjs
+?? src/shared/scoring/competitorExtract.js
+?? src/shared/scoring/competitorExtract.test.mjs
+?? src/shared/scoring/promptGen.js
+?? src/shared/scoring/promptGen.test.mjs
+?? src/shared/scoring/summarize.test.mjs
 ```
 
 Expected deletions (` D`) in the tracked list:
@@ -975,7 +975,7 @@ tracked on a fresh clone.
 
 ### Commit 2 — bug fixes (independently revertable, safe to ship alone)
 
-Files: `src/app/api/scan/worker/route.js`, `src/lib/db.js`, `src/app/api/scan/route.js`.
+Files: `src/app/api/scan/worker/route.js`, `src/server/db.js`, `src/app/api/scan/route.js`.
 
 ```
 fix(scan): stop builds launching scans; make duplicate guard cluster-safe
@@ -1039,29 +1039,29 @@ git branch -m fix/brightdata-truncation-and-rate-limit feat/aio-v8-unbranded-pip
 | 3 | `docs/*.png`, `docs/puppeteer-config.json`, `docs/plans/short context.md` | delete | 1.4 |
 | 4 | `.gitignore` | edit | 1.5 |
 | 5 | `src/lib/scoring/aioPrompts.js` | delete | 2.1 |
-| 6 | `src/lib/scoring/promptGen.js` | edit (comment only) | 2.1 |
+| 6 | `src/shared/scoring/promptGen.js` | edit (comment only) | 2.1 |
 | 7 | `src/lib/scoring/hybridPrompts.js` + `.test.mjs` | delete | 2.2 |
 | 8 | `src/app/api/scan/route.js` | edit (import) | 2.3 |
-| 9 | `src/lib/scoring/coMentions.js` | edit (signature) | 2.4 |
+| 9 | `src/shared/scoring/coMentions.js` | edit (signature) | 2.4 |
 | 10 | `src/app/api/scan/worker/route.js` | edit (force-dynamic) | 3.1 |
-| 11 | `src/lib/db.js` | edit (add fn, drop export) | 3.2a/b |
+| 11 | `src/server/db.js` | edit (add fn, drop export) | 3.2a/b |
 | 12 | `src/app/api/scan/route.js` | edit (use new guard) | 3.2c |
 | 13 | `src/app/dashboard/page.js` | edit (4 gated surfaces) | 4.3–4.6 |
-| 14 | `src/services/api.js` | edit (comment only) | 5.2 |
+| 14 | `src/shared/api.js` | edit (comment only) | 5.2 |
 
 ## Appendix B — Do NOT touch
 
 These are correct as-is. Changing them is out of scope:
 
-- `src/lib/openrouter.js`, `src/lib/llm.js` — clean provider layer.
+- `src/server/openrouter.js`, `src/server/llm.js` — clean provider layer.
   `google/gemma-4-31b-it:free` was verified against the live OpenRouter model list on
   2026-07-18 and exists. Do not "fix" the model slug.
-- `src/lib/scoring/promptGen.js` (beyond the 2.1 comment) — tested, dependency-injected.
-- `src/lib/scoring/competitorExtract.js` — tested.
-- `src/lib/scoring/aioPipeline.js` — the three-denominator contract is correct and tested.
-- `src/lib/engines/brightdata.js` — the retry/truncation logic is the point of this branch.
-- `src/lib/scoring/aioQueryClassify.js`, `aliases.js`, `citations.js` — still used.
-- `src/lib/scoring/coMentions.js` beyond 2.4 — still used by the `api.js` legacy fallback.
+- `src/shared/scoring/promptGen.js` (beyond the 2.1 comment) — tested, dependency-injected.
+- `src/shared/scoring/competitorExtract.js` — tested.
+- `src/shared/scoring/aioPipeline.js` — the three-denominator contract is correct and tested.
+- `src/shared/engines/brightdata.js` — the retry/truncation logic is the point of this branch.
+- `src/shared/scoring/aioQueryClassify.js`, `aliases.js`, `citations.js` — still used.
+- `src/shared/scoring/coMentions.js` beyond 2.4 — still used by the `api.js` legacy fallback.
 
 ## Appendix C — If something goes wrong
 

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getPromptMetrics } from "@/lib/db/analytics";
-import { groupPromptRows } from "@/lib/analytics/promptMetrics";
+import { getPromptMetrics } from "@/server/db/analytics";
+import { groupPromptRows } from "@/shared/analytics/promptMetrics";
 
 // Same rationale as the sibling metrics/citations/gaps routes (P0.4): a new
 // scan can change every row in this table, so never statically cache.
@@ -35,7 +35,7 @@ function parseRangeParam(raw) {
  *
  * Brand-keying contract: identical to every sibling /api/brands/[brand]/*
  * analytics route — `[brand]` is ALREADY a resolveBrandKey() output (see
- * src/lib/scoring/brandKey.js), used verbatim (decoded) as the
+ * src/shared/scoring/brandKey.js), used verbatim (decoded) as the
  * prompt_results.brand lookup key, never re-resolved here.
  *
  * Query params (both optional):
@@ -45,9 +45,9 @@ function parseRangeParam(raw) {
  *           scan). Positive integer.
  *
  * Aggregation: raw prompt_results rows for the target (+ previous) scan are
- * fetched via src/lib/db/analytics.js's getPromptMetrics, then collapsed
+ * fetched via src/server/db/analytics.js's getPromptMetrics, then collapsed
  * from one-row-per-(query,engine) to one-row-per-query by the pure
- * groupPromptRows (src/lib/analytics/promptMetrics.js — independently
+ * groupPromptRows (src/shared/analytics/promptMetrics.js — independently
  * unit-tested, see promptMetrics.test.mjs) — kept out of this file so the
  * grouping/null-handling/delta math is testable without booting Next.js.
  *

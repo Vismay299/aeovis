@@ -7,13 +7,13 @@
  * No workspace data crosses this route.
  */
 
-import { AppError, jsonOk, toErrorResponse } from "../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../lib/features/flags.ts";
-import { readClientFeatures } from "../../../../lib/features/clientFeatures.ts";
-import type { ReadClientFeaturesDeps } from "../../../../lib/features/clientFeatures.ts";
-import { requireWorkspace } from "../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../lib/workspace/requireWorkspace.ts";
-import { featuresQuery } from "../../../../lib/features/features.contract.ts";
+import { AppError, jsonOk, toErrorResponse } from "../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../server/features/flags.ts";
+import { readClientFeatures } from "../../../../server/features/clientFeatures.ts";
+import type { ReadClientFeaturesDeps } from "../../../../server/features/clientFeatures.ts";
+import { requireWorkspace } from "../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../server/workspace/requireWorkspace.ts";
+import { featuresQuery } from "../../../../server/features/features.contract.ts";
 
 export const dynamic = "force-dynamic";
 

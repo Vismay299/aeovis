@@ -16,7 +16,7 @@ import {
   tabInputKey,
   type SearchTab,
   type TabsState,
-} from "@/lib/query/searchTabsState";
+} from "@/shared/query/searchTabsState";
 
 const CHANGE_EVENT = "perceev:search-tabs-change";
 const stateCache = new Map<string, TabsState<any>>();

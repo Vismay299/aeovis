@@ -2,7 +2,7 @@
   "registry": "tests/fixtures/repairs/manifest.json",
   "version": 1,
   "updated": "2026-10-20",
-  "collected_test_glob": "src/lib/repairs/*.test.mjs",
+  "collected_test_glob": "src/server/repairs/*.test.mjs",
   "orphan_scan_paths": ["tests/fixtures"],
   "credential_example": "sk-example-not-a-real-key",
   "notes": [
@@ -19,19 +19,19 @@
   }],
   "required_test_files": [
     {
-      "path": "src/lib/repairs/r21-release-evidence.test.mjs",
+      "path": "src/server/repairs/r21-release-evidence.test.mjs",
       "repair": "R21",
       "cases": ["R21-05"],
       "note": "External evidence validation and end-to-end release aggregation; synthetic harness fixtures are not product qualification."
     },
     {
-      "path": "src/lib/repairs/r21-harness.test.mjs",
+      "path": "src/server/repairs/r21-harness.test.mjs",
       "repair": "R21",
       "cases": ["R21-01", "R21-02", "R21-03", "R21-04", "R21-05", "R21-06", "R21-07", "R21-08", "R21-10", "R21-11", "R21-17"],
-      "note": "The R21 cases the runner owns. Collected by src/lib/repairs/*.test.mjs, so the runner can dispatch it."
+      "note": "The R21 cases the runner owns. Collected by src/server/repairs/*.test.mjs, so the runner can dispatch it."
     },
     {
-      "path": "src/lib/repairs/r20-public-site.test.mjs",
+      "path": "src/server/repairs/r20-public-site.test.mjs",
       "repair": "R20",
       "cases": ["R20-01", "R20-02", "R20-03", "R20-04", "R20-05", "R20-06", "R20-07"],
       "note": "Public website foundation: canonicals, sitemap, robots, host policy, and marketing claims."
@@ -119,7 +119,7 @@
       "redaction": "not applicable (no real data); no provider body stored",
       "state": "present",
       "used_by": ["R04-01", "R04-02"],
-      "notes": "One valid AIO payload and one valid no-AIO payload for src/lib/engines/googlePayload.js."
+      "notes": "One valid AIO payload and one valid no-AIO payload for src/shared/engines/googlePayload.js."
     },
     {
       "name": "synthetic-orphan-supplement",

@@ -7,7 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import React from "react";
 import * as reactTable from "@tanstack/react-table";
-import { compileJsx, renderToHtml, passThroughExports, anyNamedExport, textOf } from "../../../lib/renderHarness.mjs";
+import { compileJsx, renderToHtml, passThroughExports, anyNamedExport, textOf } from "../../../server/renderHarness.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -29,7 +29,7 @@ async function loadDataTable() {
       ["@/components/ui/table", passThroughExports],
       ["@/components/ui/checkbox", anyNamedExport],
       ["@/components/ui/skeleton", anyNamedExport],
-      ["@/lib/table/tableSelection", await import("../../../lib/table/tableSelection.ts")],
+      ["@/shared/table/tableSelection", await import("../../../shared/table/tableSelection.ts")],
     ]),
   });
 }

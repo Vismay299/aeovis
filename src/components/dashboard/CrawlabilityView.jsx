@@ -8,12 +8,12 @@ import { Alert } from "@/components/perceev/Alert";
 import { Skeleton } from "@/components/perceev/Skeleton";
 import { KpiCard } from "@/components/perceev/KpiCard";
 import { SectionStrap } from "./SectionStrap";
-import { extractBrandDomain } from "@/lib/scoring/citations";
+import { extractBrandDomain } from "@/shared/scoring/citations";
 import {
   describeCompareBudget,
   describePrimaryCrawlOutcome,
   describeRivalCrawlOutcome,
-} from "@/lib/crawlabilityOutcome";
+} from "@/shared/crawlabilityOutcome";
 
 const STATUS_META = {
   open: { label: "Open", badgeVariant: "strong" },

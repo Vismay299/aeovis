@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { findCustomerBrandAliasConflict, normalizeCustomerBrand, registerCustomerBrandAliases } from "@/lib/customerProvisioning";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { findCustomerBrandAliasConflict, normalizeCustomerBrand, registerCustomerBrandAliases } from "@/server/customerProvisioning";
 
 export const dynamic = "force-dynamic";
 

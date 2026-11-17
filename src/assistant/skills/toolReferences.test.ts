@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { PLANNED_TOOL_NAMES, SKILL_TERMS, TOOL_NAMES } from "../../lib/tools/names.ts";
+import { PLANNED_TOOL_NAMES, SKILL_TERMS, TOOL_NAMES } from "../../server/tools/names.ts";
 import { checkSkillToolReferences } from "./references.ts";
 import type { ReferenceEntry, ReferenceVocabulary } from "./references.ts";
 import { SKILL_MANIFEST } from "./manifest.generated.ts";

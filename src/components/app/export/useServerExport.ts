@@ -2,8 +2,8 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { trackExport } from "@/lib/export/telemetry";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { trackExport } from "@/shared/export/telemetry";
 
 export type ServerExportKind = "workspace_answers";
 

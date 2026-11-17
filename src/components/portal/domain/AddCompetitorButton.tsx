@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { describeError } from "@/lib/query/errors";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { describeError } from "@/shared/query/errors";
 import { trackDomainEvent } from "./telemetry";
 
 type ButtonVariant = ComponentProps<typeof Button>["variant"];

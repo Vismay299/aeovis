@@ -3,13 +3,13 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import pg from "pg";
-import {createMetric,measurementContext} from "../../src/lib/scoring/metricContract.js";
-import {qualifyVisibilityPoint} from "../../src/lib/analytics/visibilitySeries.js";
+import {createMetric,measurementContext} from "../../src/shared/scoring/metricContract.js";
+import {qualifyVisibilityPoint} from "../../src/shared/analytics/visibilitySeries.js";
 import {
   contentHash,
   artifactHash,
   validatePanel,
-} from "../../src/lib/repairs/workflow.js";
+} from "../../src/server/repairs/workflow.js";
 if (
   !["127.0.0.1", "localhost", "::1"].includes(process.env.PGHOST) ||
   !/(?:_qa|_uat)$/.test(process.env.PGDATABASE || "") ||

@@ -26,7 +26,7 @@ import { Wordmark } from '@/components/landing/SiteNav';
  * and DashboardShell already imports this module, so this adds no bundle weight
  * that was not already there — but it is the same debt and it moves with it.
  */
-import { describeScanMeasurement } from '@/lib/scoring/enginePipeline';
+import { describeScanMeasurement } from '@/shared/scoring/enginePipeline';
 
 const GROUPS = [
   {

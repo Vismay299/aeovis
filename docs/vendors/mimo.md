@@ -2,14 +2,14 @@
 
 > <!-- doc-status -->
 > **Status: LIVE.** The quirks below are implemented in
-> [`src/lib/openrouter.js`](../../src/lib/openrouter.js) and selected by
-> [`src/lib/llmConfig.js`](../../src/lib/llmConfig.js).
+> [`src/server/openrouter.js`](../../src/server/openrouter.js) and selected by
+> [`src/shared/llmConfig.js`](../../src/shared/llmConfig.js).
 
 **Date:** 2026-08-30
 **Task:** R5.1.1 · **Findings:** C4, S19
 **Applies to:** the *utility* LLM path (prompt generation, competitor
 extraction, classification chores) — anything routed through
-`src/lib/llm.js`'s `llmJson`.
+`src/server/llm.js`'s `llmJson`.
 
 ---
 
@@ -24,10 +24,10 @@ produced this scan?" had to read the client to find out.
 
 The names are now provider-neutral — `LLM_BASE_URL` / `LLM_MODEL` /
 `LLM_API_KEY` — and the gateway is identified once, from the URL:
-`getLlmProvider()` at `src/lib/llmConfig.js:99`, returning `openrouter`,
-`mimo`, or `custom` (`src/lib/llmConfig.js:100-103`). The `OPENROUTER_*` names
+`getLlmProvider()` at `src/shared/llmConfig.js:99`, returning `openrouter`,
+`mimo`, or `custom` (`src/shared/llmConfig.js:100-103`). The `OPENROUTER_*` names
 still work as a **deprecated** fallback and warn once per process
-(`readLlmEnv`, `src/lib/llmConfig.js:53-70`) so an existing deployment does not break on
+(`readLlmEnv`, `src/shared/llmConfig.js:53-70`) so an existing deployment does not break on
 deploy.
 
 The quirks below did not go away with the rename. They are gateway behaviour,
@@ -44,14 +44,14 @@ gateway reads. The client has branched on this since the MiMo cutover and the
 branch is preserved verbatim: `max_completion_tokens` when the provider is
 `mimo`, `max_tokens` everywhere else.
 
-- `src/lib/openrouter.js:56-60` — the branch.
+- `src/server/openrouter.js:56-60` — the branch.
 - `scripts/check-secrets.mjs`, the `llm` entry — grep `const cap =` — makes the
   same choice in the liveness probe, so a 1-token check does not report `FAIL`
   for a working deployment merely by spelling the cap the other way.
 
 **Symptom if this regresses:** the cap is rejected or silently ignored. A
 rejection surfaces as a gateway HTTP error, which `generateContent` turns into
-`LlmUnavailableError` (`src/lib/openrouter.js:163-166`) — an outage, correctly,
+`LlmUnavailableError` (`src/server/openrouter.js:163-166`) — an outage, correctly,
 rather than an empty answer. Being ignored is the worse case: unbounded
 completions, and cost only OpenRouter would have reported.
 
@@ -65,13 +65,13 @@ the answer in `message.content`, and the trace is prose, so the JSON the caller
 asked for arrives wrapped in something no parser should have to guess at. The
 client sends `thinking: { type: "disabled" }` for MiMo only.
 
-- `src/lib/openrouter.js:70-75` — the branch and the reason.
+- `src/server/openrouter.js:70-75` — the branch and the reason.
 
 **Symptom if this regresses:** `robustJsonParse` returns `null` far more often,
 `llmJson` exhausts its JSON retries and returns `null`, and prompt generation
 falls through to the industry pack — a *quietly worse* scan, not a loud
 failure. This is the quirk most worth a regression test, and it has one:
-`src/lib/openrouter.test.mjs` — "MiMo keeps max_completion_tokens,
+`src/server/openrouter.test.mjs` — "MiMo keeps max_completion_tokens,
 thinking-disable, and NO usage.include".
 
 ### 3. JSON Lines instead of a JSON array
@@ -81,8 +81,8 @@ Asked for "a JSON array of objects", MiMo routinely answers with one top-level
 every top-level object and returns them as an array when it finds more than
 one.
 
-- `src/lib/openrouter.js:198-219` — the JSON-Lines recovery.
-- `src/lib/openrouter.js:225-251` — `scanBalanced`, which respects quoted
+- `src/server/openrouter.js:198-219` — the JSON-Lines recovery.
+- `src/server/openrouter.js:225-251` — `scanBalanced`, which respects quoted
   strings and escapes so a `}` inside a string does not end the object early.
 
 This one is **provider-agnostic on purpose**: it runs for every gateway,
@@ -96,15 +96,15 @@ pipeline's per-item cost cap depends on that number being actual spend rather
 than an estimate. The request field is sent only when the provider is
 `openrouter` **and** the model is not `:free`.
 
-- `src/lib/openrouter.js:64-69` — the request side.
-- `src/lib/openrouter.js:124-130` — the response side, which now hands the
+- `src/server/openrouter.js:64-69` — the request side.
+- `src/server/openrouter.js:124-130` — the response side, which now hands the
   `usage` block to `resolveCost` rather than coercing a missing field to 0.
-  The token counts at `src/lib/openrouter.js:111-118` are passed **raw**, not
+  The token counts at `src/server/openrouter.js:111-118` are passed **raw**, not
   `|| 0`, so `resolveCost` can still tell "the gateway said 0" from "the
   gateway said nothing".
 
 The `HTTP-Referer` / `X-Title` attribution headers are the same story:
-OpenRouter-only, `src/lib/openrouter.js:90`.
+OpenRouter-only, `src/server/openrouter.js:90`.
 
 ---
 
@@ -128,13 +128,13 @@ Consequences that are already wired:
   entry (grep `name: "llm"`). Its pass line names the model, provider and base URL it actually reached.
 - **`/api/health` cannot catch it**, by design: it reports whether a credential
   is *configured*, never the result of a live call, so polling health never
-  spends vendor budget (`src/lib/health.js:1-13`). "Configured" and "works" are
+  spends vendor budget (`src/server/health.js:1-13`). "Configured" and "works" are
   different questions and the two surfaces answer one each.
 - **A `:free` suffix is a pricing claim, not decoration.** Cost now comes from
   exactly one of three named sources and carries that name back to the caller as
   `cost_source` — `gateway` (real spend echoed by OpenRouter), `free_tier` (the
   `:free` suffix), or `price_table` (tokens × a rate). See
-  [`src/lib/llmPricing.js`](../../src/lib/llmPricing.js).
+  [`src/shared/llmPricing.js`](../../src/shared/llmPricing.js).
 - **A paid id on a gateway that does not report `usage.cost` is no longer a
   silent $0** — that was the gap this file used to warn readers about, and
   R3.6.1 closed it. `assertModelPriceable` refuses such an id **before** the

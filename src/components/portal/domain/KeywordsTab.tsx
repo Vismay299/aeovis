@@ -21,7 +21,7 @@ import {
 } from "@/components/app/table/TableBulkActionBar";
 import { useExportRows } from "@/components/app/export/useExportRows";
 import { QueryError } from "@/components/app/QueryState";
-import type { ExportFormat } from "@/lib/export/exportRows";
+import type { ExportFormat } from "@/shared/export/exportRows";
 import {
   KEYWORD_FILTER_FIELDS,
   buildKeywordsSearchUpdate,

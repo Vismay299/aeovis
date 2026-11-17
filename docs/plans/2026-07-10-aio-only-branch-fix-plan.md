@@ -58,17 +58,17 @@ This document lists **every fix**, in order, with files, exact approach, and don
 
 | Area | Path |
 |------|------|
-| Probe + summarize | `src/lib/scoring/aioPipeline.js` |
+| Probe + summarize | `src/shared/scoring/aioPipeline.js` |
 | Query generation | `src/lib/scoring/aioPrompts.js` |
-| Worker / DB prompts | `src/lib/workers/scanWorker.js` |
-| Normalize for UI | `src/services/api.js` |
+| Worker / DB prompts | `src/server/workers/scanWorker.js` |
+| Normalize for UI | `src/shared/api.js` |
 | Dashboard | `src/app/dashboard/page.js` |
 | Hero / methodology | `src/components/dashboard/KpiCard.jsx` |
 | Evidence UI | `src/components/dashboard/AioEvidence.jsx` |
 | Competitors | `src/components/dashboard/CompetitorTable.jsx` |
 | Status polling | `src/app/api/scan/[job_id]/status/route.js` |
-| Industry seeds | `src/data/industries.js` |
-| Existing constants (legacy) | `src/lib/scoring/constants.js` |
+| Industry seeds | `src/shared/industries.js` |
+| Existing constants (legacy) | `src/shared/scoring/constants.js` |
 | Live smoke tests | `tests/test_aio_scan.py` |
 | PRD / credentials smell | `memory/PRD.md`, `memory/test_credentials.md` |
 | Sample report | `test_reports/iteration_1.json` |
@@ -93,7 +93,7 @@ visibility_pct =
 
 Introduce AIO-specific constants (new file preferred so legacy v6 weights stay untouched):
 
-**Recommended file**: `src/lib/scoring/aioConstants.js`
+**Recommended file**: `src/shared/scoring/aioConstants.js`
 
 | Constant | Recommended value | Rationale |
 |----------|-------------------|-----------|
@@ -146,8 +146,8 @@ Fix these first. They make scores, gates, and KPIs disagree for **any** brand.
 
 **Steps**:
 
-1. Create `src/lib/scoring/aioConstants.js` with exports from **D2**.
-2. In `src/lib/scoring/aioPipeline.js` → `summarizeAioResults`:
+1. Create `src/shared/scoring/aioConstants.js` with exports from **D2**.
+2. In `src/shared/scoring/aioPipeline.js` → `summarizeAioResults`:
    - Replace `errorRatePct > 50` with `errorRatePct > AIO_ERROR_RATE_LIMIT_PCT`.
    - Replace `... < 0.30` with `... < AIO_MIN_NON_BRANDED_COVERAGE`.
    - Replace `nonBrandedWithAio.length < 5` with `... < AIO_MIN_NON_BRANDED_WITH_AIO`.
@@ -166,7 +166,7 @@ Fix these first. They make scores, gates, and KPIs disagree for **any** brand.
 - [ ] No bare `50`, `0.30`, or `5` gate literals remain in `aioPipeline.js`.
 - [ ] Unit test (can land with P2-S01) or manual assert: 45% errors does **not** trip gate if limit is 50.
 
-**Files**: `src/lib/scoring/aioConstants.js` (new), `src/lib/scoring/aioPipeline.js`
+**Files**: `src/shared/scoring/aioConstants.js` (new), `src/shared/scoring/aioPipeline.js`
 
 ---
 
@@ -194,7 +194,7 @@ Fix these first. They make scores, gates, and KPIs disagree for **any** brand.
 - [ ] For a synthetic set: 10 non-branded, 5 with AIO, 5 branded all with AIO → coverage **50%** (not 75%).
 - [ ] Gate `nonBrandedWithAio/nonBranded < 0.30` uses the same ratio as coverage/100.
 
-**Files**: `src/lib/scoring/aioPipeline.js`
+**Files**: `src/shared/scoring/aioPipeline.js`
 
 ---
 
@@ -227,7 +227,7 @@ Fix these first. They make scores, gates, and KPIs disagree for **any** brand.
 - [ ] Empty text + brand domain in citations → `visible === true`.
 - [ ] Truly empty SERP (no text, no refs) → `aio_present === false`.
 
-**Files**: `src/lib/scoring/aioPipeline.js`, later tests
+**Files**: `src/shared/scoring/aioPipeline.js`, later tests
 
 ---
 
@@ -237,7 +237,7 @@ Fix these first. They make scores, gates, and KPIs disagree for **any** brand.
 
 **Steps**:
 
-1. In `src/services/api.js` → `normalizeResult`:
+1. In `src/shared/api.js` → `normalizeResult`:
 
    - Read summary counts with fallbacks:
 
@@ -279,7 +279,7 @@ Fix these first. They make scores, gates, and KPIs disagree for **any** brand.
 - [ ] Loading any `run_record` never shows coverage 0% when any non-branded `aio_present` is true.
 - [ ] Normalized object always has integer `nonBrandedWithAio`.
 
-**Files**: `src/services/api.js`
+**Files**: `src/shared/api.js`
 
 ---
 
@@ -354,7 +354,7 @@ Fix these first. They make scores, gates, and KPIs disagree for **any** brand.
 
 - [ ] If 3 AIOs out of 18 tracked non-branded, banner says **3**, not 18.
 
-**Files**: `src/app/dashboard/page.js`, `src/services/api.js` (field)
+**Files**: `src/app/dashboard/page.js`, `src/shared/api.js` (field)
 
 ---
 
@@ -402,7 +402,7 @@ Fix these first. They make scores, gates, and KPIs disagree for **any** brand.
 - [ ] Second scan for the same brand still has branded queries (Brand Presence panel not empty solely due to reuse).
 - [ ] DB rows for branded seeds have `intent_tier: "branded"`.
 
-**Files**: `src/lib/workers/scanWorker.js`, `src/lib/scoring/aioPrompts.js`
+**Files**: `src/server/workers/scanWorker.js`, `src/lib/scoring/aioPrompts.js`
 
 ---
 
@@ -465,7 +465,7 @@ Use **unit fixtures** plus **any** real scan (brand-agnostic).
 
 **Done when**: Feeding a camelCase-normalized object back into `normalizeResult` does not empty Brand Presence or inflate score.
 
-**Files**: `src/services/api.js`
+**Files**: `src/shared/api.js`
 
 ---
 
@@ -482,7 +482,7 @@ Use **unit fixtures** plus **any** real scan (brand-agnostic).
 
 **Done when**: Switching between history chips never shows coverage 0 with non-zero visibility from the same `results` array.
 
-**Files**: `src/services/api.js`, `src/app/dashboard/page.js`, scan history API if needed
+**Files**: `src/shared/api.js`, `src/app/dashboard/page.js`, scan history API if needed
 
 ---
 
@@ -503,7 +503,7 @@ Use **unit fixtures** plus **any** real scan (brand-agnostic).
 
 **Done when**: Forced data-source failure shows no “Weak”/“Strong” tier.
 
-**Files**: `src/app/dashboard/page.js`, maybe `src/utils/format.js`
+**Files**: `src/app/dashboard/page.js`, maybe `src/shared/format.js`
 
 ---
 
@@ -653,7 +653,7 @@ Use **unit fixtures** plus **any** real scan (brand-agnostic).
 
 **Done when**: One scan produces ≪ 1 DB write per query (e.g. ≤ ~15 writes for 20 queries).
 
-**Files**: `src/lib/workers/scanWorker.js`, optionally `aioPipeline.js`
+**Files**: `src/server/workers/scanWorker.js`, optionally `aioPipeline.js`
 
 ---
 
@@ -697,7 +697,7 @@ Use **unit fixtures** plus **any** real scan (brand-agnostic).
 
 **Done when**: No unused-import lint on that file.
 
-**Files**: `src/lib/scoring/aioPipeline.js`
+**Files**: `src/shared/scoring/aioPipeline.js`
 
 ---
 
@@ -740,7 +740,7 @@ Use **unit fixtures** plus **any** real scan (brand-agnostic).
 
 **Done when**: Scan form does not force misleading industry seeds when industry is blank or mismatched.
 
-**Files**: `src/data/industries.js`, scan page copy
+**Files**: `src/shared/industries.js`, scan page copy
 
 ---
 

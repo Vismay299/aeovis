@@ -34,7 +34,7 @@ import {
 import { engineLabel } from "@/components/portal/scans/reportData";
 import { formatUsd } from "@/shared/money";
 import type { ScanCost } from "@/shared/costs";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 
 /** How many per-answer rows one "Show more" adds. */
 const PER_ANSWER_PAGE = 25;

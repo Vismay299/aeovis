@@ -3,8 +3,8 @@
  * or in a shape the worker does not document, so nothing here throws and
  * nothing turns an unknown into a number.
  */
-import {terminalOutcomeFromRecord} from "../../../lib/scanOutcome.js";
-import {validateMetric,METRIC_REASON_DETAIL} from "../../../lib/scoring/metricContract.js";
+import {terminalOutcomeFromRecord} from "../../../shared/scanOutcome.js";
+import {validateMetric,METRIC_REASON_DETAIL} from "../../../shared/scoring/metricContract.js";
 
 const ENGINE_LABELS = {
   google_ai_overview: "Google AI Overviews",

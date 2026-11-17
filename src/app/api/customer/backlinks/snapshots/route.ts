@@ -1,9 +1,9 @@
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { snapshotsQuery } from "../../../../../lib/backlinks/backlinks.contract.ts";
-import { listSnapshots } from "../../../../../lib/backlinks/snapshots.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { snapshotsQuery } from "../../../../../server/backlinks/backlinks.contract.ts";
+import { listSnapshots } from "../../../../../server/backlinks/snapshots.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

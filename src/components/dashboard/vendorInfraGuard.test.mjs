@@ -26,14 +26,14 @@ import {
   textOf,
   makeUseEffectShim,
   anyNamedExport,
-} from "../../lib/renderHarness.mjs";
+} from "../../server/renderHarness.mjs";
 
-import * as apiClient from "../../services/api.js";
-import * as formatModule from "../../utils/format.js";
-import * as aliasesModule from "../../lib/scoring/aliases.js";
-import * as brandKeyModule from "../../lib/scoring/brandKey.js";
-import * as aioConstantsModule from "../../lib/scoring/aioConstants.js";
-import * as enginePipelineModule from "../../lib/scoring/enginePipeline.js";
+import * as apiClient from "../../shared/api.js";
+import * as formatModule from "../../shared/format.js";
+import * as aliasesModule from "../../shared/scoring/aliases.js";
+import * as brandKeyModule from "../../shared/scoring/brandKey.js";
+import * as aioConstantsModule from "../../shared/scoring/aioConstants.js";
+import * as enginePipelineModule from "../../shared/scoring/enginePipeline.js";
 
 // ---------------------------------------------------------------------------
 // Vendor names that must NEVER appear in user-visible rendered output.
@@ -129,14 +129,14 @@ const shellModule = await compileJsx(SHELL_PATH, {
       usePathname: () => "/dashboard",
       useSearchParams: () => new URLSearchParams(),
     }],
-    ["@/services/api", { ...apiClient, __esModule: true, fetchScanHistory: () => new Promise(() => {}) }],
-    ["@/utils/format", formatModule],
-    ["@/lib/scoring/aliases", aliasesModule],
-    ["@/lib/scoring/brandKey", brandKeyModule],
-    ["@/lib/scoring/aioConstants", aioConstantsModule],
-    ["@/lib/scoring/enginePipeline", enginePipelineModule],
+    ["@/shared/api", { ...apiClient, __esModule: true, fetchScanHistory: () => new Promise(() => {}) }],
+    ["@/shared/format", formatModule],
+    ["@/shared/scoring/aliases", aliasesModule],
+    ["@/shared/scoring/brandKey", brandKeyModule],
+    ["@/shared/scoring/aioConstants", aioConstantsModule],
+    ["@/shared/scoring/enginePipeline", enginePipelineModule],
   ]),
-  autoStub: ["@/components/", "@/lib/"],
+  autoStub: ["@/components/", "@/server/", "@/shared/"],
   shimUseEffect: true,
 });
 

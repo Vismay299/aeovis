@@ -10,7 +10,7 @@
  *
  * That is the ONLY difference between the two surfaces, and since R0.1.16 it is
  * the only thing this file decides. WHICH vendors exist comes from the one
- * registry /api/health also reads (src/lib/vendorRegistry.js). This script used
+ * registry /api/health also reads (src/server/vendorRegistry.js). This script used
  * to keep a second nine-vendor array of its own; the lists happened to agree, so
  * nothing caught that they were independent, and a tenth vendor added to either
  * would have been reported by one surface and silently missing from the other.
@@ -36,25 +36,25 @@
 
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { getLlmApiKey, getLlmBaseUrl, getLlmModel, getLlmProvider } from "../src/lib/llmConfig.js";
+import { getLlmApiKey, getLlmBaseUrl, getLlmModel, getLlmProvider } from "../src/shared/llmConfig.js";
 // R0.1.16 (finding S30) — the vendor list is NOT this script's. It is the one
 // registry /api/health also reads, so a vendor cannot exist on one surface and
 // not the other. This file contributes the half that is genuinely its own: the
 // live authenticated call per vendor, in VENDOR_CHECKS below.
-import { VENDORS as VENDOR_REGISTRY, credentialStatus } from "../src/lib/vendorRegistry.js";
+import { VENDORS as VENDOR_REGISTRY, credentialStatus } from "../src/server/vendorRegistry.js";
 // R0.1.10 — the client's OWN zone resolver, so this check is on the same code
 // path every probe uses rather than a mirror of it.
-import { resolveBrightDataSerpZone } from "../src/lib/engines/brightdata.js";
-import { getOpenRouterEngineModel, isOpenRouterEngineConfigured } from "../src/lib/engines/openRouterProbe.js";
+import { resolveBrightDataSerpZone } from "../src/shared/engines/brightdata.js";
+import { getOpenRouterEngineModel, isOpenRouterEngineConfigured } from "../src/shared/engines/openRouterProbe.js";
 import {
   ENGINE_LABELS,
   deployedEngines,
   engineDriftWarning,
   formatEngineList,
   parseEngineList,
-} from "../src/lib/engines/deployedEngines.js";
-import { routeOrder, isRouteConfigured } from "../src/lib/engines/engineRoutes.ts";
-import { fetchUserData } from "../src/lib/providers/dataforseo/appendix.ts";
+} from "../src/shared/engines/deployedEngines.js";
+import { routeOrder, isRouteConfigured } from "../src/shared/engines/engineRoutes.ts";
+import { fetchUserData } from "../src/shared/providers/dataforseo/appendix.ts";
 
 const PASS = "PASS";
 const FAIL = "FAIL";
@@ -115,7 +115,7 @@ async function checkOpenRouterModel(engine) {
  *
  * This object is deliberately not a vendor table. Which env vars a vendor needs,
  * which of its names are deprecated, and whether a scan can run without it are
- * facts about the vendor and live once, in src/lib/vendorRegistry.js, where
+ * facts about the vendor and live once, in src/server/vendorRegistry.js, where
  * /api/health reads them too. What belongs HERE is the one thing /api/health can
  * never do: spend a request proving the credential actually works.
  *
@@ -156,7 +156,7 @@ export const VENDOR_CHECKS = {
   // of this comment credited "main()'s catch", which is wrong twice over: the
   // local catch runs first, main()'s per-vendor catch would give only a bare
   // err.message, and main()'s outer catch exits 2 as a crash. Exercised, not
-  // assumed — src/lib/checkSecretsBrightdataNoZone.test.mjs drives this branch.
+  // assumed — src/server/checkSecretsBrightdataNoZone.test.mjs drives this branch.
   //
   // The env read and the type/status filter below are still here on purpose and
   // are NOT a second copy of the resolver: they only pick the PASS wording and
@@ -248,7 +248,7 @@ export const VENDOR_CHECKS = {
     const base = getLlmBaseUrl(process.env);
     const model = getLlmModel(process.env);
     const provider = getLlmProvider(base);
-    // Mirror the client's per-gateway request shape (src/lib/openrouter.js):
+    // Mirror the client's per-gateway request shape (src/server/openrouter.js):
     // MiMo reads max_completion_tokens rather than max_tokens, so probing it
     // with the portable spelling can report FAIL on a working deployment.
     const cap = provider === "mimo" ? { max_completion_tokens: 1 } : { max_tokens: 1 };
@@ -293,7 +293,7 @@ export const VENDOR_CHECKS = {
 
   // This check WAS offline-only, justified by a comment claiming that signing
   // the JWT "would pull in a dependency this script deliberately does not
-  // have". That was false: src/lib/engines/gsc.js imports nothing but node's
+  // have". That was false: src/shared/engines/gsc.js imports nothing but node's
   // own `crypto`, signs the assertion with crypto.createSign at :78, and
   // already exposes listGscSites() — the cheapest authenticated read Search
   // Console offers. The dependency was imaginary and the gap was avoidable.
@@ -314,7 +314,7 @@ export const VENDOR_CHECKS = {
     if (missing.length) return { verdict: FAIL, detail: `service account is missing ${missing.join(", ")}` };
 
     try {
-      const { listGscSites } = await import("../src/lib/engines/gsc.js");
+      const { listGscSites } = await import("../src/shared/engines/gsc.js");
       const sites = await listGscSites();
       return {
         verdict: PASS,
@@ -343,7 +343,7 @@ export const VENDOR_CHECKS = {
 
   // Nothing to call: this secret guards our own routes. Its presence IS the
   // check, and its absence is what makes both worker routes fail closed in
-  // production (src/lib/cronAuth.js).
+  // production (src/server/cronAuth.js).
   async cron() {
     const secret = env("CRON_SECRET");
     if (secret.length < 16) {
@@ -415,7 +415,7 @@ export const VENDOR_CHECKS = {
  * /api/health does not know exists.
  *
  * Both arguments are injectable so the failure paths are exercised rather than
- * asserted — src/lib/vendorRegistry.test.mjs drives them.
+ * asserted — src/server/vendorRegistry.test.mjs drives them.
  */
 export function vendorsWithChecks(registry = VENDOR_REGISTRY, checks = VENDOR_CHECKS) {
   const keys = registry.map((v) => v.key);
@@ -427,7 +427,7 @@ export function vendorsWithChecks(registry = VENDOR_REGISTRY, checks = VENDOR_CH
     if (uncheckedVendors.length) {
       parts.push(
         `${uncheckedVendors.join(", ")} ${uncheckedVendors.length === 1 ? "is" : "are"} in the vendor ` +
-          `registry (src/lib/vendorRegistry.js) with no live check in VENDOR_CHECKS, so check:secrets ` +
+          `registry (src/server/vendorRegistry.js) with no live check in VENDOR_CHECKS, so check:secrets ` +
           `would silently omit ${uncheckedVendors.length === 1 ? "it" : "them"} while /api/health reports ` +
           `${uncheckedVendors.length === 1 ? "it" : "them"}`
       );
@@ -473,7 +473,7 @@ export const VENDORS = vendorsWithChecks();
  *      server-side check sees both halves. This is that check.
  *
  * It is deliberately NOT a row in VENDORS. That table is a credential table and
- * it now literally IS /api/health's — both read src/lib/vendorRegistry.js — so a
+ * it now literally IS /api/health's — both read src/server/vendorRegistry.js — so a
  * row added here is a credential /api/health will report as configured or
  * missing. "engines" is not a credential, and it has an answer even on a
  * deployment holding none. Hence its own heading, its own vocabulary, and no

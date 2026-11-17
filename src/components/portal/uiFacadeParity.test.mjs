@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import React from "react";
-import { compileJsx } from "../../lib/renderHarness.mjs";
+import { compileJsx } from "../../server/renderHarness.mjs";
 
 const root = path.resolve(import.meta.dirname, "../../..");
 const uiPath = path.join(root, "src/components/portal/ui.jsx");

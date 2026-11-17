@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import type { QueryClient } from "@tanstack/query-core";
-import { createQueryClient } from "@/lib/query/queryClient";
+import { createQueryClient } from "@/shared/query/queryClient";
 
 let browserClient: QueryClient | undefined;
 

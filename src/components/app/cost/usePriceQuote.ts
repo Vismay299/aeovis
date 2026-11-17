@@ -9,8 +9,8 @@ import {
   type QueryClient,
   type UseQueryResult,
 } from "@tanstack/react-query";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { stableStringify } from "@/lib/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { stableStringify } from "@/shared/query/keys";
 import type { PriceQuote } from "@/shared/pricing";
 
 export type PriceQuoteArgs = {

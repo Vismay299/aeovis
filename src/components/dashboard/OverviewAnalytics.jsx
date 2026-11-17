@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { resolveBrandKey } from "@/lib/scoring/brandKey";
+import { resolveBrandKey } from "@/shared/scoring/brandKey";
 import { isFiniteNumber } from "@/components/perceev/charts/chartMath";
 import { VisibilityVerdictPanel } from "./VisibilityVerdictPanel";
 import { VisibilityTrendPanel } from "./VisibilityTrendPanel";
@@ -50,7 +50,7 @@ function buildRankedEntries(result, heroScore, selfDelta) {
  * render immediately even while the trend fetch is still in flight.
  *
  * Brand-keying: the metrics endpoint is keyed by resolveBrandKey(brand, url)
- * — the DOMAIN, never the typed display name (src/lib/scoring/brandKey.js).
+ * — the DOMAIN, never the typed display name (src/shared/scoring/brandKey.js).
  *
  * @param {object} result normalized scan record (services/api.js normalizeResult output)
  * @param {number} heroScore this scan's headline visibility, as computed by DashboardShell

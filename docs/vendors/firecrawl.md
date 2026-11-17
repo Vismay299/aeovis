@@ -2,7 +2,7 @@
 
 > <!-- doc-status -->
 > **Status: LIVE.** Client:
-> [`src/lib/firecrawl.js`](../../src/lib/firecrawl.js) — `scrapeSite(url, deps)`,
+> [`src/server/firecrawl.js`](../../src/server/firecrawl.js) — `scrapeSite(url, deps)`,
 > plus `normalizeScrapeResult` and `summarizeScrape` for callers. **R3.7.2
 > renamed the entry point and changed its return type**: it was
 > `scrapeForSummary(url)`, returning a bare string. That name no longer exists.
@@ -30,7 +30,7 @@ file or a cron entry at HEAD:
 | Timeout | 20 s via `AbortSignal.timeout` (`firecrawl.js:211`) |
 | Retries | **none** — one attempt, then the fallback below |
 | Liveness probe | a real scrape of `example.com` — the `firecrawl` entry of `scripts/check-secrets.mjs` |
-| Required? | **No.** `required: false` on the `firecrawl` entry of `check-secrets.mjs`, and `src/lib/health.js:27` |
+| Required? | **No.** `required: false` on the `firecrawl` entry of `check-secrets.mjs`, and `src/server/health.js:27` |
 
 ## Response shape
 
@@ -100,14 +100,14 @@ is better than nothing — but:
    (`firecrawl.js:282-288`).
 2. The scan **records** that state rather than discarding it.
    `generateUnbrandedPrompts` writes it onto the `stats` accumulator
-   (`src/lib/scoring/promptGen.js:264`) and `runSourcingPhase` reads it back and
+   (`src/shared/scoring/promptGen.js:264`) and `runSourcingPhase` reads it back and
    calls `recordSkip(tally, CHUNK_SKIP_REASONS.WEBSITE_SCRAPE_DEGRADED, …)`
-   (`src/lib/workers/scanWorker.js:1112-1124`; the reason constant itself is at
+   (`src/server/workers/scanWorker.js:1112-1124`; the reason constant itself is at
    `scanWorker.js:216`), so the degrade lands in the chunk's `scan_runs` row
    under `detail.skips` carrying its `state_reason` and its character count. It
    is also frozen onto the job checkpoint (`scanWorker.js:1216`, preserved
    across the per-batch rebuild at `:1390`) so a resumed chunk can still see it.
-   Held by `src/lib/workers/scanChunkLedger.test.mjs:1912-2185`.
+   Held by `src/server/workers/scanChunkLedger.test.mjs:1912-2185`.
 
 A scrape that never happened at all — the tracked prompt pool was already at
 target, so generation never ran — records **nothing** here, deliberately: it is
@@ -159,7 +159,7 @@ process.
 
 An unconfigured Firecrawl reports `UNCONFIGURED`, never `FAIL`
 (`required: false` on the `firecrawl` entry of
-`scripts/check-secrets.mjs`; `src/lib/health.js:27`),
+`scripts/check-secrets.mjs`; `src/server/health.js:27`),
 and must never fail a scan or a health check. Crawlability is an enrichment on
 top of the visibility reading, not an input to it. Note the interaction with the
 quirk above: with no key at all **every** call takes the stripped-HTML path —
@@ -187,5 +187,5 @@ fallthroughs, and the import-time key capture were each reproduced by executing
 the pre-R3.7.2 `scrapeForSummary` against a stubbed `fetch` — not inferred from
 reading. The R3.7.2 revisions above were re-verified the same way against
 `scrapeSite`; the recording claim in the first quirk is held by executable tests
-in `src/lib/workers/scanChunkLedger.test.mjs`, each of which was confirmed to
+in `src/server/workers/scanChunkLedger.test.mjs`, each of which was confirmed to
 fail when its `recordSkip` call is removed.*

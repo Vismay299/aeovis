@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { usePathname } from "next/navigation";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { getSupabaseBrowserClient } from "@/shared/supabase/browser";
 import {
   PRIVACY_CHOICES_CHANGED_EVENT,
   effectiveAnalyticsChoice,
@@ -17,12 +17,12 @@ import {
 import {
   startAnalyticsCapture,
   stopAnalyticsCapture,
-} from "@/lib/telemetry/client";
+} from "@/shared/telemetry/client";
 import { wireClientSinks } from "./wireClientSinks";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { privacyKeys } from "@/lib/query/keys";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { privacyKeys } from "@/shared/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
 import type { PrivacyChoiceResponse } from "./useAnalyticsConsent";
 
 const ALLOWED_SURFACES = [

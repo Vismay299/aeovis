@@ -1,10 +1,10 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { keys } from "@/lib/query/keys";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import type { SavedBusinessView } from "@/lib/local/businesses";
-import type { BusinessProfileView } from "@/lib/local/profile";
+import { keys } from "@/shared/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import type { SavedBusinessView } from "@/server/local/businesses";
+import type { BusinessProfileView } from "@/server/local/profile";
 import { trackLocalEvent } from "../telemetry";
 
 export type { SavedBusinessView, BusinessProfileView };

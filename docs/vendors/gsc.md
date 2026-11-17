@@ -2,9 +2,9 @@
 
 > <!-- doc-status -->
 > **Status: LIVE** (wired; no property connected yet as of 2026-09-15). Client:
-> [`src/lib/engines/gsc.js`](../../src/lib/engines/gsc.js). Ingest:
-> [`src/lib/gsc/ingest.js`](../../src/lib/gsc/ingest.js). Storage:
-> [`src/lib/db/gsc.js`](../../src/lib/db/gsc.js), migration `018_gsc_daily.sql`.
+> [`src/shared/engines/gsc.js`](../../src/shared/engines/gsc.js). Ingest:
+> [`src/server/gsc/ingest.js`](../../src/server/gsc/ingest.js). Storage:
+> [`src/server/db/gsc.js`](../../src/server/db/gsc.js), migration `018_gsc_daily.sql`.
 
 **Date:** 2026-09-15 · **Task:** R4.1.1
 
@@ -24,7 +24,7 @@
 | Auth | self-signed RS256 JWT exchanged at `oauth2.googleapis.com/token`, scope `webmasters.readonly` |
 | Service account | `perceev-gsc@aeovis.iam.gserviceaccount.com` |
 | Request | `POST /webmasters/v3/sites/{site}/searchAnalytics/query`, dimensions `["date","query"]`, 25k rows/page, paginated by `startRow`, capped at 250k rows per pass |
-| Required? | **No.** `required: false` in `src/lib/vendorRegistry.js` |
+| Required? | **No.** `required: false` in `src/server/vendorRegistry.js` |
 
 ## Connect flow (per brand)
 

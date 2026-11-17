@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { UserPlus, Users } from "lucide-react";
 import { usePortal } from "../PortalShell";
 import { Badge, Banner, Button, Card, PageHeader, SkeletonRows, formatRelative } from "../ui";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 import { InlineConfirm } from "@/components/app/InlineConfirm";
 import { Input } from "@/components/ui/input";
 import {

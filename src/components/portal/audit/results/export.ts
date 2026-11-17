@@ -5,10 +5,10 @@
 // F18 phase 4 — the client exports for the visible results tables.
 //
 // Server-side export kinds (site_audit_issues, site_audit_pages,
-// site_audit_performance) are registered in src/lib/export/kinds/index.ts for
+// site_audit_performance) are registered in src/shared/export/kinds/index.ts for
 // full-list exports; the menus here cover the rows the screen has loaded.
 
-import type { CsvValue } from "@/lib/export/csv";
+import type { CsvValue } from "@/shared/export/csv";
 import { getIssueDescriptor } from "@/shared/audit-issues";
 import type { AiAccessRow, AuditIssueGroup } from "../hooks/useAuditSummary";
 import type { AuditPageRow } from "../hooks/useAuditPages";

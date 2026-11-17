@@ -2,7 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { Toaster } from "sonner";
-import { surfaceForPath } from "@/lib/theme/theme";
+import { surfaceForPath } from "@/shared/theme/theme";
 import { useThemePreference } from "@/components/app/theme/useThemePreference";
 
 const LEGACY_TOAST_STYLE = {

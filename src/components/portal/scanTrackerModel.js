@@ -4,7 +4,7 @@ import {
   applyScanReading,
   applyScanUnknown,
   isReconnecting,
-} from "../../lib/scanProgress.js";
+} from "../../shared/scanProgress.js";
 
 export const ACTIVE_SCAN_STATUSES = [
   "pending",

@@ -14,7 +14,7 @@ The probe fleet (`worker/`) is a long-lived Node.js process designed to drive re
 
 ### Architectural Boundary
 * **Independent Workspace:** `worker/` has its own `package.json` and its own dependencies (`@supabase/supabase-js`, `playwright`). It never imports from `src/app` or `next/*`.
-* **Shared Logic is Copied, Not Imported:** Enforced by `src/lib/workerIsolation.test.mjs` in CI.
+* **Shared Logic is Copied, Not Imported:** Enforced by `src/server/workerIsolation.test.mjs` in CI.
 * **Dev Mode is Production Source:** There is no distinct "dev fleet" codebase; laptop development executes the exact production worker loop (`worker/src/index.js`) directed at non-production Supabase infrastructure.
 * **Refusal Over Fabrication:** Unimplemented surface adapters (`probeBatch`) throw explicitly rather than returning artificial zero scores (Standing Rule 1: A skip is not a success).
 

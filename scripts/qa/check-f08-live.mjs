@@ -77,9 +77,9 @@ try {
 async function main() {
   const [{ Pool }, { createSpendStore }, { getSupabaseAdmin }, { isFeatureEnabled }] = await Promise.all([
     import("pg"),
-    import("../../src/lib/spend/store.ts"),
-    import("../../src/lib/supabase/admin.js"),
-    import("../../src/lib/features/flags.ts"),
+    import("../../src/shared/spend/store.ts"),
+    import("../../src/shared/supabase/admin.js"),
+    import("../../src/server/features/flags.ts"),
   ]);
   const pool = new Pool({
     host: pgHost,
@@ -140,12 +140,12 @@ async function main() {
       brand: { ...brand, brandKey: args.brand, role: "owner" },
       admin,
     };
-    const { readQuestionSettings } = await import("../../src/lib/questions/workspaceQuestions.ts");
+    const { readQuestionSettings } = await import("../../src/server/questions/workspaceQuestions.ts");
     const settings = await readQuestionSettings(admin, args.brand);
     const pricingContext = { brandKey: args.brand, admin, env: process.env, now: new Date() };
 
-    await import("../../src/lib/pricing/actions/index.ts");
-    const { quote, requireApprovedPrice, recordApproval } = await import("../../src/lib/pricing/pricedActions.ts");
+    await import("../../src/shared/pricing/actions/index.ts");
+    const { quote, requireApprovedPrice, recordApproval } = await import("../../src/shared/pricing/pricedActions.ts");
     const setupQuote = await quote("questions.setup.run", pricingContext, {});
     const researchQuote = await quote(
       "questions.research.run",
@@ -187,21 +187,21 @@ async function main() {
       },
     });
     const spendDeps = { store: spendStore, env: process.env, notifyCap: false };
-    const { metered } = await import("../../src/lib/spend/index.ts");
+    const { metered } = await import("../../src/shared/spend/index.ts");
     const meterWithQaStore = (input, call) => metered(input, call, spendDeps);
-    const { llmObject, llmText } = await import("../../src/lib/llm/index.ts");
+    const { llmObject, llmText } = await import("../../src/server/llm/index.ts");
     const llmObjectWithQaStore = (input) => llmObject(input, { spend: spendDeps, env: process.env });
     const llmTextWithQaStore = (input) => llmText(input, { spend: spendDeps, env: process.env });
-    const { createDataforseoClient } = await import("../../src/lib/providers/dataforseo/client.ts");
+    const { createDataforseoClient } = await import("../../src/shared/providers/dataforseo/client.ts");
     const dataforseoClient = createDataforseoClient({ spendDeps });
-    const { promptgenCandidates } = await import("../../src/lib/questions/setup/promptgenSource.ts");
+    const { promptgenCandidates } = await import("../../src/server/questions/setup/promptgenSource.ts");
     const promptgenWithQaStore = (ctx, input) => promptgenCandidates(ctx, input, {
       llmText: llmTextWithQaStore,
       metered: meterWithQaStore,
       env: process.env,
     });
 
-    const { normalizeCompetitorDomain } = await import("../../src/lib/questions/setup/research.ts");
+    const { normalizeCompetitorDomain } = await import("../../src/server/questions/setup/research.ts");
     const { country, language } = settings;
     const setupJobId = randomUUID();
     const setupPayload = {
@@ -242,7 +242,7 @@ async function main() {
       cancelRequested: async () => false,
     };
 
-    const { runQuestionSetup } = await import("../../src/lib/questions/setup/research.ts");
+    const { runQuestionSetup } = await import("../../src/server/questions/setup/research.ts");
     await runQuestionSetup(jobContext, {
       admin,
       llmObject: llmObjectWithQaStore,
@@ -262,7 +262,7 @@ async function main() {
       subject: { kind: "request", id: requestId },
       approvedBy: membership.user_id,
     });
-    const { researchQuestions } = await import("../../src/lib/questions/promptResearch.ts");
+    const { researchQuestions } = await import("../../src/server/questions/promptResearch.ts");
     await researchQuestions(
       admin,
       workspace,

@@ -3,8 +3,8 @@
 // F18 phase 4 — delete a finished audit from the history table.
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 
 export function useDeleteAudit(brandKey: string) {
   const queryClient = useQueryClient();

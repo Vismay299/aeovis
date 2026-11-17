@@ -2,14 +2,14 @@
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { privacyKeys } from "@/lib/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { privacyKeys } from "@/shared/query/keys";
 import { writePrivacyCookie } from "@/shared/privacy-choices";
 import {
   startAnalyticsCapture,
   stopAnalyticsCapture,
   trackEvent,
-} from "@/lib/telemetry/client";
+} from "@/shared/telemetry/client";
 
 export type PrivacyChoiceResponse = {
   analytics: boolean | null;

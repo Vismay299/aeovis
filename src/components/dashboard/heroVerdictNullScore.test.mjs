@@ -14,15 +14,15 @@ import {
   summarizeEngineSlice,
   summarizeEngineResults,
   computeHeadline,
-} from "../../lib/scoring/enginePipeline.js";
-import * as apiClient from "../../services/api.js";
-import * as formatModule from "../../utils/format.js";
-import { scoreTier, tierLabel, tierClasses } from "../../utils/format.js";
-import * as aliasesModule from "../../lib/scoring/aliases.js";
-import * as brandKeyModule from "../../lib/scoring/brandKey.js";
-import * as aioConstantsModule from "../../lib/scoring/aioConstants.js";
-import * as enginePipelineModule from "../../lib/scoring/enginePipeline.js";
-import * as rosterContinuityModule from "../../lib/scoring/rosterContinuity.js";
+} from "../../shared/scoring/enginePipeline.js";
+import * as apiClient from "../../shared/api.js";
+import * as formatModule from "../../shared/format.js";
+import { scoreTier, tierLabel, tierClasses } from "../../shared/format.js";
+import * as aliasesModule from "../../shared/scoring/aliases.js";
+import * as brandKeyModule from "../../shared/scoring/brandKey.js";
+import * as aioConstantsModule from "../../shared/scoring/aioConstants.js";
+import * as enginePipelineModule from "../../shared/scoring/enginePipeline.js";
+import * as rosterContinuityModule from "../../shared/scoring/rosterContinuity.js";
 import * as interlockingModule from "./interlocking.js";
 
 /**
@@ -36,7 +36,7 @@ import * as interlockingModule from "./interlocking.js";
  * rendered a red "Weak" chip directly beside the em dash standing in for the
  * percentage. A verdict produced by a measurement that does not exist, which is
  * the same defect this task's diff already fixed once for Sidebar (see the
- * comment at src/lib/scoring/enginePipeline.js:462-465).
+ * comment at src/shared/scoring/enginePipeline.js:462-465).
  *
  * WHAT THIS FILE PROVES, and how:
  *   - scoreTier by direct execution, including a live re-run of the OLD
@@ -152,8 +152,8 @@ const LUCIDE = ["lucide-react", anyNamedExport];
 /**
  * Render the real DashboardShell over a stored scan row.
  *
- * NOT stubbed, deliberately: @/utils/format (the module under test),
- * @/services/api (so `result` comes from the real normalizeResult), and the two
+ * NOT stubbed, deliberately: @/shared/format (the module under test),
+ * @/shared/api (so `result` comes from the real normalizeResult), and the two
  * components that turn a tier into a chip.
  */
 async function renderShell(scan) {
@@ -180,7 +180,7 @@ async function renderShell(scan) {
     LUCIDE,
     ["@/components/charts/FlowDiagram", { ...flow, __esModule: true }],
     ["@/components/charts/Gauge", { ...gauge, __esModule: true }],
-    ["@/lib/scoring/rosterContinuity", { ...rosterContinuityModule, __esModule: true }],
+    ["@/shared/scoring/rosterContinuity", { ...rosterContinuityModule, __esModule: true }],
     ["./interlocking", { ...interlockingModule, __esModule: true }],
     // Stubbed on purpose: a chain of four analytics panels, none of which
     // renders a tier chip. Named here so the omission is a decision.
@@ -218,12 +218,12 @@ async function renderShell(scan) {
         useSearchParams: () => new URLSearchParams(),
       },
     ],
-    ["@/services/api", { ...apiClient, __esModule: true, fetchScanHistory: () => syncResolved([]) }],
-    ["@/utils/format", formatModule],
-    ["@/lib/scoring/aliases", aliasesModule],
-    ["@/lib/scoring/brandKey", brandKeyModule],
-    ["@/lib/scoring/aioConstants", aioConstantsModule],
-    ["@/lib/scoring/enginePipeline", { ...enginePipelineModule, __esModule: true }],
+    ["@/shared/api", { ...apiClient, __esModule: true, fetchScanHistory: () => syncResolved([]) }],
+    ["@/shared/format", formatModule],
+    ["@/shared/scoring/aliases", aliasesModule],
+    ["@/shared/scoring/brandKey", brandKeyModule],
+    ["@/shared/scoring/aioConstants", aioConstantsModule],
+    ["@/shared/scoring/enginePipeline", { ...enginePipelineModule, __esModule: true }],
     ["@/components/dashboard/ScoreBand", { ...scoreBand, __esModule: true }],
     ["@/components/dashboard/OverviewView", { ...overview, __esModule: true }],
   ]);
@@ -235,7 +235,7 @@ async function renderShell(scan) {
       // Sidebar, ThemeToggle, the five non-overview views, StudioView. None of
       // them receives `tier`; DashboardShell.jsx is grepped below to keep that
       // true, so this fallback cannot start hiding a surface under test.
-      if (spec.startsWith("@/components/") || spec.startsWith("@/lib/")) return anyNamedExport;
+      if (spec.startsWith("@/components/") || spec.startsWith("@/server/") || spec.startsWith("@/shared/")) return anyNamedExport;
       throw new Error(
         `DashboardShell imports "${spec}", which this harness does not resolve. Add it deliberately.`
       );

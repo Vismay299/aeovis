@@ -1,5 +1,5 @@
 import LegalPage, { LegalContact } from "@/components/legal/LegalPage";
-import { POLICY_VERSION } from "@/lib/telemetry/events.ts";
+import { POLICY_VERSION } from "@/shared/telemetry/events.ts";
 
 export { POLICY_VERSION };
 export const LAST_UPDATED = POLICY_VERSION;

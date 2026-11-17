@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { Switch as SwitchPrimitive } from "@base-ui/react/switch";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 function Switch({
   className,

@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { fetchJson, isApiError, withBrand } from "@/lib/query/fetchJson";
-import { describeError } from "@/lib/query/errors";
+import { fetchJson, isApiError, withBrand } from "@/shared/query/fetchJson";
+import { describeError } from "@/shared/query/errors";
 
 export function TrackQuestionDialog({
   open,

@@ -10,7 +10,8 @@
    these are the only trees that hold class names. */
 @source "../../src/app";
 @source "../../src/components";
-@source "../../src/lib";
+@source "../../src/server";
+@source "../../src/shared";
 @source "../../src/middleware.js";
 
 /* Perceev's shared light design system. DESIGN.md governs visual direction.

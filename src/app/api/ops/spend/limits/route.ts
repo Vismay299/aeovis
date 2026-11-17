@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AppError, jsonOk, toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { getSupabaseAdmin } from "../../../../../lib/supabase/admin.js";
-import { spendLimitsQuery } from "../../../../../lib/spend/spend.contract.ts";
+import { AppError, jsonOk, toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { getSupabaseAdmin } from "../../../../../shared/supabase/admin.js";
+import { spendLimitsQuery } from "../../../../../shared/spend/spend.contract.ts";
 
 export const dynamic = "force-dynamic";
 

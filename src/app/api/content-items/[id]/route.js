@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getContentItem } from "@/lib/db/content";
+import { getContentItem } from "@/server/db/content";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

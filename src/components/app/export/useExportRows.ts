@@ -6,16 +6,16 @@
 
 import { useCallback } from "react";
 import { toast } from "sonner";
-import { downloadFile } from "@/lib/export/download";
-import { copyTableToClipboard } from "@/lib/export/clipboard";
-import { openSheetsModal } from "@/lib/export/sheetsModalStore";
+import { downloadFile } from "@/shared/export/download";
+import { copyTableToClipboard } from "@/shared/export/clipboard";
+import { openSheetsModal } from "@/shared/export/sheetsModalStore";
 import {
   exportRows,
   type ExportFormat,
   type ExportDeps,
-} from "@/lib/export/exportRows";
-import { trackExport } from "@/lib/export/telemetry";
-import type { CsvValue } from "@/lib/export/csv";
+} from "@/shared/export/exportRows";
+import { trackExport } from "@/shared/export/telemetry";
+import type { CsvValue } from "@/shared/export/csv";
 
 export async function copyList(items: string[], label: string): Promise<void> {
   if (items.length === 0) {

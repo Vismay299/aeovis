@@ -5,8 +5,8 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { useQuery } from "@tanstack/react-query";
-import { keys, stableStringify } from "@/lib/query/keys";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { keys, stableStringify } from "@/shared/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
 import type { ResearchScope } from "@/shared/researchScope";
 import type {
   DomainFilterValues,

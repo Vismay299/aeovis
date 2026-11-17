@@ -5,7 +5,7 @@ import { countRowCitations, summarizeSources } from "./sourcesMetrics.js";
 /**
  * R2.7.2 (finding A10) — "Sources cited: 0" beside "Distinct domains: 14".
  *
- * The rows below are the shape src/lib/scoring/enginePipeline.js actually
+ * The rows below are the shape src/shared/scoring/enginePipeline.js actually
  * produces and scanWorker.js stores verbatim in raw_results.results: no
  * `aio_citations` key anywhere, `references` carrying the URLs, `citations`
  * carrying their deduped hrefs.

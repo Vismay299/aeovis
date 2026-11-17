@@ -1,10 +1,10 @@
-import { requireUser as defaultRequireUser, type RequireUserDeps } from "../../../../../lib/auth/requireUser.ts";
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { completeOnboarding as defaultCompleteOnboarding } from "../../../../../lib/onboarding/steps.ts";
+import { requireUser as defaultRequireUser, type RequireUserDeps } from "../../../../../server/auth/requireUser.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { completeOnboarding as defaultCompleteOnboarding } from "../../../../../server/onboarding/steps.ts";
 import { finishDestination } from "../../../../../shared/onboarding.ts";
-import { onboardingCompleteBodySchema } from "../../../../../lib/onboarding/onboarding.contract.ts";
+import { onboardingCompleteBodySchema } from "../../../../../server/onboarding/onboarding.contract.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

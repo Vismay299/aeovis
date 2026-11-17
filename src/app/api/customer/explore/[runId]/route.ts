@@ -1,11 +1,11 @@
-import { requireWorkspace } from "../../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, jsonOk, AppError } from "../../../../../lib/http/errors.ts";
-import { exploreGetQuery } from "../../../../../lib/explore/explore.contract.ts";
+import { requireWorkspace } from "../../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { toErrorResponse, jsonOk, AppError } from "../../../../../shared/http/errors.ts";
+import { exploreGetQuery } from "../../../../../server/explore/explore.contract.ts";
 import {
   getExploreRun,
   type ExploreServiceDeps,
-} from "../../../../../lib/explore/service.ts";
+} from "../../../../../server/explore/service.ts";
 
 export const dynamic = "force-dynamic";
 

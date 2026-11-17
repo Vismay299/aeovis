@@ -2,21 +2,21 @@
 //   src/serverFunctions/serp-locations.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../lib/workspace/requireWorkspace.ts";
-import { serpRequestBody } from "../../../../../lib/keywords/keywords.contract.ts";
+} from "../../../../../server/workspace/requireWorkspace.ts";
+import { serpRequestBody } from "../../../../../server/keywords/keywords.contract.ts";
 import {
   runSerpRequest,
   type RunSerpDeps,
-} from "../../../../../lib/keywords/serp.ts";
-import "../../../../../lib/pricing/actions/index.ts";
-import { CacheOnlyMiss } from "../../../../../lib/research/cache.ts";
-import { toResearchError } from "../../../../../lib/research/providerErrors.ts";
+} from "../../../../../server/keywords/serp.ts";
+import "../../../../../shared/pricing/actions/index.ts";
+import { CacheOnlyMiss } from "../../../../../server/research/cache.ts";
+import { toResearchError } from "../../../../../server/research/providerErrors.ts";
 
 export const dynamic = "force-dynamic";
 

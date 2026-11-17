@@ -48,7 +48,7 @@ about the code — report it.
 idiom for every search tool, what is safe to read, and what to do if a secret
 appears anyway — lives in `CLAUDE.md` § "Secrets hygiene", which every session
 and every agent in this project loads. It binds you exactly as if it were
-written here. `src/lib/agentSecretsGuard.test.mjs` fails if this pointer or
+written here. `src/server/agentSecretsGuard.test.mjs` fails if this pointer or
 that section goes missing.
 
 ## Protocol
@@ -58,7 +58,7 @@ controller commits and a separate verifier closes.
 
 ```bash
 node .claude/orchestration/orchestrate.mjs claim  <id> --agent rebuild-test-author
-node .claude/orchestration/orchestrate.mjs submit <id> --evidence "src/lib/x.test.mjs:12" --note "..."
+node .claude/orchestration/orchestrate.mjs submit <id> --evidence "src/server/x.test.mjs:12" --note "..."
 ```
 
 Report the before/after counts from `npm run test:scoring` and name any test you

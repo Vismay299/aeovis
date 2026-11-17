@@ -4,7 +4,7 @@ import * as React from "react";
 import { Button } from "@/components/ui/button";
 import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
-import { stableStringify } from "@/lib/query/keys";
+import { stableStringify } from "@/shared/query/keys";
 import { formatUsd, type PriceQuote } from "@/shared/pricing";
 
 export type PricedActionButtonProps = {

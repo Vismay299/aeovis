@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listLessons, setLessonActive } from "@/lib/db/content";
+import { listLessons, setLessonActive } from "@/server/db/content";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

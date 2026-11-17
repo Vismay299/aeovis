@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { POLICY_VERSION } from "../../lib/telemetry/events.ts";
+import { POLICY_VERSION } from "../../shared/telemetry/events.ts";
 
 const privacyFile = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),

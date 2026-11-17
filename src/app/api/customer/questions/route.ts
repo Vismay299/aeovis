@@ -2,26 +2,26 @@
 //   src/server/features/ai-visibility/services/aiVisibilityConfiguration.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { AppError } from "../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../lib/features/flags.ts";
+import { AppError } from "../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
   type Workspace,
-} from "../../../../lib/workspace/requireWorkspace.ts";
-import { getBrandAliases } from "../../../../lib/scoring/aliases.js";
+} from "../../../../server/workspace/requireWorkspace.ts";
+import { getBrandAliases } from "../../../../shared/scoring/aliases.js";
 import {
   questionsGetQuery,
   questionsPatchBody,
-} from "../../../../lib/questions/questions.contract.ts";
-import { projectQuestionPatch } from "../../../../lib/questions/applyQuestionPatch.ts";
+} from "../../../../server/questions/questions.contract.ts";
+import { projectQuestionPatch } from "../../../../server/questions/applyQuestionPatch.ts";
 import {
   listWorkspaceQuestions,
   saveQuestionPatch,
-} from "../../../../lib/questions/workspaceQuestions.ts";
-import { getQuestionsState, type StateDeps } from "../../../../lib/questions/state.ts";
-import { captureServerEvent } from "../../../../lib/telemetry/server.ts";
+} from "../../../../server/questions/workspaceQuestions.ts";
+import { getQuestionsState, type StateDeps } from "../../../../server/questions/state.ts";
+import { captureServerEvent } from "../../../../shared/telemetry/server.ts";
 
 export const dynamic = "force-dynamic";
 

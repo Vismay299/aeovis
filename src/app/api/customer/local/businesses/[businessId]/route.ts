@@ -1,5 +1,5 @@
-import { removeBusiness, updateBusinessRole } from "../../../../../../lib/local/businesses.ts";
-import { businessIdParams, localBrandQuery, updateBusinessBody } from "../../../../../../lib/local/local.contract.ts";
+import { removeBusiness, updateBusinessRole } from "../../../../../../server/local/businesses.ts";
+import { businessIdParams, localBrandQuery, updateBusinessBody } from "../../../../../../server/local/local.contract.ts";
 import {
   gate,
   jsonOk,
@@ -9,7 +9,7 @@ import {
   respond,
   type LocalRouteDeps,
   type RouteContext,
-} from "../../../../../../lib/local/routeKit.ts";
+} from "../../../../../../server/local/routeKit.ts";
 
 export const dynamic = "force-dynamic";
 

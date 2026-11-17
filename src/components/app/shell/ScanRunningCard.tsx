@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 import { usePortal } from "@/components/portal/PortalShell";
 
 /**

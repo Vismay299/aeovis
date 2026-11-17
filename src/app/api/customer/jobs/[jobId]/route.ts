@@ -1,10 +1,10 @@
-import { AppError, jsonOk, toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { jobIdParams, jobStatusQuery } from "../../../../../lib/jobs/jobs.contract.ts";
-import { jobStore } from "../../../../../lib/jobs/store.ts";
-import type { JobStore } from "../../../../../lib/jobs/store.ts";
-import { getJobStatus } from "../../../../../lib/jobs/status.ts";
-import type { JobStatusResult } from "../../../../../lib/jobs/status.ts";
-import { requireWorkspace } from "../../../../../lib/workspace/requireWorkspace.ts";
+import { AppError, jsonOk, toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { jobIdParams, jobStatusQuery } from "../../../../../server/jobs/jobs.contract.ts";
+import { jobStore } from "../../../../../server/jobs/store.ts";
+import type { JobStore } from "../../../../../server/jobs/store.ts";
+import { getJobStatus } from "../../../../../server/jobs/status.ts";
+import type { JobStatusResult } from "../../../../../server/jobs/status.ts";
+import { requireWorkspace } from "../../../../../server/workspace/requireWorkspace.ts";
 
 export const dynamic = "force-dynamic";
 

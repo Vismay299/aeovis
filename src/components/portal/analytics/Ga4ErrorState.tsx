@@ -5,7 +5,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/app/EmptyState";
 import { QueryError } from "@/components/app/QueryState";
-import { ApiError } from "@/lib/query/fetchJson";
+import { ApiError } from "@/shared/query/fetchJson";
 
 /** Reads the error code off a fetchJson failure (or a thrown AppError shape). */
 export function ga4ErrorCode(error: unknown): string {

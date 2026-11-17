@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { findCustomerBrand, getCustomerContext } from "@/lib/supabase/customer";
-import { isFeatureEnabled } from "@/lib/features/flags.ts";
+import { findCustomerBrand, getCustomerContext } from "@/shared/supabase/customer";
+import { isFeatureEnabled } from "@/server/features/flags.ts";
 
 export const dynamic = "force-dynamic";
 export const fetchCache = "force-no-store";

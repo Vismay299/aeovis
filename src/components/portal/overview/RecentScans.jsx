@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Play, Radar } from "lucide-react";
 import { PrefetchLink } from "@/components/app/PrefetchLink";
-import { scanReportQueryOptions } from "@/lib/query/portalQueries";
+import { scanReportQueryOptions } from "@/shared/query/portalQueries";
 import { Badge, Button, Card, EmptyState, SkeletonRows, formatDate, formatPct } from "../ui";
 import { countText, scanTimestamp, toNumber, visibilityTone } from "./overviewModel";
 

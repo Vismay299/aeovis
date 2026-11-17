@@ -5,8 +5,8 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 import type { Devices, RankSchedule } from "@/shared/rank-tracking";
 import type { ScheduleTime } from "@/shared/schedule";
 import { trackRankEvent } from "../telemetry";

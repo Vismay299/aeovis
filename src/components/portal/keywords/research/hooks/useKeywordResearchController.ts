@@ -19,7 +19,7 @@ import { useKeywordSerpAnalysis, type KeywordSerpResponse } from "./useKeywordSe
 import { useKeywordHistory } from "./useKeywordHistory";
 import { useKeywordSearchTabs } from "./useKeywordSearchTabs";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
-import { isApiError } from "@/lib/query/fetchJson";
+import { isApiError } from "@/shared/query/fetchJson";
 import { MAX_KEYWORDS_PER_SUBMIT } from "@/shared/keywords";
 
 const searchSchema = z.object({

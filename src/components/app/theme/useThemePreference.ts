@@ -13,7 +13,7 @@ import {
   surfaceForPath,
   parsePreference,
   resolveTheme,
-} from "@/lib/theme/theme";
+} from "@/shared/theme/theme";
 
 // Set when localStorage cannot store a pick (private browsing, strict modes,
 // a full quota): the pick then holds for this page session and wins over

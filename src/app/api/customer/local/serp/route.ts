@@ -1,6 +1,6 @@
-import { getLocalSerpResults } from "../../../../../lib/local/localSerp.ts";
-import { serpBody } from "../../../../../lib/local/local.contract.ts";
-import { approve, gate, jsonOk, parseBody, respond, type LocalRouteDeps } from "../../../../../lib/local/routeKit.ts";
+import { getLocalSerpResults } from "../../../../../server/local/localSerp.ts";
+import { serpBody } from "../../../../../server/local/local.contract.ts";
+import { approve, gate, jsonOk, parseBody, respond, type LocalRouteDeps } from "../../../../../server/local/routeKit.ts";
 
 export const dynamic = "force-dynamic";
 

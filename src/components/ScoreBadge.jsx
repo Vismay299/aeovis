@@ -1,4 +1,4 @@
-import { tierClasses, tierLabel } from "@/utils/format";
+import { tierClasses, tierLabel } from "@/shared/format";
 
 export const ScoreBadge = ({ tier, label, className = "", testId }) => {
   return (

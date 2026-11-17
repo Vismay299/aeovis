@@ -1,1 +1,1 @@
-export { describeError } from "@/lib/query/errors";
+export { describeError } from "@/shared/query/errors";

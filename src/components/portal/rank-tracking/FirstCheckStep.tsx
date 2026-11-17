@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { PricedActionButton } from "@/components/app/cost/PricedActionButton";
-import { fetchJson, isApiError } from "@/lib/query/fetchJson";
+import { fetchJson, isApiError } from "@/shared/query/fetchJson";
 import { formatNextRun } from "@/shared/schedule";
 import { trackRankEvent } from "./telemetry";
 

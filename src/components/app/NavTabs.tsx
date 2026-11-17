@@ -7,7 +7,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 /** A strip of router links styled as tabs, for pages with their own URL. */
 export function NavTabs({

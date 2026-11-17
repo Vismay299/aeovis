@@ -23,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { relativeTime } from "@/utils/format";
+import { relativeTime } from "@/shared/format";
 import { formatUsd } from "@/shared/money";
 
 /** One row of `GET /api/ops/spend/limits`. */

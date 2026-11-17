@@ -4,8 +4,8 @@
 // llms.txt, and the banners' flags. Read once the audit is finished.
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 import type { IssueCategory, IssueScope, IssueSeverity } from "@/shared/audit-issues";
 
 export type AuditIssueGroup = {

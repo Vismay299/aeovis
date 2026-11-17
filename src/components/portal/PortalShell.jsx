@@ -19,8 +19,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { usePathname, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { setTelemetryIdentity, resetTelemetry } from "@/lib/telemetry/client";
+import { getSupabaseBrowserClient } from "@/shared/supabase/browser";
+import { setTelemetryIdentity, resetTelemetry } from "@/shared/telemetry/client";
 import { ConsentBanner } from "@/components/app/telemetry/ConsentBanner";
 import { useScanTracker } from "./useScanTracker";
 import { prefetchPriceQuote } from "@/components/app/cost/usePriceQuote";
@@ -32,14 +32,14 @@ import { SkeletonPageContent } from "@/components/app/SkeletonPresets";
 import { AppBanner } from "@/components/app/AppBanner";
 import { Button } from "@/components/ui/button";
 import { TopLoadingBar } from "./ui";
-import { keys } from "@/lib/query/keys";
+import { keys } from "@/shared/query/keys";
 import {
   featuresQueryOptions,
   overviewQueryOptions,
   gscQueryOptions,
-} from "@/lib/query/portalQueries";
-import { describeError } from "@/lib/query/errors";
-import { setUnauthorizedHandler } from "@/lib/query/fetchJson";
+} from "@/shared/query/portalQueries";
+import { describeError } from "@/shared/query/errors";
+import { setUnauthorizedHandler } from "@/shared/query/fetchJson";
 import { WorkspaceProvider } from "@/components/app/workspace/WorkspaceContext";
 import { decideOnboardingRedirect } from "@/components/app/onboarding/useOnboardingRedirect";
 

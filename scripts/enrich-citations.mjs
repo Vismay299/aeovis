@@ -15,9 +15,9 @@
  *
  * Pages through `citations` WHERE content_type IS NULL (any of the three
  * columns being null is the same "never enriched" signal — enrichCitations
- * always writes all three together, see src/lib/analytics/citationEnrich.js)
+ * always writes all three together, see src/shared/analytics/citationEnrich.js)
  * and classifies each page via that SAME module the live scan pipeline uses
- * at finalize (src/lib/workers/scanWorker.js runFinalizePhase), then updates
+ * at finalize (src/server/workers/scanWorker.js runFinalizePhase), then updates
  * rows in chunks.
  *
  * IDEMPOTENT: a live run only ever selects rows still missing content_type —
@@ -47,11 +47,11 @@
  *
  * Brand domain: citations.brand is resolveBrandKey() output, which IS the
  * brand's domain for every scan created through the normal onboarding flow
- * (src/lib/scoring/brandKey.js — falls back to a normalized display name
+ * (src/shared/scoring/brandKey.js — falls back to a normalized display name
  * only when no URL was ever given, a rare legacy edge case). Used directly
  * as `brandDomain` for domain_type classification — no extra lookup needed.
  *
- * Free model ONLY (src/lib/llm.js llmJson, via citationEnrich.js) for the
+ * Free model ONLY (src/server/llm.js llmJson, via citationEnrich.js) for the
  * small batched LLM fallback — same choke point + cost policy the live
  * pipeline uses. Heuristics resolve the majority of rows with zero LLM cost;
  * enrichCitations batches at most one LLM call per (page x distinct scan_id
@@ -67,8 +67,8 @@
  * likewise caught, logged, and counted, never fatal to the run.
  */
 
-import { supabase } from "../src/lib/db.js";
-import { enrichCitations } from "../src/lib/analytics/citationEnrich.js";
+import { supabase } from "../src/server/db.js";
+import { enrichCitations } from "../src/shared/analytics/citationEnrich.js";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const PAGE_SIZE = 200;

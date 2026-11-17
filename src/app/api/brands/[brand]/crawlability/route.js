@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { AI_BOTS } from "@/lib/crawlers/bots";
-import { auditDomain } from "@/lib/crawlers/robots";
-import { extractBrandDomain } from "@/lib/scoring/citations";
+import { AI_BOTS } from "@/server/crawlers/bots";
+import { auditDomain } from "@/server/crawlers/robots";
+import { extractBrandDomain } from "@/shared/scoring/citations";
 import {
   SsrfBlockedError,
   bareHostname,
@@ -9,10 +9,10 @@ import {
   isPolicyRefusal,
   normalizeTargetUrl,
   safeFetch,
-} from "@/lib/ssrfGuard";
+} from "@/server/ssrfGuard";
 // R4.3.1 — persist audits and detect changes between runs
-import { saveCrawlabilityAudit, getAuditHistory } from "@/lib/db/crawlability";
-import { buildAuditDiff } from "@/lib/crawlabilityChanges";
+import { saveCrawlabilityAudit, getAuditHistory } from "@/server/db/crawlability";
+import { buildAuditDiff } from "@/server/crawlabilityChanges";
 
 // A live audit hits the brand's own (and rivals') robots.txt on every call —
 // never statically cache (same reasoning as the sibling metrics/schedule
@@ -40,7 +40,7 @@ const BLOCKED_DOMAIN_MESSAGE =
  * GET /api/brands/[brand]/crawlability — plan.md P5.
  *
  * Brand-keying contract: identical to metrics/schedule — the `[brand]` path
- * param is ALREADY a resolveBrandKey() domain (see src/lib/scoring/brandKey.js);
+ * param is ALREADY a resolveBrandKey() domain (see src/shared/scoring/brandKey.js);
  * used verbatim (decoded) here, and — unlike the DB-backed routes — also used
  * literally as the hostname to fetch `https://{domain}/robots.txt` from.
  *
@@ -70,7 +70,7 @@ const BLOCKED_DOMAIN_MESSAGE =
  *
  * SSRF (R3.7.4, finding C12): the `[brand]` param and every `compare` entry
  * become a server-side fetch target, and POST /api/scan is anonymous, so this
- * is a stranger-controlled URL. Two gates, both src/lib/ssrfGuard.js:
+ * is a stranger-controlled URL. Two gates, both src/server/ssrfGuard.js:
  *   1. screenDomain() — shape plus classifyAddress(), no DNS, gives a 400.
  *   2. safeFetch() — resolves the name and checks EVERY answer, then follows
  *      redirects by hand and re-validates each hop.
@@ -88,7 +88,7 @@ const BLOCKED_DOMAIN_MESSAGE =
  * node:http(s) request with `lookup` + `servername` and manual redirects.
  * undici is not a declared dependency and Next's global fetch is not swappable
  * per call, so it is recorded rather than faked. Full write-up:
- * src/lib/ssrfGuard.js:28-49.
+ * src/server/ssrfGuard.js:28-49.
  *
  * Errors: 400 on a missing/non-domain-shaped brand and on any policy refusal;
  * 500 only on a genuine unexpected failure in this route's own logic (never
@@ -264,7 +264,7 @@ function requireBrandKey(params) {
  * key is only ever an opaque lookup string.
  *
  * This is gate one of two, and it owns NO address knowledge of its own — every
- * range decision is delegated to classifyAddress() in src/lib/ssrfGuard.js.
+ * range decision is delegated to classifyAddress() in src/server/ssrfGuard.js.
  * The denylist that used to live here (four string literals plus one regex for
  * 10/8, 192.168/16 and 172.16/12) was deleted in R3.7.4: it allowed
  * 169.254.169.254, 127.0.0.2, 127.1, 0177.0.0.1, 100.64.0.1, 198.18.0.1 and

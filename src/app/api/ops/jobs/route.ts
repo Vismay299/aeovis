@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AppError, jsonOk, toErrorResponse } from "../../../../lib/http/errors.ts";
-import { jobsListQuery } from "../../../../lib/jobs/jobs.contract.ts";
-import { getSupabaseAdmin } from "../../../../lib/supabase/admin.js";
+import { AppError, jsonOk, toErrorResponse } from "../../../../shared/http/errors.ts";
+import { jobsListQuery } from "../../../../server/jobs/jobs.contract.ts";
+import { getSupabaseAdmin } from "../../../../shared/supabase/admin.js";
 
 export const dynamic = "force-dynamic";
 

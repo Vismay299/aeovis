@@ -16,7 +16,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import type { PriceQuote } from "@/shared/pricing";
 import { MAX_TRACKED_KEYWORD_LENGTH, devicesLabel } from "@/shared/rank-tracking";
 import { trackRankEvent, buildKeywordsAddPayload } from "./telemetry";

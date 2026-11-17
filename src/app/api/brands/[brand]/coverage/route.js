@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getScansForBrand, getScansByDomain, joinScanIdentities } from "@/lib/db";
-import { listContentJobs, listContentItems } from "@/lib/db/content";
-import { queryUniverseFromScan, rollupCoverage, summarizeCoverage } from "@/lib/content/coverage";
+import { getScansForBrand, getScansByDomain, joinScanIdentities } from "@/server/db";
+import { listContentJobs, listContentItems } from "@/server/db/content";
+import { queryUniverseFromScan, rollupCoverage, summarizeCoverage } from "@/shared/content/coverage";
 
 // Same rationale as the sibling gaps/metrics/citations routes (P0.4): a new
 // scan or a new approval changes coverage, so never statically cache.

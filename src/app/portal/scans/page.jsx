@@ -27,14 +27,14 @@ import { TableBulkActionBar, TableBulkExportMenu } from "@/components/app/table/
 import { SortableHeader } from "@/components/app/table/SortableHeader";
 import { DataTableToolbar, DataTableFilterToggle, DataTableFilterPanel, DataTableFilterGroup, DataTableRangeFilter } from "@/components/app/table/DataTableToolbar";
 import { TablePagination } from "@/components/app/table/TablePagination";
-import { numericNullsLast } from "@/lib/table/nullSafeSort";
+import { numericNullsLast } from "@/shared/table/nullSafeSort";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { QueryError } from "@/components/app/QueryState";
-import { scanReportQueryOptions } from "@/lib/query/portalQueries";
-import { exportFilename } from "@/lib/export/filenames";
+import { scanReportQueryOptions } from "@/shared/query/portalQueries";
+import { exportFilename } from "@/shared/export/filenames";
 import { useQuery } from "@tanstack/react-query";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys, stableStringify } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys, stableStringify } from "@/shared/query/keys";
 import "@/components/portal/scans/scans.css";
 
 const FAILED_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;

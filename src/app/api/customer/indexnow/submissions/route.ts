@@ -1,8 +1,8 @@
-import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, AppError } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { listSubmissions } from "../../../../../lib/indexnow/history.ts";
-import { submissionsQuery } from "../../../../../lib/indexnow/indexnow.contract.ts";
+import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { toErrorResponse, AppError } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { listSubmissions } from "../../../../../server/indexnow/history.ts";
+import { submissionsQuery } from "../../../../../server/indexnow/indexnow.contract.ts";
 
 export const dynamic = "force-dynamic";
 

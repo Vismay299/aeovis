@@ -1,17 +1,17 @@
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { requireWorkspace, type Workspace } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { aiQuestionFeatureGateError } from "../../../../../lib/questions/questions.contract.ts";
-import { requireApprovedPrice } from "../../../../../lib/pricing/pricedActions.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { requireWorkspace, type Workspace } from "../../../../../server/workspace/requireWorkspace.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { aiQuestionFeatureGateError } from "../../../../../server/questions/questions.contract.ts";
+import { requireApprovedPrice } from "../../../../../shared/pricing/pricedActions.ts";
 import {
   researchBody,
   researchQuestions,
   type PromptResearchDeps,
-} from "../../../../../lib/questions/promptResearch.ts";
-import { cached } from "../../../../../lib/cache/providerCache.ts";
-import { captureServerEvent } from "../../../../../lib/telemetry/server.ts";
-import "../../../../../lib/pricing/actions/index.ts";
+} from "../../../../../server/questions/promptResearch.ts";
+import { cached } from "../../../../../server/cache/providerCache.ts";
+import { captureServerEvent } from "../../../../../shared/telemetry/server.ts";
+import "../../../../../shared/pricing/actions/index.ts";
 
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";

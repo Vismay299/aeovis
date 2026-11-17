@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { listContentItems } from "@/lib/db/content";
+import { listContentItems } from "@/server/db/content";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

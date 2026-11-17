@@ -50,7 +50,7 @@ account.
 
 - Canonical names are `LLM_BASE_URL` / `LLM_MODEL` / `LLM_API_KEY`. The
   `OPENROUTER_*` names still work as deprecated aliases and warn once per
-  process ([`llmConfig.js`](../../src/lib/llmConfig.js)).
+  process ([`llmConfig.js`](../../src/shared/llmConfig.js)).
 - Per-gateway request quirks derive from the **base URL**, never from a
   variable name — MiMo reads `max_completion_tokens` where others read
   `max_tokens`.

@@ -40,7 +40,7 @@ import { openPortal as _openPortal } from "./portalFixtureHarness.mjs";
 let generateUnsubscribeSignature;
 try {
   ({ generateUnsubscribeSignature } = await import(
-    "../../src/lib/email/links.ts"
+    "../../src/server/email/links.ts"
   ));
 } catch {
   const { createHmac } = await import("node:crypto");

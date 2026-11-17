@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
-import { customerRouteContext } from "@/lib/supabase/customerRoute";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { repairWorkflowStore } from "@/lib/db/repairWorkflow";
+import { customerRouteContext } from "@/shared/supabase/customerRoute";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { repairWorkflowStore } from "@/server/db/repairWorkflow";
 import {
   canonicalJson,
   validatePanel,
   makeSourceSnapshot,
   opportunityFromEvidence,
-} from "@/lib/repairs/workflow";
+} from "@/server/repairs/workflow";
 import {
   auditOwnedPages,
   boundedResponseText,
-} from "@/lib/repairs/technicalAudit";
-import { getBrandAliases } from "@/lib/scoring/aliases";
-import { safeFetch } from "@/lib/ssrfGuard";
+} from "@/server/repairs/technicalAudit";
+import { getBrandAliases } from "@/shared/scoring/aliases";
+import { safeFetch } from "@/server/ssrfGuard";
 export const dynamic = "force-dynamic";
 const json = (data, status = 200) =>
   NextResponse.json(data, { status, headers: { "Cache-Control": "no-store" } });

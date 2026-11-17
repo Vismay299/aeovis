@@ -1,5 +1,5 @@
-import { supabase, ScansUnavailableError } from "@/lib/db";
-import { terminalOutcomeFromRecord } from "@/lib/scanOutcome";
+import { supabase, ScansUnavailableError } from "@/server/db";
+import { terminalOutcomeFromRecord } from "@/shared/scanOutcome";
 
 // Private helper module (the `_lib` prefix opts it out of Next.js route
 // resolution) shared by the two new P0.3 single-scan endpoints:

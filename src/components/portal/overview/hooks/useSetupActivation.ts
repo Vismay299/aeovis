@@ -6,8 +6,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { setupKeys } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { setupKeys } from "@/shared/query/keys";
 import type { SetupStep } from "@/shared/setup-steps";
 
 export type SetupStepStatus = "done" | "skipped" | "todo";

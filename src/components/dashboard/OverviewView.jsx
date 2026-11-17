@@ -11,7 +11,7 @@
 import { ArrowRight } from 'lucide-react';
 import { FlowDiagram, RIVAL_RAMP } from '@/components/charts/FlowDiagram';
 import { Gauge } from '@/components/charts/Gauge';
-import { describeRosterState } from '@/lib/scoring/rosterContinuity';
+import { describeRosterState } from '@/shared/scoring/rosterContinuity';
 import { buildInterlocking } from './interlocking';
 import { OverviewAnalytics } from './OverviewAnalytics';
 
@@ -40,7 +40,7 @@ import { OverviewAnalytics } from './OverviewAnalytics';
  *      no amount of nullish-checking finds it — the discriminator is
  *      `roster_source`, which the scan already carries.
  *
- * `describeRosterState` (src/lib/scoring/rosterContinuity.js) is the repo's
+ * `describeRosterState` (src/shared/scoring/rosterContinuity.js) is the repo's
  * single predicate for case 2; RivalsView, Donut and VisibilityVerdictPanel all
  * read it, and this surface now reads the same one rather than comparing
  * `roster_source` strings of its own. `rosterSource == null` (a scan taken

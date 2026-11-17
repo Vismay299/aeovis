@@ -1,6 +1,6 @@
-import { listBusinesses, saveBusiness } from "../../../../../lib/local/businesses.ts";
-import { localBrandQuery, saveBusinessBody } from "../../../../../lib/local/local.contract.ts";
-import { gate, jsonOk, parseBody, parseQuery, respond, type LocalRouteDeps } from "../../../../../lib/local/routeKit.ts";
+import { listBusinesses, saveBusiness } from "../../../../../server/local/businesses.ts";
+import { localBrandQuery, saveBusinessBody } from "../../../../../server/local/local.contract.ts";
+import { gate, jsonOk, parseBody, parseQuery, respond, type LocalRouteDeps } from "../../../../../server/local/routeKit.ts";
 
 export const dynamic = "force-dynamic";
 

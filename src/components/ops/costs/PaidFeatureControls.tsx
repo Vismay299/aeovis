@@ -27,7 +27,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
-import { relativeTime } from "@/utils/format";
+import { relativeTime } from "@/shared/format";
 import { formatUsd } from "@/shared/money";
 
 /** One row of `GET /api/ops/spend/controls`. */

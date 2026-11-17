@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import type { ContextAuthor } from "@/shared/project-context";
-import { relativeTime } from "@/utils/format";
+import { relativeTime } from "@/shared/format";
 
 export function getAuthorLabel(
   by: ContextAuthor,

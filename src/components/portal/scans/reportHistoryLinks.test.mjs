@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { compileJsx } from "../../../lib/renderHarness.mjs";
+import { compileJsx } from "../../../server/renderHarness.mjs";
 import * as reportData from "./reportData.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));

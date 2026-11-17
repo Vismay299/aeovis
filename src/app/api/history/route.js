@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { listRecentScans } from "@/lib/db";
-import { listContentItems, listContentJobs } from "@/lib/db/content";
-import { historyStoreUnreachable } from "@/lib/historyStoreState";
+import { listRecentScans } from "@/server/db";
+import { listContentItems, listContentJobs } from "@/server/db/content";
+import { historyStoreUnreachable } from "@/shared/historyStoreState";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -22,7 +22,7 @@ const NO_STORE = { "Cache-Control": "no-store" };
  * `200 { scans: [], runs: [], activeJobs: [], counts: {} }` — indistinguishable
  * from a real first run, so the refusal reached the server log and nobody else.
  * The contract, the 503 and the reason vocabulary live in
- * src/lib/historyStoreState.js, shared with the surface that renders it.
+ * src/shared/historyStoreState.js, shared with the surface that renders it.
  */
 export async function GET() {
   try {

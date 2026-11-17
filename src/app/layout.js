@@ -3,7 +3,7 @@ import "@/components/design-system/primitives.css";
 import "@/components/portal/portal.css";
 import SurfaceSync from "@/components/app/theme/SurfaceSync";
 import AppToaster from "@/components/app/AppToaster";
-import { buildThemeInitScript } from "@/lib/theme/theme";
+import { buildThemeInitScript } from "@/shared/theme/theme";
 
 export const metadata = {
   metadataBase: new URL("https://perceev.com"),

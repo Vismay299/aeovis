@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
-import { loadScan, clearScan } from "@/services/api";
+import { loadScan, clearScan } from "@/shared/api";
 
 /**
  * /dashboard — legacy one-time migration shim (P0.3).

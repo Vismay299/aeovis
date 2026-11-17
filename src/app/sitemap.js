@@ -1,4 +1,4 @@
-import { getPublicUrlInventory } from "../lib/publicSite.js";
+import { getPublicUrlInventory } from "../server/publicSite.js";
 
 export default function sitemap() {
   const inventory = getPublicUrlInventory();

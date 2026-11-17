@@ -1,19 +1,19 @@
 import { z } from "zod";
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { requireWorkspace, type Workspace } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { aiQuestionFeatureGateError } from "../../../../../lib/questions/questions.contract.ts";
-import { requireApprovedPrice, recordApproval } from "../../../../../lib/pricing/pricedActions.ts";
-import { enqueueJob } from "../../../../../lib/jobs/enqueue.ts";
-import { captureServerEvent } from "../../../../../lib/telemetry/server.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { requireWorkspace, type Workspace } from "../../../../../server/workspace/requireWorkspace.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { aiQuestionFeatureGateError } from "../../../../../server/questions/questions.contract.ts";
+import { requireApprovedPrice, recordApproval } from "../../../../../shared/pricing/pricedActions.ts";
+import { enqueueJob } from "../../../../../server/jobs/enqueue.ts";
+import { captureServerEvent } from "../../../../../shared/telemetry/server.ts";
 import {
   readQuestionSettings,
-} from "../../../../../lib/questions/workspaceQuestions.ts";
-import { normalizeCompetitorDomain } from "../../../../../lib/questions/setup/research.ts";
-import type { SetupPayload } from "../../../../../lib/questions/setup/schemas.ts";
-import "../../../../../lib/pricing/actions/index.ts";
-import "../../../../../lib/questions/jobs.ts";
+} from "../../../../../server/questions/workspaceQuestions.ts";
+import { normalizeCompetitorDomain } from "../../../../../server/questions/setup/research.ts";
+import type { SetupPayload } from "../../../../../server/questions/setup/schemas.ts";
+import "../../../../../shared/pricing/actions/index.ts";
+import "../../../../../server/questions/jobs.ts";
 
 export const maxDuration = 90;
 export const dynamic = "force-dynamic";

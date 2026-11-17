@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveShareOfVoice, SHARE_STATE, NOT_AVAILABLE_LABEL } from "./shareOfVoice.js";
-import { ROSTER_SOURCE } from "../../../lib/scoring/rosterContinuity.js";
+import { ROSTER_SOURCE } from "../../../shared/scoring/rosterContinuity.js";
 
 /**
  * R2.7.1 / finding A8 — the Share of Voice donut must read the pipeline's

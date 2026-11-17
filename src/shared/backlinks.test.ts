@@ -14,7 +14,7 @@ import {
   type ReferringDomainRow,
   type BacklinksSummary,
 } from "./backlinks.ts";
-import { buildCsv } from "../lib/export/csv.ts";
+import { buildCsv } from "./export/csv.ts";
 
 function makeBacklinkRow(overrides: Partial<BacklinksRow> = {}): BacklinksRow {
   return {

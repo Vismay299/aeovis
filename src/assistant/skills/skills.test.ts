@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TOOL_NAMES } from "../../lib/tools/names.ts";
+import { TOOL_NAMES } from "../../server/tools/names.ts";
 import { PERCEEV_SURFACE_NOTE, getSkillVersion, listSkills, loadSkill, skillCatalogFingerprint } from "./index.ts";
 import { SKILL_MANIFEST_FINGERPRINT } from "./manifest.generated.ts";
 import type { SkillManifestEntry } from "./types.ts";

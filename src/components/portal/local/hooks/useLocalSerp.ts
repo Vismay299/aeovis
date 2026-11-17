@@ -1,9 +1,9 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { keys, stableStringify } from "@/lib/query/keys";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import type { LocalSerpRow } from "@/lib/local/localSerp";
+import { keys, stableStringify } from "@/shared/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import type { LocalSerpRow } from "@/server/local/localSerp";
 import { trackLocalEvent } from "../telemetry";
 
 export type { LocalSerpRow };

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from "react";
-import { rankColor } from "@/utils/format";
+import { rankColor } from "@/shared/format";
 import { ChevronDown, ChevronRight, Filter } from "lucide-react";
-import { normalizeTopic } from "@/lib/scoring/topics";
+import { normalizeTopic } from "@/shared/scoring/topics";
 
 const INTENT_LABELS = {
   high_intent: "High Intent",

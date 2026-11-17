@@ -5,7 +5,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { keys } from "@/lib/query/keys";
+import { keys } from "@/shared/query/keys";
 import { fetchSerpLocations } from "./SerpLocationCombobox";
 
 /**

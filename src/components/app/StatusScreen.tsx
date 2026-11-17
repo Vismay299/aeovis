@@ -5,7 +5,7 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 import { Spinner } from "@/components/app/Spinner";
 import { PerceevMark } from "@/components/app/brand/PerceevLogo";
 

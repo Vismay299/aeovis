@@ -2,10 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import React from "react";
-import { compileJsx, renderToHtml } from "../../lib/renderHarness.mjs";
+import { compileJsx, renderToHtml } from "../../server/renderHarness.mjs";
 import * as reportData from "./scans/reportData.js";
 import * as contentShared from "./content/shared.js";
-import { FORMATS } from "../../lib/content/agents/formats.js";
+import { FORMATS } from "../../shared/content/agents/formats.js";
 
 const here = import.meta.dirname;
 const context = { brandKey: "workspace-trace", brand: { display_name: "trace" }, refreshOverview() {}, redirectToLogin() {}, scan: { start() {} } };
@@ -52,7 +52,7 @@ test("tenant Scans renders a runnable mock inside the tenant page rather than li
       ["@/components/portal/ui", ui],
       ["@/components/portal/scans/MockScanPanel", mock],
       ["@/components/portal/scans/reportData", reportData],
-      ["@/lib/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"] }) }],
+      ["@/shared/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"] }) }],
       ["@/components/app/table/DataTable", {
         DataTable: () => null,
         makeSelectionColumn: () => ({}),
@@ -62,14 +62,14 @@ test("tenant Scans renders a runnable mock inside the tenant page rather than li
       ["@/components/app/export/useExportRows", { useExportRows: () => () => {} }],
       ["@/components/app/export/useServerExport", { useServerExport: () => ({ mutate: () => {}, isPending: false }) }],
       ["@/components/app/QueryState", { QueryError: () => null }],
-      ["@/lib/export/filenames", await import("../../lib/export/filenames.ts")],
+      ["@/shared/export/filenames", await import("../../shared/export/filenames.ts")],
       ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (_schema, defaults) => [defaults, () => {}] }],
       ["zod", await import("zod")],
-      ["@/lib/query/keys", { keys: { scanHistory: () => ["scanHistory", "workspace-trace", "input"] }, stableStringify: (value) => JSON.stringify(value) }],
-      ["@/lib/query/fetchJson", { fetchJson: async () => ({ scans: [], totalCount: 0, page: 1, size: 50 }), withBrand: (path) => path }],
+      ["@/shared/query/keys", { keys: { scanHistory: () => ["scanHistory", "workspace-trace", "input"] }, stableStringify: (value) => JSON.stringify(value) }],
+      ["@/shared/query/fetchJson", { fetchJson: async () => ({ scans: [], totalCount: 0, page: 1, size: 50 }), withBrand: (path) => path }],
       ["@tanstack/react-query", { useQuery: () => ({ data: { scans: [], totalCount: 0, page: 1, size: 50 }, isLoading: false, isFetching: false, error: null, refetch: () => {} }) }],
     ]),
-    autoStub: ["@/components/app/table/", "@/components/app/ExportMenu", "@/components/app/export/", "@/lib/table/"],
+    autoStub: ["@/components/app/table/", "@/components/app/ExportMenu", "@/components/app/export/", "@/shared/table/"],
     autoNull: ["lucide-react", "@/components/portal/ScanProgressCard", "@/components/portal/scans/scans.css", "@/components/portal/schedule/NextRunBadge"],
   });
   const html = renderToHtml(page.default);
@@ -81,7 +81,7 @@ test("tenant Scans renders a runnable mock inside the tenant page rather than li
 
 test("a selected FAQ agent shows its output format rather than the base article pipeline", async () => {
   const composer = await compileJsx(path.join(here,"content/ComposerCard.jsx"),{
-    modules:new Map([["react",React],["../ui",await primitives()],["./shared",contentShared],["@/lib/content/agents/formats",{FORMATS}],["@/lib/telemetry/client",{trackEvent(){}}]]),
+    modules:new Map([["react",React],["../ui",await primitives()],["./shared",contentShared],["@/shared/content/agents/formats",{FORMATS}],["@/shared/telemetry/client",{trackEvent(){}}]]),
     autoNull:["lucide-react"],
   });
   const html=renderToHtml(composer.default,{brandKey:"workspace-trace",selectedAgent:{id:"own-agent",name:"FAQ Writer",format:"faq",base:"geo_article"}});

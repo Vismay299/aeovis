@@ -1,13 +1,13 @@
-import { AppError } from "../../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { requireWorkspace, type Workspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
-import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
-import { aiQuestionFeatureGateError } from "../../../../../../lib/questions/questions.contract.ts";
+import { AppError } from "../../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { requireWorkspace, type Workspace } from "../../../../../../server/workspace/requireWorkspace.ts";
+import { isFeatureEnabled } from "../../../../../../server/features/flags.ts";
+import { aiQuestionFeatureGateError } from "../../../../../../server/questions/questions.contract.ts";
 import {
   listResearchKeywords,
   type PromptResearchDeps,
-} from "../../../../../../lib/questions/promptResearch.ts";
-import { questionsGetQuery } from "../../../../../../lib/questions/questions.contract.ts";
+} from "../../../../../../server/questions/promptResearch.ts";
+import { questionsGetQuery } from "../../../../../../server/questions/questions.contract.ts";
 
 export const maxDuration = 30;
 export const dynamic = "force-dynamic";

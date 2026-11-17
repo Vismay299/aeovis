@@ -8,7 +8,7 @@ Three ideas drive every decision on this page, in this order:
   2. Show the evidence. No score without the sentence that produced it.
   3. Unbranded or it doesn't count. The neutrality of the probe is the trust story.
 
-Ported from design-options/prototype.src.html; see docs/design/DESIGN-SYSTEM.md.
+Ported from docs/design/options/prototype.src.html; see docs/design/DESIGN-SYSTEM.md.
 Every figure below is the one reading quoted on every other surface (§10 of
 that document) and every brand on it is fictional.
 */
@@ -16,11 +16,11 @@ that document) and every brand on it is fictional.
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
-import { DEFAULT_UNBRANDED_TARGET } from '@/lib/scoring/promptSetSize';
+import { DEFAULT_UNBRANDED_TARGET } from '@/shared/scoring/promptSetSize';
 import {
   ENGINE_LABELS, deployedEngineLabels, deployedEngines, formatEngineList,
   primaryDeployedEngineLabel,
-} from '@/lib/engines/deployedEngines';
+} from '@/shared/engines/deployedEngines';
 import { SiteNav } from '@/components/landing/SiteNav';
 import { SiteFooter } from '@/components/landing/SiteFooter';
 import { Reveal } from '@/components/landing/Reveal';
@@ -32,8 +32,8 @@ import { Reveal as RevealFlow } from '@/components/landing/Reveal';
 import {
   CapabilityDeck, TrackedSetViz, TrendViz, RivalViz, SourcesViz,
 } from '@/components/landing/CapabilityDeck';
-import { saveScan } from '@/services/api';
-import { SAMPLE_DESTINATIONS, SAMPLE_RESULT } from '@/data/mockData';
+import { saveScan } from '@/shared/api';
+import { SAMPLE_DESTINATIONS, SAMPLE_RESULT } from '@/shared/mockData';
 
 /* ── the one demonstration reading ──────────────────────────────────
    Nothing below is a number typed twice. TRACKED is the constant a scan runs
@@ -42,7 +42,7 @@ import { SAMPLE_DESTINATIONS, SAMPLE_RESULT } from '@/data/mockData';
 
    R2.10.1 — the first pass at this kept a SECOND copy of each and they drifted
    inside one commit: this page moved to 30 questions and 13/10/5/2 while the
-   sample report one click away (src/data/mockData.js, reached from the "See a
+   sample report one click away (src/shared/mockData.js, reached from the "See a
    sample report" button below) stayed on 36 and 15/12/6/3, and still credited
    twelve of them to ChatGPT. landingHonesty.test.mjs asserts the tie now,
    rather than asking a human to hold two files in their head. */
@@ -66,14 +66,14 @@ const TRACKED = DEFAULT_UNBRANDED_TARGET;
    because it cannot be checked. If one ever returns it reads a real count query,
    and when that query cannot answer it renders an em dash and a state chip —
    never a zero, which is a reading, and never a seed, which is a lie.
-   src/lib/landingProbeCounter.test.mjs holds that line. */
+   src/server/landingProbeCounter.test.mjs holds that line. */
 
 // R2.10.1 — the engines this deployment actually probes, not a hardcoded three.
 // The hero used to name Google AI Overview, ChatGPT and Perplexity while the
 // deployment ran ENGINES=aio,perplexity with no OPENAI_API_KEY at all, so
 // ChatGPT could not have run even if it had been configured. Claiming an engine
 // we do not probe is a claim about coverage, and it was wrong in the flattering
-// direction. See src/lib/engines/deployedEngines.js.
+// direction. See src/shared/engines/deployedEngines.js.
 const ENGINE_SENTENCE = formatEngineList(deployedEngineLabels());
 
 const DEPLOYED_ENGINE_KEYS = deployedEngines();

@@ -9,7 +9,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "sucrase";
 
-import { ROSTER_SOURCE, describeRosterState } from "../../lib/scoring/rosterContinuity.js";
+import { ROSTER_SOURCE, describeRosterState } from "../../shared/scoring/rosterContinuity.js";
 
 /**
  * R2.7.12 — THE RIVAL COUNT A CUSTOMER ACTUALLY SEES.

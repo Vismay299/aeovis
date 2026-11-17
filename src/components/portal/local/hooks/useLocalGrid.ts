@@ -2,10 +2,10 @@
 
 import { useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { keys } from "@/lib/query/keys";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
+import { keys } from "@/shared/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import { useServerPacedQuery } from "@/components/app/hooks/useServerPacedQuery";
-import type { GridSummaryRow, GridView } from "@/lib/local/grid";
+import type { GridSummaryRow, GridView } from "@/server/local/grid";
 import { trackLocalEvent } from "../telemetry";
 
 export type { GridSummaryRow, GridView };

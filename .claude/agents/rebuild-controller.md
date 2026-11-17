@@ -64,7 +64,7 @@ it builds, it submits. Closing is the controller's act on the verifier's word.
 
 You no longer have to hand-type the secrets rule into each prompt. Every
 `rebuild-*` definition carries the *Secrets hygiene* section by construction, and
-`src/lib/agentSecretsGuard.test.mjs` fails if one of them stops carrying it.
+`src/server/agentSecretsGuard.test.mjs` fails if one of them stops carrying it.
 Restate it only when a task's own working set touches credentials — for example
 a task that edits `.env.example`.
 
@@ -103,7 +103,7 @@ not a success.
 idiom for every search tool, what is safe to read, and what to do if a secret
 appears anyway — lives in `CLAUDE.md` § "Secrets hygiene", which every session
 and every agent in this project loads. It binds you exactly as if it were
-written here. `src/lib/agentSecretsGuard.test.mjs` fails if this pointer or
+written here. `src/server/agentSecretsGuard.test.mjs` fails if this pointer or
 that section goes missing.
 
 ## Committing

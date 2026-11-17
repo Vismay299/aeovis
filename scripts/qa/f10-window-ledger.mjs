@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   expectedWindows,
   unexplainedGaps,
-} from "../../src/lib/schedules/soakLedger.ts";
+} from "../../src/server/schedules/soakLedger.ts";
 
 const USAGE = [
   "usage: node scripts/qa/f10-window-ledger.mjs --brand <brand-key> --from <ISO-date-or-timestamp> --to <ISO-date-or-timestamp>",

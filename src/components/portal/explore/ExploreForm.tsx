@@ -39,7 +39,7 @@ import {
   supportsWebSearchCountry,
 } from "@/shared/explore";
 import { WEB_SEARCH_COUNTRY_CODES } from "@/shared/web-search-countries";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 type Props = {
   defaultWorkspaceName?: string;

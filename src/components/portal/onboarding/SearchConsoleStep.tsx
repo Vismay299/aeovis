@@ -8,7 +8,7 @@ import { useState } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import PropertyPicker from "@/components/portal/gsc/PropertyPicker";
-import { fetchJson } from "@/lib/query/fetchJson";
+import { fetchJson } from "@/shared/query/fetchJson";
 import { trackOnboardingEvent } from "./telemetry";
 import type { OnboardingState } from "./hooks/useOnboardingState";
 

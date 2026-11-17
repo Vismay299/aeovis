@@ -14,7 +14,7 @@ import {
   formatNextRun,
   scheduleLabel,
 } from "@/shared/schedule";
-import type { CustomerScheduleView } from "@/lib/schedules/schedule.contract";
+import type { CustomerScheduleView } from "@/server/schedules/schedule.contract";
 import { useSchedule } from "./hooks/useSchedule";
 
 export type NextRunBadgeProps = {

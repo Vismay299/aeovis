@@ -10,8 +10,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import AuthLayout from "@/components/portal/AuthLayout";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { consumeCustomerAuthFragment } from "@/lib/supabase/authLink";
+import { getSupabaseBrowserClient } from "@/shared/supabase/browser";
+import { consumeCustomerAuthFragment } from "@/shared/supabase/authLink";
 import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from "@/shared/password";
 
 export function ResetPasswordForm() {

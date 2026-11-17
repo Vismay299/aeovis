@@ -1,6 +1,6 @@
-import { getSupabaseAdmin } from "../../../../../lib/supabase/admin.js";
-import { customerSessionBinding } from "../../../../../lib/supabase/sessionBinding.js";
-import { handleGa4Callback } from "../../../../../lib/ga4/oauth.ts";
+import { getSupabaseAdmin } from "../../../../../shared/supabase/admin.js";
+import { customerSessionBinding } from "../../../../../shared/supabase/sessionBinding.js";
+import { handleGa4Callback } from "../../../../../server/ga4/oauth.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -21,7 +21,7 @@ export async function GET(
   const getCtx =
     deps?.getCustomerContext ??
     (async () => {
-      const { getCustomerContext } = await import("../../../../../lib/supabase/customer.js");
+      const { getCustomerContext } = await import("../../../../../shared/supabase/customer.js");
       return getCustomerContext();
     });
   const context = await getCtx();

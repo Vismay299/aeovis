@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getScansForBrand } from "@/lib/db";
-import { terminalOutcomeFromRecord } from "@/lib/scanOutcome";
+import { getScansForBrand } from "@/server/db";
+import { terminalOutcomeFromRecord } from "@/shared/scanOutcome";
 
 // Scan history must always be fresh. Without this, Next 14 statically caches
 // the handler (it never reads `request`), so newly-saved scans never appear.

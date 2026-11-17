@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { customerRouteContext } from "@/lib/supabase/customerRoute";
-import { runMockScan } from "@/lib/demo/mockScan";
+import { customerRouteContext } from "@/shared/supabase/customerRoute";
+import { runMockScan } from "@/server/demo/mockScan";
 
 export const dynamic = "force-dynamic";
 export async function POST(request) {

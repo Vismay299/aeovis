@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { getContentItem } from "@/lib/db/content";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { repairWorkflowStore } from "@/lib/db/repairWorkflow";
-import { verifyPublishUrl } from "@/lib/content/publishVerification";
+import { getContentItem } from "@/server/db/content";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { repairWorkflowStore } from "@/server/db/repairWorkflow";
+import { verifyPublishUrl } from "@/shared/content/publishVerification";
 export const dynamic = "force-dynamic";
 // Operator perimeter authenticates this route; the transaction applies the same
 // exact-version, body and event guarantees as customer publication.

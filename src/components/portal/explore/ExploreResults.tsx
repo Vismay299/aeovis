@@ -28,10 +28,10 @@ import type {
   ExploreModelResult,
   ExploreSuccessResult,
   ExploreErrorResult,
-} from "@/lib/explore/explore.contract";
+} from "@/server/explore/explore.contract";
 import { ENGINE_ACCENTS } from "./engineAccents";
 import { TrackQuestionButton } from "./TrackQuestionButton";
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 type Props = {
   run: ExploreGetResponse;

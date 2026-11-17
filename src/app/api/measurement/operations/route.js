@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { readProviderReadiness } from "@/lib/db/probeDispatch";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { readProviderReadiness } from "@/server/db/probeDispatch";
 export const dynamic = "force-dynamic";
 export async function GET() {
   const client = getSupabaseAdmin();

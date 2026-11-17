@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { isCronAuthorized } from "@/lib/cronAuth";
-import { recordCronTick } from "@/lib/db/analytics";
-import { supabase } from "@/lib/db";
+import { isCronAuthorized } from "@/server/cronAuth";
+import { recordCronTick } from "@/server/db/analytics";
+import { supabase } from "@/server/db";
 import {
   REAP_PASS_REASONS,
   SCHEDULER_TICK_REASONS,
@@ -10,8 +10,8 @@ import {
   runScanChunk,
   runSchedulerTick,
   shouldRescueJob,
-} from "@/lib/workers/scanWorker";
-import { RUN_OUTCOMES } from "@/lib/scanRuns";
+} from "@/server/workers/scanWorker";
+import { RUN_OUTCOMES } from "@/server/scanRuns";
 import { executeSweep } from "./_lib/sweepExecution.js";
 
 // This route has side effects (it resumes real scans and, via the scheduler
@@ -40,7 +40,7 @@ const warnedNoSecret = { value: false };
  * authenticate with the bearer secret. When CRON_SECRET is unset the gate FAILS CLOSED in
  * production (401) and allows-with-a-warning everywhere else, so dev and the
  * self-continue fetch keep working. The implementation is shared with
- * /api/content/worker in src/lib/cronAuth.js so the two cannot drift.
+ * /api/content/worker in src/server/cronAuth.js so the two cannot drift.
  */
 function isAuthorized(request, searchParams) {
   return isCronAuthorized(request, searchParams, { label: "worker", warned: warnedNoSecret });

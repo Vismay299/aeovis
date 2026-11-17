@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { engineLabel } from "@/components/portal/scans/reportData";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 import { AnswerEvidence } from "./AnswerEvidence";
 import {
   useQuestionAnswer,

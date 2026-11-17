@@ -3,8 +3,8 @@
 // F18 phase 4 — affected pages for one issue type, read when a group expands.
 
 import { useQuery } from "@tanstack/react-query";
-import { fetchJson } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 
 export type AuditIssueRow = {
   id: string;

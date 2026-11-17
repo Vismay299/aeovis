@@ -8,7 +8,7 @@
 | ID | F05 |
 | Wave | 0 |
 | Comparison rows covered | "Frontend patterns worth taking": poll only while work runs at the server's pace; results fill in as they arrive; stale data stays visible when a refresh fails; prefetch on intent; URL-held filters; browser-like search tabs; recent searches |
-| Depends on | F04 phases 1–4 merged (React 19, `@tanstack/react-query` installed, primitives, `QueryState`, `AppProviders`, app shell, `/api/customer/features`); F01 phase 1 (`zod`, `src/lib/http/errors.ts` envelope). Phase 3 also needs `fix/run-scan-unapproved-panel` merged (it migrates that branch's `useScanTracker.js` and Overview). |
+| Depends on | F04 phases 1–4 merged (React 19, `@tanstack/react-query` installed, primitives, `QueryState`, `AppProviders`, app shell, `/api/customer/features`); F01 phase 1 (`zod`, `src/shared/http/errors.ts` envelope). Phase 3 also needs `fix/run-scan-unapproved-panel` merged (it migrates that branch's `useScanTracker.js` and Overview). |
 | Blocks | F06; F09 phase 3; every later UI phase (F03 P4, F11 P3, F12 P3, F13…) |
 | Reserved migrations | 060–064 — **unused** (F05 has no database objects) |
 | Feature flag | none (infrastructure; behaviour of migrated surfaces is unchanged) |
@@ -59,17 +59,17 @@ One shared TanStack Query client, one typed JSON fetch helper and one query-key 
 
 | ID | Statement | Verified by |
 |---|---|---|
-| F05-AC-01 | The shared client uses `staleTime` 300,000 ms and `gcTime` 3,600,000 ms; queries retry at most twice and never on 4xx; mutations never retry. A failed mutation without its own `onError` and without `meta.errorToast === false` shows exactly one toast with `describeError`; a 401 shows none. | unit `src/lib/query/queryClient.test.ts` |
-| F05-AC-02 | `fetchJson` sends `cache: "no-store"` and `credentials: "same-origin"`, JSON headers only when there is a body, parses `{ error, code, recovery, details }` (and legacy `{ detail }`) into `ApiError`, maps network failures to `ApiError(0, "network_error")`, validates with an optional schema (`invalid_response` on mismatch), and calls the registered unauthorized handler on 401 before throwing. It reads only `status`, `ok` and `json()` from the response. | unit `src/lib/query/fetchJson.test.ts` |
-| F05-AC-03 | Spend refusals (`feature_disabled`, `daily_cap`, `workspace_cap`, `over_approved_max`) render the spend card with the API message and recovery and no retry button; "View usage" appears only when the workspace has `usage_page` on. | unit `src/lib/query/errors.test.ts`; browser `F05-B06` |
-| F05-AC-04 | Every query key comes from `src/lib/query/keys.ts`; workspace-scoped keys are `[domain, brandKey, …]`; `invalidateWorkspace` touches only that workspace's keys. | unit `src/lib/query/keys.test.ts` |
-| F05-AC-05 | `pollIntervalMs` returns `false` when the data is not active and `max(floor, pollAfterSeconds ?? fallback) × 1000` when active; `useServerPacedQuery` uses `staleTime` 0 while active and `Infinity` when finished, and calls `onFinish` once per active→finished transition, never for data that was already finished when first read. | unit `src/lib/query/polling.test.ts` |
-| F05-AC-06 | The optimistic helper patches every cached query matching the key before the request, invalidates on failure in `onSettled`, and leaves the global error toast in place. | unit `src/lib/query/optimistic.test.ts` |
-| F05-AC-07 | URL state: params parse through a schema with defaults; writes strip defaults and empty values and use `replace`; text filters commit 350 ms after the last keystroke; a URL change the draft did not cause (back/forward, Clear filters) replaces the draft. | unit `src/lib/query/urlState.test.ts`, `filterSearchParams.test.ts`; browser `F05-B05` |
-| F05-AC-08 | Per-viewer preferences read and write `localStorage` under `perceev:pref:<key>[:<brandKey>]`, validate with a schema, fall back on any error, and keep working in memory when storage throws. | unit `src/lib/query/localPrefs.test.ts` |
-| F05-AC-09 | Search tabs: the same cases as OpenSEO's `useSearchTabs.test.ts` (eviction at 20, newest kept, malformed dropped, close selects right then left neighbour, re-opening an identical input re-activates), with storage in `sessionStorage["perceev:search-tabs:<feature>:<brandKey>"]`. | unit `src/lib/query/searchTabsState.test.ts` |
-| F05-AC-10 | Recent searches: newest first, de-duplicated by the caller's rule, capped at 20, invalid stored JSON → empty list, storage errors ignored. | unit `src/lib/query/localHistory.test.ts` |
-| F05-AC-11 | Portal context: overview, GSC and features come from queries keyed by workspace; after a switch the previous workspace's data is never shown, even when its response arrives late; `usePortal()` keeps every existing field and meaning. | unit `src/lib/query/portalQueries.test.ts`; browser `F05-B01` |
+| F05-AC-01 | The shared client uses `staleTime` 300,000 ms and `gcTime` 3,600,000 ms; queries retry at most twice and never on 4xx; mutations never retry. A failed mutation without its own `onError` and without `meta.errorToast === false` shows exactly one toast with `describeError`; a 401 shows none. | unit `src/shared/query/queryClient.test.ts` |
+| F05-AC-02 | `fetchJson` sends `cache: "no-store"` and `credentials: "same-origin"`, JSON headers only when there is a body, parses `{ error, code, recovery, details }` (and legacy `{ detail }`) into `ApiError`, maps network failures to `ApiError(0, "network_error")`, validates with an optional schema (`invalid_response` on mismatch), and calls the registered unauthorized handler on 401 before throwing. It reads only `status`, `ok` and `json()` from the response. | unit `src/shared/query/fetchJson.test.ts` |
+| F05-AC-03 | Spend refusals (`feature_disabled`, `daily_cap`, `workspace_cap`, `over_approved_max`) render the spend card with the API message and recovery and no retry button; "View usage" appears only when the workspace has `usage_page` on. | unit `src/shared/query/errors.test.ts`; browser `F05-B06` |
+| F05-AC-04 | Every query key comes from `src/shared/query/keys.ts`; workspace-scoped keys are `[domain, brandKey, …]`; `invalidateWorkspace` touches only that workspace's keys. | unit `src/shared/query/keys.test.ts` |
+| F05-AC-05 | `pollIntervalMs` returns `false` when the data is not active and `max(floor, pollAfterSeconds ?? fallback) × 1000` when active; `useServerPacedQuery` uses `staleTime` 0 while active and `Infinity` when finished, and calls `onFinish` once per active→finished transition, never for data that was already finished when first read. | unit `src/shared/query/polling.test.ts` |
+| F05-AC-06 | The optimistic helper patches every cached query matching the key before the request, invalidates on failure in `onSettled`, and leaves the global error toast in place. | unit `src/shared/query/optimistic.test.ts` |
+| F05-AC-07 | URL state: params parse through a schema with defaults; writes strip defaults and empty values and use `replace`; text filters commit 350 ms after the last keystroke; a URL change the draft did not cause (back/forward, Clear filters) replaces the draft. | unit `src/shared/query/urlState.test.ts`, `filterSearchParams.test.ts`; browser `F05-B05` |
+| F05-AC-08 | Per-viewer preferences read and write `localStorage` under `perceev:pref:<key>[:<brandKey>]`, validate with a schema, fall back on any error, and keep working in memory when storage throws. | unit `src/shared/query/localPrefs.test.ts` |
+| F05-AC-09 | Search tabs: the same cases as OpenSEO's `useSearchTabs.test.ts` (eviction at 20, newest kept, malformed dropped, close selects right then left neighbour, re-opening an identical input re-activates), with storage in `sessionStorage["perceev:search-tabs:<feature>:<brandKey>"]`. | unit `src/shared/query/searchTabsState.test.ts` |
+| F05-AC-10 | Recent searches: newest first, de-duplicated by the caller's rule, capped at 20, invalid stored JSON → empty list, storage errors ignored. | unit `src/shared/query/localHistory.test.ts` |
+| F05-AC-11 | Portal context: overview, GSC and features come from queries keyed by workspace; after a switch the previous workspace's data is never shown, even when its response arrives late; `usePortal()` keeps every existing field and meaning. | unit `src/shared/query/portalQueries.test.ts`; browser `F05-B01` |
 | F05-AC-12 | Scan tracker on queries: every existing lifecycle behaviour holds (404 and finished jobs never re-adopted; 409 `scan_already_running` adopts the next run; `panel_not_approved` is an error; workspace switch resets); a `start()` response that arrives after a workspace switch is ignored; `start` keeps a stable identity while `brandKey` and `starting` are unchanged. | unit `src/components/portal/scanTrackerModel.test.mjs`; existing `portalRegressions`/`portalProgress` tests |
 | F05-AC-13 | The scan status route is polled every 2.5 s while a scan is active (the route sends no `pollAfterSeconds`, so the floor and fallback are 2.5 s, today's cadence) and not at all otherwise; the overview is refreshed once when the scan finishes. | unit `polling.test.ts`; browser `F05-B02` |
 | F05-AC-14 | Hovering or focusing the Questions or Search Console sidebar item, or a scan row, prefetches that page's query once; opening it then renders from cache without a second request inside the stale time. | browser `F05-B03` |
@@ -97,9 +97,9 @@ None. Migrations 060–064 stay unused.
 
 ### 6.2 Client modules
 
-Pure modules live in `src/lib/query/` (relative imports with `.ts` extensions, conventions §5.3, so `node --test` runs them). React hooks and components live in `src/components/app/`.
+Pure modules live in `src/shared/query/` (relative imports with `.ts` extensions, conventions §5.3, so `node --test` runs them). React hooks and components live in `src/components/app/`.
 
-#### `src/lib/query/fetchJson.ts`
+#### `src/shared/query/fetchJson.ts`
 
 ```ts
 export class ApiError extends Error {
@@ -122,7 +122,7 @@ Rules:
 5. `ok` with `schema`: `schema.parse(body)`; a throw becomes `ApiError(response.status, "invalid_response", "The server sent an unexpected response.")`. Never include the body in the error or a log.
 6. `withBrand("/api/customer/overview", "acme", { range: "30d", x: undefined })` → `/api/customer/overview?brand_key=acme&range=30d` (undefined/null skipped, values URL-encoded, existing `?` respected).
 
-#### `src/lib/query/errors.ts`
+#### `src/shared/query/errors.ts`
 
 ```ts
 export const SPEND_REFUSAL_CODES = ["feature_disabled", "daily_cap", "workspace_cap", "over_approved_max"] as const;
@@ -140,9 +140,9 @@ export function spendRefusedView(e: ApiError & { code: SpendRefusalCode }): { ti
 | `workspace_cap` | "Monthly spend limit reached" | API `error` | true |
 | `over_approved_max` | "The price changed" | API `error` | false |
 
-`recovery` is the API's `recovery` or `null`. F04's `src/components/app/errors/describeError.ts` becomes `export { describeError } from "@/lib/query/errors";`.
+`recovery` is the API's `recovery` or `null`. F04's `src/components/app/errors/describeError.ts` becomes `export { describeError } from "@/shared/query/errors";`.
 
-#### `src/lib/query/keys.ts`
+#### `src/shared/query/keys.ts`
 
 ```ts
 export const keys = {
@@ -164,7 +164,7 @@ export function stableStringify(value: unknown): string;   // sorted object keys
 
 Rule for later specs: a workspace-scoped key is `[domain, brandKey, ...params]`; a record addressed by an id the route authorises (`scanReport`) is `[domain, id]`. Each spec adds its entries here in its own PR.
 
-#### `src/lib/query/queryClient.ts`
+#### `src/shared/query/queryClient.ts`
 
 ```ts
 import { MutationCache, QueryClient } from "@tanstack/query-core";
@@ -177,7 +177,7 @@ export function createQueryClient(deps: { toastError(title: string, description?
 
 `createQueryClient`: `new QueryClient({ mutationCache: new MutationCache({ onError(error, _v, _c, mutation) { if (isApiError(error) && error.status === 401) return; if (mutation.options.onError || mutation.meta?.errorToast === false) return; if (isSpendRefused(error)) { const v = spendRefusedView(error); deps.toastError(v.title, [v.message, v.recovery].filter(Boolean).join(" ")); return; } deps.toastError(describeError(error)); } }), defaultOptions: { queries: { staleTime: QUERY_STALE_TIME_MS, gcTime: QUERY_GC_TIME_MS, retry: shouldRetryQuery }, mutations: { retry: 0 } } })`. `refetchOnWindowFocus` keeps TanStack's default (true), as OpenSEO.
 
-#### `src/lib/query/polling.ts`
+#### `src/shared/query/polling.ts`
 
 ```ts
 export function pollIntervalMs<T>(data: T | undefined, o: { isActive(d: T): boolean; pollAfterSeconds?(d: T): number | null | undefined; floorSeconds?: number /* default 4 */; fallbackSeconds?: number /* default 5 */ }): number | false;
@@ -188,7 +188,7 @@ export const JOB_ACTIVE_STATUSES: readonly ["queued", "running"];
 export function isJobActive(s: { status: string } | undefined): boolean;
 ```
 
-#### `src/lib/query/optimistic.ts`
+#### `src/shared/query/optimistic.ts`
 
 ```ts
 export function optimisticHandlers<TVars, TCache>(client: QueryClient, queryKey: readonly unknown[], apply: (old: TCache, vars: TVars) => TCache): {
@@ -197,9 +197,9 @@ export function optimisticHandlers<TVars, TCache>(client: QueryClient, queryKey:
 };
 ```
 
-#### `src/lib/query/filterSearchParams.ts` — COPY of `openseo:src/client/lib/filterSearchParams.ts` (`filterValuesFromSearch`, `filterValuesToSearch`, `normalizeFilterValues`), with `isTextField` taking an optional `textFields: readonly string[]` argument (default `["include", "exclude"]`).
+#### `src/shared/query/filterSearchParams.ts` — COPY of `openseo:src/client/lib/filterSearchParams.ts` (`filterValuesFromSearch`, `filterValuesToSearch`, `normalizeFilterValues`), with `isTextField` taking an optional `textFields: readonly string[]` argument (default `["include", "exclude"]`).
 
-#### `src/lib/query/urlState.ts`
+#### `src/shared/query/urlState.ts`
 
 ```ts
 export function parseSearchParams<S extends Record<string, unknown>>(params: URLSearchParams, schema: { safeParse(v: unknown): { success: boolean; data?: S } }, defaults: S, arrays?: readonly (keyof S)[]): S;
@@ -208,7 +208,7 @@ export function buildSearch<S extends Record<string, unknown>>(current: URLSearc
 // Apply patch; drop keys equal to their default, undefined, null, "" or []; keep unknown existing keys; sorted for stable URLs; returns "" or "?a=1&b=2".
 ```
 
-#### `src/lib/query/localPrefs.ts`
+#### `src/shared/query/localPrefs.ts`
 
 ```ts
 export function prefStorageKey(key: string, brandKey?: string): string; // "perceev:pref:<key>" or "perceev:pref:<key>:<brandKey>"
@@ -216,7 +216,7 @@ export function readPref<T>(storage: Storage | null, fullKey: string, schema: { 
 export function writePref(storage: Storage | null, fullKey: string, value: unknown): boolean; // false when storage throws or is null
 ```
 
-#### `src/lib/query/searchTabsState.ts` (PORT of `useSearchTabs.ts:13-250`, generic over the input type)
+#### `src/shared/query/searchTabsState.ts` (PORT of `useSearchTabs.ts:13-250`, generic over the input type)
 
 ```ts
 export const SEARCH_TABS_LIMIT = 20;
@@ -235,7 +235,7 @@ export function markViewedState<I>(s: TabsState<I>, tabId: string, when: number)
 
 Each function returns the same object when nothing changes (as OpenSEO's `update` relies on).
 
-#### `src/lib/query/localHistory.ts` (PORT of `useLocalHistoryStore.ts:12-34` and `:57-85`)
+#### `src/shared/query/localHistory.ts` (PORT of `useLocalHistoryStore.ts:12-34` and `:57-85`)
 
 ```ts
 export const HISTORY_LIMIT = 20;
@@ -248,7 +248,7 @@ export function saveHistory(storage: Storage | null, key: string, items: unknown
 
 `src/shared/json.ts`: COPY of `openseo:src/shared/json.ts` (`jsonCodec`, zod v4 `z.codec`).
 
-#### `src/lib/query/portalQueries.ts` (query option builders for portal data; plain objects so they are unit-testable)
+#### `src/shared/query/portalQueries.ts` (query option builders for portal data; plain objects so they are unit-testable)
 
 ```ts
 export function featuresQueryOptions(brandKey: string);   // key keys.features, GET /api/customer/features?brand_key=
@@ -268,7 +268,7 @@ Each returns `{ queryKey, queryFn: ({ signal }) => fetchJson(url, { signal }), e
 | `providers/AppProviders.tsx` (F04 file, edited) | wraps `TooltipProvider` in `<QueryClientProvider client={useState(getQueryClient)[0]}>`. |
 | `workspace/WorkspaceContext.tsx` | `WorkspaceContext`, `WorkspaceProvider({ value: { brandKey: string; features: Record<string, boolean> \| null; isOwner: boolean }, children })`, `useWorkspace(): … \| null` — lets TSX feature components read the workspace without importing portal JSX. |
 | `SpendRefusedError.tsx` | `SpendRefusedError({ error, variant?, title? })` → `ErrorState` with `title = view.title`, `message = view.message` + recovery sentence, `action` = `Button variant="outline" size="sm" className="text-foreground" render={<Link href="/portal/usage" />}` "View usage" when `view.showUsageLink && useWorkspace()?.features?.usage_page === true`, else no button (PORT of `InsufficientCreditsError.tsx:20-36`, `:77-90`). |
-| `QueryState.tsx` (F04 file, edited) | `QueryError`: when `isSpendRefused(error ?? cause)` render `SpendRefusedError`; otherwise unchanged; `describeError` from `@/lib/query/errors`. |
+| `QueryState.tsx` (F04 file, edited) | `QueryError`: when `isSpendRefused(error ?? cause)` render `SpendRefusedError`; otherwise unchanged; `describeError` from `@/shared/query/errors`. |
 | `hooks/useServerPacedQuery.ts` | `useServerPacedQuery<T>(options & { isActive(d: T): boolean; pollAfterSeconds?(d: T): number \| null \| undefined; floorSeconds?: number; fallbackSeconds?: number; sameRun?(a: T, b: T): boolean; onFinish?(d: T): void })` → `useQuery` with `refetchInterval: q => pollIntervalMs(q.state.data, …)`, `refetchIntervalInBackground: false`, `staleTime: q => pacedStaleTime(q.state.data, isActive)`, and an effect calling `onFinish` when `finishTransition(prev, data)` (PORT of `shared.tsx:115-157`). |
 | `hooks/useJobStatus.ts` | `useJobStatus(brandKey, jobId, { onFinish? })` → `useServerPacedQuery` on `keys.jobStatus`, `GET /api/customer/jobs/<jobId>?brand_key=` (F01 §6.5), `isActive = isJobActive`, `pollAfterSeconds = d => d.pollAfterSeconds`, floor 4, fallback 5. |
 | `hooks/useOptimisticMutation.ts` | `useOptimisticMutation<TVars, TData, TCache>({ mutationFn, queryKey, apply, onSuccess?, meta? })` using `optimisticHandlers`. |
@@ -329,8 +329,8 @@ The reducer returns the **same state object** when an action changes nothing (fo
 ```js
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { pollIntervalMs } from "@/lib/query/polling";
-import { keys } from "@/lib/query/keys";
+import { pollIntervalMs } from "@/shared/query/polling";
+import { keys } from "@/shared/query/keys";
 import { ACTIVE_SCAN_STATUSES, SCAN_POLL_SECONDS, initialTrackerState, scanTrackerReducer, trackerView } from "./scanTrackerModel";
 export { ACTIVE_SCAN_STATUSES, PANEL_NOT_APPROVED, SCAN_ALREADY_RUNNING, SCAN_STAGES, scanStageIndex, SCAN_STALL_MS } from "./scanTrackerModel";
 
@@ -386,22 +386,22 @@ No visual change, except:
 
 | OpenSEO source | Perceev target | Mode | Adaptation notes |
 |---|---|---|---|
-| `openseo:src/client/tanstack-db/queryClient.ts` (+ `queryClient.test.ts`) | `src/lib/query/queryClient.ts` (+ `queryClient.test.ts`) | PORT | Factory with injected toast; 401 and spend-refusal branches; retry rule; mutations never retry. |
-| `openseo:src/client/lib/error-messages.ts` (+ test) | `src/lib/query/errors.ts` (+ `errors.test.ts`) | PORT | Our routes send human messages, so the message wins; codes drive the spend card. |
+| `openseo:src/client/tanstack-db/queryClient.ts` (+ `queryClient.test.ts`) | `src/shared/query/queryClient.ts` (+ `queryClient.test.ts`) | PORT | Factory with injected toast; 401 and spend-refusal branches; retry rule; mutations never retry. |
+| `openseo:src/client/lib/error-messages.ts` (+ test) | `src/shared/query/errors.ts` (+ `errors.test.ts`) | PORT | Our routes send human messages, so the message wins; codes drive the spend card. |
 | `openseo:src/client/components/QueryState.tsx:39-41`, `openseo:src/client/features/billing/InsufficientCreditsError.tsx:20-90` | `src/components/app/QueryState.tsx` (edit), `src/components/app/SpendRefusedError.tsx` | PORT | Credits → spend caps; link to Usage instead of Billing. |
-| `openseo:src/client/features/ai-visibility/shared.tsx:115-157` | `src/lib/query/polling.ts`, `src/components/app/hooks/useServerPacedQuery.ts` | PORT | Generic over the run shape; floor/fallback configurable. |
+| `openseo:src/client/features/ai-visibility/shared.tsx:115-157` | `src/shared/query/polling.ts`, `src/components/app/hooks/useServerPacedQuery.ts` | PORT | Generic over the run shape; floor/fallback configurable. |
 | `openseo:src/client/features/rank-tracking/useRankRunPolling.ts:9-47` | `useServerPacedQuery` `onFinish` | PATTERN | One invalidation per terminal transition. |
 | `openseo:src/client/features/audit/AuditDetail.tsx:53-73,258-262` | `useJobStatus` | PATTERN | Results fetched only after finish; live feeds poll a separate key. |
 | `openseo:src/router.tsx:45`, `openseo:src/routes/_app/p/$projectId/ai-visibility.tsx:11-19` | `src/components/app/PrefetchLink.tsx`, nav `prefetch` | PATTERN | Next `Link` + `prefetchQuery` on intent. |
-| `openseo:src/client/features/rank-tracking/useSetKeywordPinned.ts:10-48` | `src/lib/query/optimistic.ts`, `src/components/app/hooks/useOptimisticMutation.ts` | PORT | Generic `apply`. |
-| `openseo:src/client/lib/filterSearchParams.ts` | `src/lib/query/filterSearchParams.ts` | COPY | Text fields configurable. |
-| `openseo:src/routes/_app/p/$projectId/saved.tsx:63-153` | `src/lib/query/urlState.ts`, `src/components/app/hooks/{useUrlSearchState,useDebouncedFilters}.ts` | PORT | Next `useSearchParams`/`router.replace`; default stripping as `stripSearchParams`. |
+| `openseo:src/client/features/rank-tracking/useSetKeywordPinned.ts:10-48` | `src/shared/query/optimistic.ts`, `src/components/app/hooks/useOptimisticMutation.ts` | PORT | Generic `apply`. |
+| `openseo:src/client/lib/filterSearchParams.ts` | `src/shared/query/filterSearchParams.ts` | COPY | Text fields configurable. |
+| `openseo:src/routes/_app/p/$projectId/saved.tsx:63-153` | `src/shared/query/urlState.ts`, `src/components/app/hooks/{useUrlSearchState,useDebouncedFilters}.ts` | PORT | Next `useSearchParams`/`router.replace`; default stripping as `stripSearchParams`. |
 | `openseo:src/client/hooks/useDebouncedDraft.ts` | `src/components/app/hooks/useDebouncedDraft.ts` | COPY | — |
-| `openseo:src/client/features/keywords/hooks/usePreferredKeywordLocation.ts`, `openseo:src/client/features/keywords/page/KeywordResearchPagination.tsx:70-100` | `src/lib/query/localPrefs.ts`, `src/components/app/hooks/useLocalPref.ts` | PATTERN | One generic hook. |
-| `openseo:src/client/features/search-tabs/useSearchTabs.ts` (+ test) | `src/lib/query/searchTabsState.ts` (+ test), `src/components/app/search-tabs/useSearchTabs.ts` | PORT | Generic input type; storage key per feature and workspace. |
+| `openseo:src/client/features/keywords/hooks/usePreferredKeywordLocation.ts`, `openseo:src/client/features/keywords/page/KeywordResearchPagination.tsx:70-100` | `src/shared/query/localPrefs.ts`, `src/components/app/hooks/useLocalPref.ts` | PATTERN | One generic hook. |
+| `openseo:src/client/features/search-tabs/useSearchTabs.ts` (+ test) | `src/shared/query/searchTabsState.ts` (+ test), `src/components/app/search-tabs/useSearchTabs.ts` | PORT | Generic input type; storage key per feature and workspace. |
 | `openseo:src/client/features/search-tabs/useSearchTabNavigation.ts` | `src/components/app/search-tabs/useSearchTabNavigation.ts` | COPY | — |
 | `openseo:src/client/features/search-tabs/SearchTabStrip.tsx` | `src/components/app/search-tabs/SearchTabStrip.tsx` | PORT | `getQueryConfig` passed in instead of hard-coded features. |
-| `openseo:src/client/hooks/useLocalHistoryStore.ts`, `useTimestampedSearchHistory.ts` | `src/lib/query/localHistory.ts`, `src/components/app/hooks/{useLocalHistoryStore,useTimestampedSearchHistory}.ts` | PORT | Pure core extracted for tests. |
+| `openseo:src/client/hooks/useLocalHistoryStore.ts`, `useTimestampedSearchHistory.ts` | `src/shared/query/localHistory.ts`, `src/components/app/hooks/{useLocalHistoryStore,useTimestampedSearchHistory}.ts` | PORT | Pure core extracted for tests. |
 | `openseo:src/shared/json.ts` | `src/shared/json.ts` | COPY | — |
 | `openseo:src/client/components/RecentSearches.tsx` | `src/components/app/RecentSearches.tsx` | COPY | — |
 
@@ -416,10 +416,10 @@ Branches `feat/f05-client-data-layer-p<N>`.
 - [x] **P1.T1 Dependencies**
   - [x] **P1.T1.S1** *Files:* `package.json`, `package-lock.json`. *Do:* `npm install @tanstack/query-core@^5.103.2` (same version as the `@tanstack/react-query` F04 installed). *Verify:* `node -e "import('@tanstack/query-core').then(m=>console.log(typeof m.QueryClient))"` → `function`.
 - [x] **P1.T2 Pure modules**
-  - [x] **P1.T2.S1** *Files:* `src/lib/query/fetchJson.ts`, `src/lib/query/fetchJson.test.ts`. *Do:* §6.2; tests with an injected `fetch` returning `{ status, ok, json }` objects: 200 JSON → value; 200 empty body → `null`; schema mismatch → `invalid_response`; 400 `{error,code,details}` → `ApiError` fields; legacy `{detail}` → message; 401 → handler called once then `ApiError(401,"unauthenticated")`; `TypeError` → `network_error`; `AbortError` re-thrown; POST sets `Content-Type` and body, GET does not; `withBrand` cases. *Verify:* `node --test src/lib/query/fetchJson.test.ts` → pass (F05-AC-02).
-  - [x] **P1.T2.S2** *Files:* `src/lib/query/errors.ts`, `errors.test.ts`. *Do:* §6.2 table; `describeError` cases. *Verify:* `node --test src/lib/query/errors.test.ts` → pass (F05-AC-03 unit).
-  - [x] **P1.T2.S3** *Files:* `src/lib/query/keys.ts`, `keys.test.ts`. *Do:* §6.2; tests: every builder's shape; `isWorkspaceKey(["overview","a"],"a")` true, `(["overview","b"],"a")` false, `(["scanReport","x"],"x")` false; `invalidateWorkspace` with a recording client calls the predicate and matches only `a` keys; `stableStringify({b:1,a:{d:1,c:2}})` → `{"a":{"c":2,"d":1},"b":1}`. *Verify:* `node --test src/lib/query/keys.test.ts` → pass (F05-AC-04).
-  - [x] **P1.T2.S4** *Files:* `src/lib/query/queryClient.ts`, `queryClient.test.ts`. *Do:* PORT of OpenSEO's two cases plus: 401 → no toast; spend refusal → toast with the card title and message; defaults equal the constants; `shouldRetryQuery(0, new ApiError(404,…))` false, `(1, new ApiError(500,…))` true, `(2, …)` false; mutation `retry` 0. Build failing mutations with `client.getMutationCache().build(client, {...}).execute(undefined).catch(() => {})` as OpenSEO does. *Verify:* `node --test src/lib/query/queryClient.test.ts` → pass (F05-AC-01).
+  - [x] **P1.T2.S1** *Files:* `src/shared/query/fetchJson.ts`, `src/shared/query/fetchJson.test.ts`. *Do:* §6.2; tests with an injected `fetch` returning `{ status, ok, json }` objects: 200 JSON → value; 200 empty body → `null`; schema mismatch → `invalid_response`; 400 `{error,code,details}` → `ApiError` fields; legacy `{detail}` → message; 401 → handler called once then `ApiError(401,"unauthenticated")`; `TypeError` → `network_error`; `AbortError` re-thrown; POST sets `Content-Type` and body, GET does not; `withBrand` cases. *Verify:* `node --test src/shared/query/fetchJson.test.ts` → pass (F05-AC-02).
+  - [x] **P1.T2.S2** *Files:* `src/shared/query/errors.ts`, `errors.test.ts`. *Do:* §6.2 table; `describeError` cases. *Verify:* `node --test src/shared/query/errors.test.ts` → pass (F05-AC-03 unit).
+  - [x] **P1.T2.S3** *Files:* `src/shared/query/keys.ts`, `keys.test.ts`. *Do:* §6.2; tests: every builder's shape; `isWorkspaceKey(["overview","a"],"a")` true, `(["overview","b"],"a")` false, `(["scanReport","x"],"x")` false; `invalidateWorkspace` with a recording client calls the predicate and matches only `a` keys; `stableStringify({b:1,a:{d:1,c:2}})` → `{"a":{"c":2,"d":1},"b":1}`. *Verify:* `node --test src/shared/query/keys.test.ts` → pass (F05-AC-04).
+  - [x] **P1.T2.S4** *Files:* `src/shared/query/queryClient.ts`, `queryClient.test.ts`. *Do:* PORT of OpenSEO's two cases plus: 401 → no toast; spend refusal → toast with the card title and message; defaults equal the constants; `shouldRetryQuery(0, new ApiError(404,…))` false, `(1, new ApiError(500,…))` true, `(2, …)` false; mutation `retry` 0. Build failing mutations with `client.getMutationCache().build(client, {...}).execute(undefined).catch(() => {})` as OpenSEO does. *Verify:* `node --test src/shared/query/queryClient.test.ts` → pass (F05-AC-01).
 - [x] **P1.T3 React layer**
   - [x] **P1.T3.S1** *Files:* `src/components/app/providers/queryClient.ts`, `src/components/app/providers/AppProviders.tsx`, `src/components/app/workspace/WorkspaceContext.tsx`, `src/components/app/SpendRefusedError.tsx`, `src/components/app/QueryState.tsx`, `src/components/app/errors/describeError.ts`. *Do:* §6.2 React table. *Verify:* `npm run typecheck` → exit 0; `npm run build` → exit 0.
   - [x] **P1.T3.S2** *Files:* `THIRD_PARTY_NOTICES.md`. *Do:* append this phase's COPY/PORT paths. *Verify:* `git grep -c "tanstack-db/queryClient.ts" -- THIRD_PARTY_NOTICES.md` → `1`.
@@ -439,7 +439,7 @@ Branches `feat/f05-client-data-layer-p<N>`.
   - `@tanstack/query-core` and `@tanstack/react-query` are both pinned to exactly `5.104.5` (no `^`), so neither can drift into a second copy. Bump them together.
   - `shouldRetryQuery` also refuses `invalid_response`: the same request gets the same unparseable answer.
   - The mutation toast skips a 401 only while `setUnauthorizedHandler` has a handler registered (`hasUnauthorizedHandler()`); before phase 3 registers it, a 401 toasts its message instead of failing silently. It also skips an `AbortError` (a cancellation, not a failure).
-  - A per-call `mutate(v, { onError })` is invisible to `MutationCache` (it lives on the observer), so it cannot suppress the toast. `src/lib/query/mutationOnErrorGuard.test.mjs` fails on any such call; put `onError` on `useMutation` or set `meta: { errorToast: false }`.
+  - A per-call `mutate(v, { onError })` is invisible to `MutationCache` (it lives on the observer), so it cannot suppress the toast. `src/shared/query/mutationOnErrorGuard.test.mjs` fails on any such call; put `onError` on `useMutation` or set `meta: { errorToast: false }`.
   - `stableStringify` applies `toJSON` (a `Date`) before sorting keys; it used to turn a `Date` into `{}`.
   - `spendRefusedView` returns `text` (message + recovery), used by both the card and the toast. The `inline` variant shows no title, so `SpendRefusedError` puts the title first in the message there.
 
@@ -448,18 +448,18 @@ Branches `feat/f05-client-data-layer-p<N>`.
 **Goal:** polling, optimistic, URL state, preferences, search tabs, recent searches and prefetch helpers exist with unit tests.
 
 - [x] **P2.T1 Polling**
-  - [x] **P2.T1.S1** *Files:* `src/lib/query/polling.ts`, `polling.test.ts`. *Do:* `pollIntervalMs` cases: inactive → false; active with `pollAfterSeconds` 2 and floor 4 → 4000; 10 → 10000; null → fallback × 1000; scan config floor 2.5/fallback 2.5 → 2500; `pacedStaleTime` 0/Infinity/undefined-data 0; `finishTransition` running→completed true, completed→completed false, undefined→completed false (already finished on open), different run ids false. *Verify:* `node --test src/lib/query/polling.test.ts` → pass (F05-AC-05, F05-AC-13 unit).
+  - [x] **P2.T1.S1** *Files:* `src/shared/query/polling.ts`, `polling.test.ts`. *Do:* `pollIntervalMs` cases: inactive → false; active with `pollAfterSeconds` 2 and floor 4 → 4000; 10 → 10000; null → fallback × 1000; scan config floor 2.5/fallback 2.5 → 2500; `pacedStaleTime` 0/Infinity/undefined-data 0; `finishTransition` running→completed true, completed→completed false, undefined→completed false (already finished on open), different run ids false. *Verify:* `node --test src/shared/query/polling.test.ts` → pass (F05-AC-05, F05-AC-13 unit).
   - [x] **P2.T1.S2** *Files:* `src/components/app/hooks/useServerPacedQuery.ts`, `src/components/app/hooks/useJobStatus.ts`. *Do:* §6.2. *Verify:* `npm run typecheck` → exit 0.
 - [x] **P2.T2 Optimistic**
-  - [x] **P2.T2.S1** *Files:* `src/lib/query/optimistic.ts`, `optimistic.test.ts`, `src/components/app/hooks/useOptimisticMutation.ts`. *Do:* tests with a real `QueryClient` from `@tanstack/query-core`: seed two queries under `["rows","a",1]` and `["rows","a",2]`, run `onMutate` → both patched; `onSettled(undefined, new Error())` → both invalidated (`isInvalidated` true); `onSettled(data, null)` → not invalidated; a mutation built with these handlers and no `onError` still triggers the client's toast (use `createQueryClient` with a recording toast). *Verify:* `node --test src/lib/query/optimistic.test.ts` → pass (F05-AC-06).
+  - [x] **P2.T2.S1** *Files:* `src/shared/query/optimistic.ts`, `optimistic.test.ts`, `src/components/app/hooks/useOptimisticMutation.ts`. *Do:* tests with a real `QueryClient` from `@tanstack/query-core`: seed two queries under `["rows","a",1]` and `["rows","a",2]`, run `onMutate` → both patched; `onSettled(undefined, new Error())` → both invalidated (`isInvalidated` true); `onSettled(data, null)` → not invalidated; a mutation built with these handlers and no `onError` still triggers the client's toast (use `createQueryClient` with a recording toast). *Verify:* `node --test src/shared/query/optimistic.test.ts` → pass (F05-AC-06).
 - [x] **P2.T3 URL state and filters**
-  - [x] **P2.T3.S1** *Files:* `src/lib/query/filterSearchParams.ts`, `filterSearchParams.test.ts`. *Do:* COPY; tests: `{minVol:"10."}` → `{minVol:10}`; `{include:" a "}` → `{include:"a"}`; `""` → `undefined`; round trip `normalizeFilterValues`. *Verify:* `node --test src/lib/query/filterSearchParams.test.ts` → pass.
-  - [x] **P2.T3.S2** *Files:* `src/lib/query/urlState.ts`, `urlState.test.ts`. *Do:* tests: missing params → defaults; `?page=3` with default `page: 1` → `3` (number); `?view=bogus&q=x` → `view` default, `q` "x"; repeated `?tags=a&tags=b` with `arrays: ["tags"]` → `["a","b"]`; `buildSearch` drops defaults, `""`, `[]`, keeps unknown keys, sorts. *Verify:* `node --test src/lib/query/urlState.test.ts` → pass (F05-AC-07 unit).
+  - [x] **P2.T3.S1** *Files:* `src/shared/query/filterSearchParams.ts`, `filterSearchParams.test.ts`. *Do:* COPY; tests: `{minVol:"10."}` → `{minVol:10}`; `{include:" a "}` → `{include:"a"}`; `""` → `undefined`; round trip `normalizeFilterValues`. *Verify:* `node --test src/shared/query/filterSearchParams.test.ts` → pass.
+  - [x] **P2.T3.S2** *Files:* `src/shared/query/urlState.ts`, `urlState.test.ts`. *Do:* tests: missing params → defaults; `?page=3` with default `page: 1` → `3` (number); `?view=bogus&q=x` → `view` default, `q` "x"; repeated `?tags=a&tags=b` with `arrays: ["tags"]` → `["a","b"]`; `buildSearch` drops defaults, `""`, `[]`, keeps unknown keys, sorts. *Verify:* `node --test src/shared/query/urlState.test.ts` → pass (F05-AC-07 unit).
   - [x] **P2.T3.S3** *Files:* `src/components/app/hooks/{useUrlSearchState,useDebouncedDraft,useDebouncedFilters}.ts`. *Do:* §6.2. *Verify:* `npm run typecheck` → exit 0.
 - [x] **P2.T4 Preferences, tabs, history**
-  - [x] **P2.T4.S1** *Files:* `src/lib/query/localPrefs.ts`, `localPrefs.test.ts`, `src/components/app/hooks/useLocalPref.ts`. *Do:* tests with a `Map`-backed fake `Storage` and a throwing one: key format; valid JSON passes the schema; invalid JSON or schema failure → fallback; write returns false when storage throws. *Verify:* `node --test src/lib/query/localPrefs.test.ts` → pass (F05-AC-08).
-  - [x] **P2.T4.S2** *Files:* `src/lib/query/searchTabsState.ts`, `searchTabsState.test.ts`, `src/components/app/search-tabs/{useSearchTabs.ts,useSearchTabNavigation.ts,SearchTabStrip.tsx}`. *Do:* PORT of OpenSEO's tests `useSearchTabs.test.ts:29-211` with a test-only `parseInput` (zod object `{ type: "q", text: string.min(1) }`): eviction keeps tab-1…tab-20; stored 25 keep tab-5…tab-24; malformed dropped; `activeTabId` kept only when present; plus `closeTabState` right-then-left neighbour; `openTabState` with an identical input re-activates without adding. *Verify:* `node --test src/lib/query/searchTabsState.test.ts` → pass (F05-AC-09).
-  - [x] **P2.T4.S3** *Files:* `src/lib/query/localHistory.ts`, `localHistory.test.ts`, `src/shared/json.ts`, `src/components/app/hooks/{useLocalHistoryStore,useTimestampedSearchHistory}.ts`, `src/components/app/RecentSearches.tsx`. *Do:* tests: add puts newest first and removes the duplicate; 21st item drops the oldest; remove by key; invalid stored JSON → `[]`; `saveHistory` with a throwing storage does not throw. *Verify:* `node --test src/lib/query/localHistory.test.ts` → pass (F05-AC-10).
+  - [x] **P2.T4.S1** *Files:* `src/shared/query/localPrefs.ts`, `localPrefs.test.ts`, `src/components/app/hooks/useLocalPref.ts`. *Do:* tests with a `Map`-backed fake `Storage` and a throwing one: key format; valid JSON passes the schema; invalid JSON or schema failure → fallback; write returns false when storage throws. *Verify:* `node --test src/shared/query/localPrefs.test.ts` → pass (F05-AC-08).
+  - [x] **P2.T4.S2** *Files:* `src/shared/query/searchTabsState.ts`, `searchTabsState.test.ts`, `src/components/app/search-tabs/{useSearchTabs.ts,useSearchTabNavigation.ts,SearchTabStrip.tsx}`. *Do:* PORT of OpenSEO's tests `useSearchTabs.test.ts:29-211` with a test-only `parseInput` (zod object `{ type: "q", text: string.min(1) }`): eviction keeps tab-1…tab-20; stored 25 keep tab-5…tab-24; malformed dropped; `activeTabId` kept only when present; plus `closeTabState` right-then-left neighbour; `openTabState` with an identical input re-activates without adding. *Verify:* `node --test src/shared/query/searchTabsState.test.ts` → pass (F05-AC-09).
+  - [x] **P2.T4.S3** *Files:* `src/shared/query/localHistory.ts`, `localHistory.test.ts`, `src/shared/json.ts`, `src/components/app/hooks/{useLocalHistoryStore,useTimestampedSearchHistory}.ts`, `src/components/app/RecentSearches.tsx`. *Do:* tests: add puts newest first and removes the duplicate; 21st item drops the oldest; remove by key; invalid stored JSON → `[]`; `saveHistory` with a throwing storage does not throw. *Verify:* `node --test src/shared/query/localHistory.test.ts` → pass (F05-AC-10).
 - [x] **P2.T5 Prefetch**
   - [x] **P2.T5.S1** *Files:* `src/components/app/PrefetchLink.tsx`, `src/components/app/navigation/navModel.ts` (add optional `prefetch`). *Do:* §6.2. *Verify:* `npm run typecheck` → exit 0; `node --test src/components/app/navigation/navModel.test.ts` → pass.
 
@@ -470,18 +470,18 @@ Branches `feat/f05-client-data-layer-p<N>`.
 **Goal:** the portal context, scan tracker, Overview panel read and scan report run on queries with unchanged behaviour; prefetch and URL-held filters work.
 
 - [x] **P3.T1 Test support**
-  - [x] **P3.T1.S1** *Files:* `src/lib/fakeReactQuery.mjs` (new). *Do:* `export function createFakeReactQuery(react)` returning `{ __esModule: true, useQuery, useQueryClient, useMutation, keepPreviousData }` built only on `react.useState/useEffect/useRef/useCallback` (the hooks the lifecycle React provides): `useQuery(o)` keeps `{ status, data: o.initialData, error, dataUpdatedAt, errorUpdatedAt, fetchStatus }`; when `o.enabled !== false` and `JSON.stringify(o.queryKey)` or a refetch counter changes, runs `o.queryFn({ queryKey: o.queryKey, signal: new AbortController().signal })` once and stores data (`dataUpdatedAt = ++clock`) or error (`errorUpdatedAt = ++clock`); applies `o.select` to data; never polls (cadence is covered by `polling.test.ts`); returns `isPending`, `isError`, `isSuccess`, `isFetching`, `refetch`. `useQueryClient()` returns a recorder `{ calls: [], invalidateQueries, prefetchQuery, cancelQueries, setQueryData, setQueriesData, getQueryData }`. `useMutation` runs `mutationFn` and the callbacks. *Verify:* used by P3.T3.S3.
+  - [x] **P3.T1.S1** *Files:* `src/server/fakeReactQuery.mjs` (new). *Do:* `export function createFakeReactQuery(react)` returning `{ __esModule: true, useQuery, useQueryClient, useMutation, keepPreviousData }` built only on `react.useState/useEffect/useRef/useCallback` (the hooks the lifecycle React provides): `useQuery(o)` keeps `{ status, data: o.initialData, error, dataUpdatedAt, errorUpdatedAt, fetchStatus }`; when `o.enabled !== false` and `JSON.stringify(o.queryKey)` or a refetch counter changes, runs `o.queryFn({ queryKey: o.queryKey, signal: new AbortController().signal })` once and stores data (`dataUpdatedAt = ++clock`) or error (`errorUpdatedAt = ++clock`); applies `o.select` to data; never polls (cadence is covered by `polling.test.ts`); returns `isPending`, `isError`, `isSuccess`, `isFetching`, `refetch`. `useQueryClient()` returns a recorder `{ calls: [], invalidateQueries, prefetchQuery, cancelQueries, setQueryData, setQueriesData, getQueryData }`. `useMutation` runs `mutationFn` and the callbacks. *Verify:* used by P3.T3.S3.
 - [x] **P3.T2 Portal context**
-  - [x] **P3.T2.S1** *Files:* `src/lib/query/portalQueries.ts`, `portalQueries.test.ts`. *Do:* §6.2; tests: keys and URLs per builder (mock `globalThis.fetch`, call `queryFn({ signal })`); no builder sets `placeholderData`; `enabled` false for `""`; `panelQueryOptions(...).staleTime === 0`. *Verify:* `node --test src/lib/query/portalQueries.test.ts` → pass (F05-AC-11 unit).
+  - [x] **P3.T2.S1** *Files:* `src/shared/query/portalQueries.ts`, `portalQueries.test.ts`. *Do:* §6.2; tests: keys and URLs per builder (mock `globalThis.fetch`, call `queryFn({ signal })`); no builder sets `placeholderData`; `enabled` false for `""`; `panelQueryOptions(...).staleTime === 0`. *Verify:* `node --test src/shared/query/portalQueries.test.ts` → pass (F05-AC-11 unit).
   - [x] **P3.T2.S2** *Files:* `src/components/portal/PortalShell.jsx`, `src/components/app/shell/AppSidebar.tsx` (prefetch on items), `src/components/app/navigation/items.ts` (`prefetch` for Overview, Questions, Search Console). *Do:* §6.3 PortalShell. *Verify:* `npm run build` → exit 0; `node --test src/components/portal/` → pass.
 - [x] **P3.T3 Scan tracker**
   - [x] **P3.T3.S1** *Files:* `src/components/portal/scanTrackerModel.js`, `src/components/portal/scanTrackerModel.test.mjs`. *Do:* §6.3; tests (pure, no React): adoption of the first active unsettled job; 404 settles and never re-adopts the same id on a later `jobsSeen` with a fresh array; `complete`/`failed` settle, set `finished`, bump `notifySeq`; `transient_error` and `status:"unknown"` keep the job and mark progress unknown; `statusReceived` for another job id is ignored; `brandChanged` resets `settledJobIds`; `startResolved` with a stale `brandKey` is ignored; `alreadyRunning` sets the notice and bumps `notifySeq`; `panelNotApproved` sets `errorCode` and today's sentence; `trackerView` matches today's fields for a running job (`percent` 37, `stageIndex` 2). *Verify:* `node --test src/components/portal/scanTrackerModel.test.mjs` → pass (F05-AC-12 unit).
   - [x] **P3.T3.S2** *Files:* `src/components/portal/useScanTracker.js`. *Do:* §6.3 hook. *Verify:* `git grep -n '/api/scan/\${encodeURIComponent(jobId)}/status' -- src/components/portal/useScanTracker.js` → one match.
-  - [x] **P3.T3.S3** *Files:* `src/components/portal/portalRegressions.test.mjs`, `src/components/portal/portalProgress.test.mjs`. *Do (reason: `useScanTracker.js` now imports `@tanstack/react-query`, `@/lib/query/polling`, `@/lib/query/keys` and `./scanTrackerModel`, which the harness must be told about; assertions are unchanged):* in `trackerLifecycle` add to the modules map `["@tanstack/react-query", createFakeReactQuery(lifecycle.react)]`, `["@/lib/query/polling", await import("../../lib/query/polling.ts")]`, `["@/lib/query/keys", await import("../../lib/query/keys.ts")]`, `["./scanTrackerModel", await import("./scanTrackerModel.js")]`; in `portalProgress.test.mjs` `loadTracker()` add the same four with `createFakeReactQuery(React)`. *Verify:* `node --test src/components/portal/portalRegressions.test.mjs src/components/portal/portalProgress.test.mjs` → pass (F05-AC-12).
+  - [x] **P3.T3.S3** *Files:* `src/components/portal/portalRegressions.test.mjs`, `src/components/portal/portalProgress.test.mjs`. *Do (reason: `useScanTracker.js` now imports `@tanstack/react-query`, `@/shared/query/polling`, `@/shared/query/keys` and `./scanTrackerModel`, which the harness must be told about; assertions are unchanged):* in `trackerLifecycle` add to the modules map `["@tanstack/react-query", createFakeReactQuery(lifecycle.react)]`, `["@/shared/query/polling", await import("../../lib/query/polling.ts")]`, `["@/shared/query/keys", await import("../../lib/query/keys.ts")]`, `["./scanTrackerModel", await import("./scanTrackerModel.js")]`; in `portalProgress.test.mjs` `loadTracker()` add the same four with `createFakeReactQuery(React)`. *Verify:* `node --test src/components/portal/portalRegressions.test.mjs src/components/portal/portalProgress.test.mjs` → pass (F05-AC-12).
 - [x] **P3.T4 Overview and report**
   - [x] **P3.T4.S1** *Files:* `src/app/portal/page.jsx`. *Do:* §6.3 Overview panel. *Verify:* build → exit 0.
   - [x] **P3.T4.S2** *Files:* `src/app/portal/scans/[scanId]/page.jsx`, `src/components/portal/scans/ReportCards.jsx`, `src/app/portal/scans/page.jsx`, `src/components/portal/overview/RecentScans.jsx`. *Do:* §6.3 Scan report and scan-row prefetch. *Verify:* build → exit 0.
-  - [x] **P3.T4.S3** *Files:* `src/components/portal/portalRegressions.test.mjs`, `src/components/portal/tenantWorkspace.test.mjs`. *Do (reason: the report page and scans page import query helpers; assertions unchanged):* in "the report renders its By engine card…" and `renderCustomerReport` add `["@tanstack/react-query", createFakeReactQuery(lifecycle.react)]`, `["@/lib/query/portalQueries", await import("../../lib/query/portalQueries.ts")]`, `["@/lib/query/fetchJson", await import("../../lib/query/fetchJson.ts")]`, `["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (_s, defaults) => [defaults, noop] }]`, `["@/components/app/hooks/useDebouncedDraft", { useDebouncedDraft: (value) => [value, noop] }]`, `["zod", await import("zod")]`; in `tenantWorkspace.test.mjs` "tenant Scans renders a runnable mock…" add `autoStub: ["@/components/app/PrefetchLink"]` and `["@/lib/query/portalQueries", await import("../../lib/query/portalQueries.ts")]`. The response doubles already provide `status`, `ok`, `json()`. *Verify:* `node --test src/components/portal/` → pass.
+  - [x] **P3.T4.S3** *Files:* `src/components/portal/portalRegressions.test.mjs`, `src/components/portal/tenantWorkspace.test.mjs`. *Do (reason: the report page and scans page import query helpers; assertions unchanged):* in "the report renders its By engine card…" and `renderCustomerReport` add `["@tanstack/react-query", createFakeReactQuery(lifecycle.react)]`, `["@/shared/query/portalQueries", await import("../../lib/query/portalQueries.ts")]`, `["@/shared/query/fetchJson", await import("../../lib/query/fetchJson.ts")]`, `["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (_s, defaults) => [defaults, noop] }]`, `["@/components/app/hooks/useDebouncedDraft", { useDebouncedDraft: (value) => [value, noop] }]`, `["zod", await import("zod")]`; in `tenantWorkspace.test.mjs` "tenant Scans renders a runnable mock…" add `autoStub: ["@/components/app/PrefetchLink"]` and `["@/shared/query/portalQueries", await import("../../lib/query/portalQueries.ts")]`. The response doubles already provide `status`, `ok`, `json()`. *Verify:* `node --test src/components/portal/` → pass.
 - [x] **P3.T5 Browser checks**
   - [x] **P3.T5.S1** *Files:* `scripts/qa/check-f05-browser.mjs` (new), `tests/fixtures/portal/{overview-acme-running.json,scan-status-sequence.json}` (new), `.github/workflows/ci.yml` (run it after `check-f04-browser.mjs`). *Do:* using `openPortal` from `scripts/qa/portalFixtureHarness.mjs`:
     - `F05-B01` delay the `acme` overview response 1.5 s, switch to Beta at once, wait 3 s: the page never shows Acme's KPI values (poll the DOM every 100 ms) and ends on Beta's.
@@ -499,17 +499,17 @@ Branches `feat/f05-client-data-layer-p<N>`.
 
 | Test file | Cases | ACs |
 |---|---|---|
-| `src/lib/query/queryClient.test.ts` | defaults, toast rules, 401 silent, spend toast, retry rules | 01 |
-| `src/lib/query/fetchJson.test.ts` | success, empty, schema, error envelope, legacy `detail`, 401 handler, network, abort, headers, `withBrand` | 02 |
-| `src/lib/query/errors.test.ts` | spend detection, card copy, `describeError` | 03 |
-| `src/lib/query/keys.test.ts` | shapes, workspace predicate, `stableStringify` | 04 |
-| `src/lib/query/polling.test.ts` | interval, stale time, finish transition, scan cadence | 05, 13 |
-| `src/lib/query/optimistic.test.ts` | patch, invalidate on error, toast kept | 06 |
-| `src/lib/query/filterSearchParams.test.ts`, `urlState.test.ts` | parse, coerce, fallback per key, strip defaults | 07 |
-| `src/lib/query/localPrefs.test.ts` | keys, schema, throwing storage | 08 |
-| `src/lib/query/searchTabsState.test.ts` | OpenSEO cases + close/open rules | 09 |
-| `src/lib/query/localHistory.test.ts` | order, dedupe, cap, invalid JSON, throwing storage | 10 |
-| `src/lib/query/portalQueries.test.ts` | keys, URLs, no `placeholderData`, panel stale time | 11 |
+| `src/shared/query/queryClient.test.ts` | defaults, toast rules, 401 silent, spend toast, retry rules | 01 |
+| `src/shared/query/fetchJson.test.ts` | success, empty, schema, error envelope, legacy `detail`, 401 handler, network, abort, headers, `withBrand` | 02 |
+| `src/shared/query/errors.test.ts` | spend detection, card copy, `describeError` | 03 |
+| `src/shared/query/keys.test.ts` | shapes, workspace predicate, `stableStringify` | 04 |
+| `src/shared/query/polling.test.ts` | interval, stale time, finish transition, scan cadence | 05, 13 |
+| `src/shared/query/optimistic.test.ts` | patch, invalidate on error, toast kept | 06 |
+| `src/shared/query/filterSearchParams.test.ts`, `urlState.test.ts` | parse, coerce, fallback per key, strip defaults | 07 |
+| `src/shared/query/localPrefs.test.ts` | keys, schema, throwing storage | 08 |
+| `src/shared/query/searchTabsState.test.ts` | OpenSEO cases + close/open rules | 09 |
+| `src/shared/query/localHistory.test.ts` | order, dedupe, cap, invalid JSON, throwing storage | 10 |
+| `src/shared/query/portalQueries.test.ts` | keys, URLs, no `placeholderData`, panel stale time | 11 |
 | `src/components/portal/scanTrackerModel.test.mjs` | reducer table of §6.3 | 12 |
 | `portalRegressions.test.mjs`, `portalProgress.test.mjs`, `tenantWorkspace.test.mjs` (maps updated) | existing assertions | 12 |
 | `scripts/qa/check-f05-browser.mjs` | B01–B06 | 03, 07, 11, 13, 14, 15 |
@@ -543,6 +543,6 @@ Fixtures: invented JSON under `tests/fixtures/portal/`; no provider calls; the h
 
 ## Deviations from conventions
 
-1. **`src/lib/fakeReactQuery.mjs`** is a test helper in `src/` next to `src/lib/renderHarness.mjs` (same precedent), not a fixture under `tests/fixtures/`.
+1. **`src/server/fakeReactQuery.mjs`** is a test helper in `src/` next to `src/server/renderHarness.mjs` (same precedent), not a fixture under `tests/fixtures/`.
 2. **`useScanTracker.js` stays JavaScript and keeps raw `fetch`** for the status route and the start POST, because the existing lifecycle tests and the P0 status semantics depend on it; all other new client code uses `fetchJson`.
-3. **Query-key rule** (`[domain, brandKey, …]`, id-addressed `[domain, id]`) and the `WorkspaceContext` are new shared conventions; conventions §5 should list `src/lib/query/keys.ts`, `fetchJson`, `ApiError` and `useWorkspace()` (requested in the final report).
+3. **Query-key rule** (`[domain, brandKey, …]`, id-addressed `[domain, id]`) and the `WorkspaceContext` are new shared conventions; conventions §5 should list `src/shared/query/keys.ts`, `fetchJson`, `ApiError` and `useWorkspace()` (requested in the final report).

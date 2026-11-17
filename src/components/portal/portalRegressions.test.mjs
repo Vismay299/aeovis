@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import React from "react";
-import { compileJsx, renderToHtml, textOf } from "../../lib/renderHarness.mjs";
-import * as scanProgress from "../../lib/scanProgress.js";
+import { compileJsx, renderToHtml, textOf } from "../../server/renderHarness.mjs";
+import * as scanProgress from "../../shared/scanProgress.js";
 import * as reportData from "./scans/reportData.js";
-import {createMetric} from "../../lib/scoring/metricContract.js";
-import { createFakeReactQuery } from "../../lib/fakeReactQuery.mjs";
+import {createMetric} from "../../shared/scoring/metricContract.js";
+import { createFakeReactQuery } from "../../server/fakeReactQuery.mjs";
 import { z } from "zod";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -92,12 +92,12 @@ async function trackerLifecycle(t, fetch) {
   const { useScanTracker } = await compileJsx(path.join(here, "useScanTracker.js"), {
     modules: new Map([
       ["react", lifecycle.react],
-      ["@/lib/scanProgress", scanProgress],
+      ["@/shared/scanProgress", scanProgress],
       ["@tanstack/react-query", createFakeReactQuery(lifecycle.react)],
-      ["@/lib/query/polling", await import("../../lib/query/polling.ts")],
-      ["@/lib/query/keys", await import("../../lib/query/keys.ts")],
+      ["@/shared/query/polling", await import("../../shared/query/polling.ts")],
+      ["@/shared/query/keys", await import("../../shared/query/keys.ts")],
       ["./scanTrackerModel", await import("./scanTrackerModel.js")],
-      ["@/lib/telemetry/client", { trackEvent() {} }],
+      ["@/shared/telemetry/client", { trackEvent() {} }],
     ]),
   });
   return { lifecycle, useScanTracker };
@@ -312,7 +312,7 @@ async function draftLifecycle(t, request) {
       ["../status", { contentItemStatus: () => ({ label: "Needs review" }) }],
       ["@/components/studio/Markdown", { Markdown: noop }],
       ["./ReviewFindings", review],
-      ["@/lib/telemetry/client", { trackEvent() {} }],
+      ["@/shared/telemetry/client", { trackEvent() {} }],
     ]),
     autoNull: ["lucide-react", "./IndexNowOffer"],
   });
@@ -399,12 +399,12 @@ test("the report renders its By engine card from the actual worker payload shape
       ["@/components/portal/scans/reportData", reportData],
       ["@/components/app/ExportMenu", { ExportMenu: named("ExportMenu") }],
       ["@/components/app/export/useExportRows", { useExportRows: () => noop }],
-      ["@/lib/export/filenames", await import("../../lib/export/filenames.ts")],
+      ["@/shared/export/filenames", await import("../../shared/export/filenames.ts")],
       ["@/components/portal/scans/reportExport", await import("./scans/reportExport.js")],
       ["@/components/portal/scans/scans.css", {}],
-      ["@/lib/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"], queryFn: async () => (await fetch("/api/customer/scans/" + id)).json() }) }],
-      ["@/lib/query/fetchJson", { isApiError: (err) => Boolean(err?.status) }],
-      ["@/lib/query/errors", { describeError: (err) => ({ title: "Error", message: err?.message || String(err) }) }],
+      ["@/shared/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"], queryFn: async () => (await fetch("/api/customer/scans/" + id)).json() }) }],
+      ["@/shared/query/fetchJson", { isApiError: (err) => Boolean(err?.status) }],
+      ["@/shared/query/errors", { describeError: (err) => ({ title: "Error", message: err?.message || String(err) }) }],
       ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (_schema, defaults) => [defaults, noop] }],
       ["@/components/app/hooks/useDebouncedDraft", { useDebouncedDraft: (opts) => [opts?.value || "", noop, noop] }],
       ["zod", { z }],
@@ -495,7 +495,7 @@ test("a history bar is pending only before finalization, not when collection fai
 });
 
 test("a completed healthy scan with no elicited brands renders an unmeasured history bar", async () => {
-  const { summarizeEngineSlice, summarizeEngineResults, computeHeadline } = await import("../../lib/scoring/enginePipeline.js");
+  const { summarizeEngineSlice, summarizeEngineResults, computeHeadline } = await import("../../shared/scoring/enginePipeline.js");
   const results = Array.from({ length: 30 }, (_, i) => ({
     query: `unbranded question ${i}`, is_branded_query: false,
     answer_present: true, error: null, text: "An answer without vendor names",
@@ -527,8 +527,8 @@ test("a completed healthy scan with no elicited brands renders an unmeasured his
 
 // Real finalizer output, read back through the customer report API's projection.
 async function finalizedReport(valid, planned = 30, mentions = valid) {
-  const { runFinalizePhase } = await import("../../lib/workers/scanWorker.js");
-  const { makeMemoryScanBackend } = await import("../../lib/demo/memoryScanBackend.js");
+  const { runFinalizePhase } = await import("../../server/workers/scanWorker.js");
+  const { makeMemoryScanBackend } = await import("../../server/demo/memoryScanBackend.js");
   const backend = makeMemoryScanBackend(), jobId = `portal-${valid}-${planned}-${mentions}`;
   const queries = Array.from({ length: planned }, (_, i) => `Buyer question ${i}`);
   await backend.deps.upsertPromptResults(queries.map((query, i) => ({
@@ -565,12 +565,12 @@ async function renderCustomerReport(t, scan) {
       ["@/components/portal/scans/reportData", reportData],
       ["@/components/app/ExportMenu", { ExportMenu: named("ExportMenu") }],
       ["@/components/app/export/useExportRows", { useExportRows: () => noop }],
-      ["@/lib/export/filenames", await import("../../lib/export/filenames.ts")],
+      ["@/shared/export/filenames", await import("../../shared/export/filenames.ts")],
       ["@/components/portal/scans/reportExport", await import("./scans/reportExport.js")],
       ["@/components/portal/scans/scans.css", {}],
-      ["@/lib/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"], queryFn: async () => (await fetch("/api/customer/scans/" + id)).json() }) }],
-      ["@/lib/query/fetchJson", { isApiError: (err) => Boolean(err?.status) }],
-      ["@/lib/query/errors", { describeError: (err) => ({ title: "Error", message: err?.message || String(err) }) }],
+      ["@/shared/query/portalQueries", { scanReportQueryOptions: (id) => ({ queryKey: ["portal", "scans", id, "report"], queryFn: async () => (await fetch("/api/customer/scans/" + id)).json() }) }],
+      ["@/shared/query/fetchJson", { isApiError: (err) => Boolean(err?.status) }],
+      ["@/shared/query/errors", { describeError: (err) => ({ title: "Error", message: err?.message || String(err) }) }],
       ["@/components/app/hooks/useUrlSearchState", { useUrlSearchState: (_schema, defaults) => [defaults, noop] }],
       ["@/components/app/hooks/useDebouncedDraft", { useDebouncedDraft: (opts) => [opts?.value || "", noop, noop] }],
       ["zod", { z }],
@@ -667,7 +667,7 @@ test("every planned question is listed, including those with no collected row, w
 test("the finalizer stores the planned question list in panel order with the planned engines", async () => {
   const scan = await finalizedReport(30);
   assert.equal(scan.planned_questions.prompts.length, 30);assert.equal(scan.planned_questions.prompts[0], "Buyer question 0");assert.deepEqual(scan.planned_questions.engines, ["chatgpt"]);
-  const { plannedQuestions } = await import("../../lib/workers/scanWorker.js");
+  const { plannedQuestions } = await import("../../server/workers/scanWorker.js");
   assert.deepEqual(plannedQuestions([{ text: "Best CRM?" }, { text: "Acme pricing" }, "Best ERP?"], ["best crm?", "best erp?"], ["aio"]), { engines: ["aio"], prompts: ["Best CRM?", "Best ERP?"] });
   assert.ok(scan);
 });
@@ -684,7 +684,7 @@ test("the Google card states the AI Overview trigger count from the terminal out
 });
 
 test("multi-engine reports count questions named by any engine, once per question", async () => {
-  const { questionsNamingBrand } = await import("../../lib/workers/scanWorker.js");
+  const { questionsNamingBrand } = await import("../../server/workers/scanWorker.js");
   const rows = [
     { query: "Best tees?", engine: "aio", raw: { visible: false } },
     { query: "Best tees?", engine: "chatgpt", mentioned: true, raw: {} },
@@ -985,7 +985,7 @@ test("Overview swaps GettingStarted for SetupChecklist only when onboarding_wiza
         ["@/components/portal/ui", ui],
         ["@/components/app/QueryState", { QueryError: () => null }],
         [
-          "@/lib/query/portalQueries",
+          "@/shared/query/portalQueries",
           {
             panelQueryOptions: () => ({
               queryKey: ["panel", "acme"],

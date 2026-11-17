@@ -4,7 +4,7 @@
 //   src/client/components/PermissionHint.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 /** Shown where a missing permission would otherwise leave a card or step empty. */
 export function PermissionHint({

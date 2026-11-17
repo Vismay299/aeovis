@@ -9,7 +9,7 @@
 | Wave | 1 |
 | Comparison rows covered | "Scheduling" (OpenSEO: the customer picks daily, weekly or monthly per tracker; the next run is shown on the page. Perceev: durable schedule windows exist but are operator-only and off by default; the seven-day soak has not started) |
 | Depends on | F01 (merged: `definePeriodic`, `enqueueSystemJob`, `defineJob`, spend holds, flags, `requireWorkspace`), F09 (merged: priced-action registry, `estimateScanRun` with `scheduleInterval`, `recordApproval`, `price_approvals`, `scan_jobs.approved_max_usd`/`price_quote`, `CostReviewDialog`, `MonthlyProjection`, `probeDaySpendToday`), F03 (`scheduledChecksPerMonth`). Phase 4 (UI) also needs F04 and F05. Queued collection needs F02 phase 4 (optional, §6.4). |
-| Blocks | F15 (reuses `src/shared/schedule.ts` and `src/lib/schedules/runDue.ts`), R11 soak execution (owner) |
+| Blocks | F15 (reuses `src/shared/schedule.ts` and `src/server/schedules/runDue.ts`), R11 soak execution (owner) |
 | Reserved migrations | 085–089. **085** `085_f10_customer_schedules.sql`. 086–089 unused. |
 | Feature flag | `FEATURE_CUSTOMER_SCHEDULING` (name `customer_scheduling`, spend `["ai_visibility.scan"]`), in `CLIENT_FEATURES`. Off in production until the R11 soak gates pass (§10). |
 | Spend features | none new (scheduled scans reserve under F03's `ai_visibility.scan`) |
@@ -33,11 +33,11 @@ Workspace owners choose daily, weekly or monthly scans (optionally at a time and
 
 ## 3. What Perceev has today
 
-- **`scan_schedules`** (`supabase/migrations/005_analytics_platform.sql:84-96`): `brand` (primary key = workspace key), `display_name`, `cadence` (`72h | daily | weekly | off`, no CHECK), `enabled` (column default true; product default false), `engines`, `geo`, `prompt_target`, `last_run_at`, `next_run_at`; due index `scan_schedules_next_run_idx` (`:117`). Customers can read their row (`supabase/migrations/023_customer_auth_and_tenant_rls.sql:138-162`). The scan worker registers a disabled row after a brand's first scan ("scheduling is opt-in", `src/lib/workers/scanWorker.js:1367-1415`).
-- **Operator route** `GET/PUT /api/brands/[brand]/schedule` (`src/app/api/brands/[brand]/schedule/route.js:1-139`) with `validateScheduleBody`, `applyInsertDefaults`, `applyNextRunAt` (`src/lib/brandAnalyticsApi.js`); operator-gated.
+- **`scan_schedules`** (`supabase/migrations/005_analytics_platform.sql:84-96`): `brand` (primary key = workspace key), `display_name`, `cadence` (`72h | daily | weekly | off`, no CHECK), `enabled` (column default true; product default false), `engines`, `geo`, `prompt_target`, `last_run_at`, `next_run_at`; due index `scan_schedules_next_run_idx` (`:117`). Customers can read their row (`supabase/migrations/023_customer_auth_and_tenant_rls.sql:138-162`). The scan worker registers a disabled row after a brand's first scan ("scheduling is opt-in", `src/server/workers/scanWorker.js:1367-1415`).
+- **Operator route** `GET/PUT /api/brands/[brand]/schedule` (`src/app/api/brands/[brand]/schedule/route.js:1-139`) with `validateScheduleBody`, `applyInsertDefaults`, `applyNextRunAt` (`src/shared/brandAnalyticsApi.js`); operator-gated.
 - **Durable windows** (`supabase/migrations/032_durable_schedule_windows.sql:4-59`): `measurement_windows` (`started | missed | overlap | blocked | finalized`, reason, job id, panel and context snapshot); `enqueue_measurement_window(brand, now)` locks the schedule, records elapsed windows as `missed` with one catch-up, records `overlap` for an active scan and `blocked reviewed_panel_required` without an approved panel, otherwise creates the scan job with the frozen panel and advances `next_run_at` in the same transaction; a trigger finalizes the window when the job ends. Steps: daily 1 day, weekly 7 days, anything else 72 hours.
-- **Tick:** `runSchedulerTick` (`src/lib/workers/scanWorker.js:3308-3352`) calls `enqueue_measurement_window` for each due schedule from `listDueSchedules` (`src/lib/db/analytics.js:838`) and kicks the first chunk. It runs from `/api/scan/worker`, whose Vercel cron fires once a day at 00:00 UTC (`vercel.json`). That cannot honour weekly-at-09:00 or monthly anchors.
-- **R11 policy helpers** (`src/lib/continuousMeasurement.js:1-379`): bounded catch-up, overlap policy, spend-cap blocking, soak evaluation (≥ 95 % per surface, no day below 90 %), operational health.
+- **Tick:** `runSchedulerTick` (`src/server/workers/scanWorker.js:3308-3352`) calls `enqueue_measurement_window` for each due schedule from `listDueSchedules` (`src/server/db/analytics.js:838`) and kicks the first chunk. It runs from `/api/scan/worker`, whose Vercel cron fires once a day at 00:00 UTC (`vercel.json`). That cannot honour weekly-at-09:00 or monthly anchors.
+- **R11 policy helpers** (`src/server/continuousMeasurement.js:1-379`): bounded catch-up, overlap policy, spend-cap blocking, soak evaluation (≥ 95 % per surface, no day below 90 %), operational health.
 - **History UI:** the measurement page lists `measurement_windows` ("Scheduled opportunities", fix branch card) from `GET /api/customer/measurement` (`src/app/api/customer/measurement/route.js:20-33`).
 - **P0 controls:** `claim_probe_dispatch` refuses every observation while dispatch is paused unless the job's workspace is in the one-brand allowlist (`supabase/migrations/035_scoped_provider_rollout.sql:27-32`). A scheduled scan started while paused would create a job whose every observation is blocked.
 - **R11 status** (`docs/audits/2026-10-16/REPAIR-BACKLOG.md:695-745`): durable claims and bounded catch-up done; "R11.1b Keep customer scheduling opt-in; show enabled/off/paused and next due/last successful measurement separately" open; the seven-day soak (840 observations, R11-15..18) not started.
@@ -49,20 +49,20 @@ Workspace owners choose daily, weekly or monthly scans (optionally at a time and
 |---|---|---|
 | F10-AC-01 | `computeNextRunAt` reproduces OpenSEO's results: daily/weekly step from the anchor without drift; monthly on the user's last day with the −1/0/+1 shift; a chosen time and weekday converted from an IANA timezone; default 04:00–10:00 UTC with injected randomness. | unit `src/shared/schedule.test.ts` (port of `rank-tracking.test.ts:53-160`) |
 | F10-AC-02 | `planWindows(nextRunAt, interval, now)` returns `run` = the latest elapsed window, `missed` = earlier elapsed windows (one catch-up, `MAX_CATCH_UP_WINDOWS`), `next` > `now`; nothing due → `run: null`. | unit `schedule.test.ts` |
-| F10-AC-03 | Migration 085 adds the customer columns with their constraints; a customer row needs an interval and an approved maximum; `enqueue_measurement_window` returns `{started:false, reason:"customer_managed"}` for customer rows; `listDueSchedules` returns only operator rows. | DB `scripts/qa/check-f10-db.mjs` group `schema`; unit `src/lib/db/analytics.test.mjs` |
-| F10-AC-04 | `PUT /api/customer/schedule` with `enabled: true` is owner-only, prices through `ai_visibility.schedule.save` (`400 approval_required` without `maxUsd`, `409 price_changed`, `409 panel_not_approved` when blocked), records a `price_approvals` row (`source 'schedule'`, subject `scan_schedule`), stores `approved_max_usd`, sets `managed_by 'customer'` and computes `next_run_at`; an unchanged interval and time keep the stored slot; an operator-managed enabled row → `409 operator_schedule_active`. | route `src/lib/schedules/schedule.route.test.mjs`; DB group `save` |
+| F10-AC-03 | Migration 085 adds the customer columns with their constraints; a customer row needs an interval and an approved maximum; `enqueue_measurement_window` returns `{started:false, reason:"customer_managed"}` for customer rows; `listDueSchedules` returns only operator rows. | DB `scripts/qa/check-f10-db.mjs` group `schema`; unit `src/server/db/analytics.test.mjs` |
+| F10-AC-04 | `PUT /api/customer/schedule` with `enabled: true` is owner-only, prices through `ai_visibility.schedule.save` (`400 approval_required` without `maxUsd`, `409 price_changed`, `409 panel_not_approved` when blocked), records a `price_approvals` row (`source 'schedule'`, subject `scan_schedule`), stores `approved_max_usd`, sets `managed_by 'customer'` and computes `next_run_at`; an unchanged interval and time keep the stored slot; an operator-managed enabled row → `409 operator_schedule_active`. | route `src/server/schedules/schedule.route.test.mjs`; DB group `save` |
 | F10-AC-05 | Pausing (`enabled: false`) is allowed for members and owners, creates no windows while paused, and resuming needs a fresh approval. | route; DB group `pause` |
-| F10-AC-06 | Periodic `ai_visibility.schedules` (every 300 s) enqueues one system job per 5-minute slot; the job handles at most 10 due customer schedules, oldest first; every handled schedule's `next_run_at` advances, whether its window started or was skipped. | unit `src/lib/schedules/aiVisibilitySchedules.test.ts`; DB group `tick` |
+| F10-AC-06 | Periodic `ai_visibility.schedules` (every 300 s) enqueues one system job per 5-minute slot; the job handles at most 10 due customer schedules, oldest first; every handled schedule's `next_run_at` advances, whether its window started or was skipped. | unit `src/server/schedules/aiVisibilitySchedules.test.ts`; DB group `tick` |
 | F10-AC-07 | Each skip reason — `scheduling_disabled`, `workspace_inactive`, `dispatch_paused`, `brand_not_allowlisted`, `panel_not_approved`, `no_engines`, `over_scan_limit`, `price_changed`, `daily_capacity_reached`, `daily_cap`, `workspace_cap`, `feature_disabled` — records a `blocked` window with that reason, sets `last_skip_reason`/`last_skip_at`, advances the schedule, creates no scan job and leaves no spend hold. | unit (one case each); DB groups `skip-paused`, `skip-panel`, `skip-price` |
 | F10-AC-08 | A started window creates one scan job with the approved head panel as `panel_snapshot`, `approved_max_usd` = the schedule's approval, `price_quote`, a `started` window, a `scan_job` spend hold, and one worker wake-up; a second tick for the same window or two concurrent ticks create no second job. | DB groups `start`, `race` |
 | F10-AC-09 | An active scan at the window → `overlap` / `active_scan_overlap` and the schedule advances; a unique-index race on the workspace's running scan is recorded the same way. | DB group `overlap` |
 | F10-AC-10 | An unexpected error while starting one schedule records `blocked start_failed`, advances it, releases its hold and does not stop the other schedules in the tick. | unit `aiVisibilitySchedules.test.ts` |
-| F10-AC-11 | Scheduled scans collect in queued mode where supported: with F02 phase 4 merged and an approved DataForSEO route, a scheduled job's frozen routes for `chatgpt`, `gemini` and `aio` use `scraper_queued`/`serp_queued`; model-API engines stay live. | unit `src/lib/schedules/queuedMode.test.ts` (skipped with a named reason until F02 phase 4 exists) |
+| F10-AC-11 | Scheduled scans collect in queued mode where supported: with F02 phase 4 merged and an approved DataForSEO route, a scheduled job's frozen routes for `chatgpt`, `gemini` and `aio` use `scraper_queued`/`serp_queued`; model-API engines stay live. | unit `src/server/schedules/queuedMode.test.ts` (skipped with a named reason until F02 phase 4 exists) |
 | F10-AC-12 | `GET /api/customer/schedule` returns status (`off`, `on`, `paused`, `operator`), interval, chosen time, next run, last run, last completed scheduled scan, last skip with message, approved maximum and the last 10 windows with messages; members and owners. | route |
 | F10-AC-13 | Settings → Schedule shows every state in §6.6 with exact copy, the per-scan "Up to" amount, the monthly projection from the quote, the daily warning, and opens `CostReviewDialog` with `MonthlyProjection` before saving. | browser `scripts/qa/check-f10-browser.mjs` B1–B5 |
 | F10-AC-14 | `NextRunBadge` on Overview and Scans shows "Next scan …", "Scheduled scans off" or the skipped variant, and nothing while loading or when the flag is off. | render test `src/components/portal/schedule/nextRunBadge.test.ts`; browser B6 |
-| F10-AC-15 | `runDueSchedules` (generic) advances every item before or instead of starting it, records skips, isolates failures, and has no Perceev-scan imports, so F15 can reuse it; `src/shared/schedule.ts` imports nothing from `src/lib`. | unit `src/lib/schedules/runDue.test.ts`; import guard in `schedule.test.ts` |
-| F10-AC-16 | `expectedWindows(schedule, from, to)` and `unexplainedGaps(expected, recorded)` list every scheduled opportunity and every one with no ledger row; `scripts/qa/f10-window-ledger.mjs` prints the ledger for the R11 soak. | unit `src/lib/schedules/soakLedger.test.ts` |
+| F10-AC-15 | `runDueSchedules` (generic) advances every item before or instead of starting it, records skips, isolates failures, and has no Perceev-scan imports, so F15 can reuse it; `src/shared/schedule.ts` imports nothing from `src/server`. | unit `src/server/schedules/runDue.test.ts`; import guard in `schedule.test.ts` |
+| F10-AC-16 | `expectedWindows(schedule, from, to)` and `unexplainedGaps(expected, recorded)` list every scheduled opportunity and every one with no ledger row; `scripts/qa/f10-window-ledger.mjs` prints the ledger for the R11 soak. | unit `src/server/schedules/soakLedger.test.ts` |
 | F10-AC-17 | At 375 px the settings page and badges have no horizontal scroll; controls are labelled and keyboard reachable. | browser B7 |
 
 ## 5. Scope
@@ -255,7 +255,7 @@ export function skipReasonMessage(reason: string): string;                    //
 
 `planWindows` walks from `nextRunAt` with `computeNextRunAt(interval, anchor)` semantics: collect every window `≤ now`; `run` = the last one, `missed` = the earlier ones (at most 50 kept; older ones are omitted from the returned list); `next` = the first window `> now`. With no window `≤ now`, `{ run: null, missed: [], next: nextRunAt }`.
 
-#### 6.2.2 `src/lib/schedules/runDue.ts` (generic, PORT of `scheduledAiVisibility.ts:16-83` structure)
+#### 6.2.2 `src/server/schedules/runDue.ts` (generic, PORT of `scheduledAiVisibility.ts:16-83` structure)
 
 ```ts
 export type DueItem = { key: string; observedNextRunAt: string; interval: ScheduleInterval };
@@ -272,9 +272,9 @@ export async function runDueSchedules<T extends DueItem, C>(i: {
 }): Promise<{ started: number; skipped: Record<string, number>; failed: number; notDue: number }>;
 ```
 
-Per item: `plan = planWindows(...)`; `run === null` → `notDue++`; else inside `wrap("window:" + key + ":" + plan.run, …)`: `evaluate` → `skip` → `block(reason)`; `start` → `start()`; any thrown error → `logger.error("[schedules] start failed", { key })` then `block(item, plan, "start_failed")` (itself guarded: a failing block is logged and counted in `failed`). Items are processed sequentially; one item's failure never stops the loop. No imports from `src/lib/workers`, `src/lib/db.js` or pricing (F15 reuse).
+Per item: `plan = planWindows(...)`; `run === null` → `notDue++`; else inside `wrap("window:" + key + ":" + plan.run, …)`: `evaluate` → `skip` → `block(reason)`; `start` → `start()`; any thrown error → `logger.error("[schedules] start failed", { key })` then `block(item, plan, "start_failed")` (itself guarded: a failing block is logged and counted in `failed`). Items are processed sequentially; one item's failure never stops the loop. No imports from `src/server/workers`, `src/server/db.js` or pricing (F15 reuse).
 
-#### 6.2.3 `src/lib/schedules/aiVisibilitySchedules.ts` (scan adapter)
+#### 6.2.3 `src/server/schedules/aiVisibilitySchedules.ts` (scan adapter)
 
 ```ts
 export const SCHEDULE_TICK_LIMIT = 10;
@@ -301,9 +301,9 @@ export const wakeScanWorker: (jobId: string) => { fired: boolean; reason: string
 
 `startScheduledScan` calls `start_customer_window(brand, now, observedNext, plan.run, plan.missed, plan.next, jobId, approved_max_usd, quote)`. `started:false` → `releaseSpend(holdId, "schedule_" + reason)`; `started:true` → `wakeScanWorker(jobId)` (once). A thrown error (including unique violation `23505` on `scan_jobs_one_running_per_workspace`) → `releaseSpend(holdId, "schedule_start_failed")` then rethrow; `runDueSchedules` turns it into `block(…, "start_failed")`, except `23505`, which the adapter maps to `block(…, "active_scan_overlap")`.
 
-`src/lib/db/analytics.js` `listDueSchedules`: adds `.eq("managed_by", "operator")` (one line), so the daily cron never sees customer rows.
+`src/server/db/analytics.js` `listDueSchedules`: adds `.eq("managed_by", "operator")` (one line), so the daily cron never sees customer rows.
 
-#### 6.2.4 Priced action `src/lib/pricing/actions/scheduleSave.ts` (registered in `src/lib/pricing/actions/index.ts`)
+#### 6.2.4 Priced action `src/shared/pricing/actions/scheduleSave.ts` (registered in `src/shared/pricing/actions/index.ts`)
 
 ```ts
 export const scheduleSaveInput = z.strictObject({ panelKey: z.string().min(1).max(80).default("default"),
@@ -315,7 +315,7 @@ export const scheduleSaveAction = definePricedAction({ key: "ai_visibility.sched
 
 The quote's `totalUsd` is the per-scan "up to" amount the owner approves; `monthly.totalUsd` = per-scan × `scheduledChecksPerMonth(interval)`; `expectedUsd` is F09's typical cost from recent answers (which reflects queued prices once F02 phase 4 runs scans). One extra warning for this action: `schedule_note` "Each scheduled scan reserves up to this amount and is charged only for answers collected."
 
-#### 6.2.5 `src/lib/schedules/customerSchedule.ts` (route service)
+#### 6.2.5 `src/server/schedules/customerSchedule.ts` (route service)
 
 ```ts
 export async function getCustomerSchedule(admin: SupabaseClient, ws: Workspace): Promise<CustomerScheduleView>;  // §6.5 GET shape
@@ -332,7 +332,7 @@ export function sameSlot(row: ScanScheduleRow, interval: ScheduleInterval, time:
 | periodic `ai_visibility.schedules` (300 s) | F01 `definePeriodic` | `enqueueSystemJob("ai_visibility.schedules.tick", { at }, { dedupeKey: "ai_visibility.schedules:" + floor(now/300 s), singleActiveKey: "ai_visibility.schedules" })` | — |
 | `ai_visibility.schedules.tick` | system; `deadlineSeconds: 240`, `pollAfterSeconds: 20` | `list` (`DB_STEP`): `listDueCustomerSchedules(now, 10)` → `[{ key, observedNextRunAt, interval, approvedMaxUsd }]`. Then `runDueSchedules` with `wrap = (name, fn) => ctx.step.do(name, { timeoutMs: 60000, retries: 0 }, fn)`: one step per window (`window:<brand>:<runIso>`) that evaluates and starts or blocks. Retries are 0 because the step reserves spend; a failed step is caught by `runDueSchedules` and recorded as `start_failed` in a follow-up step `block:<brand>:<runIso>` (`DB_STEP`, idempotent SQL). | `completed` with `{ started, skipped, failed, notDue }`; `partial` when any `failed > 0` |
 
-Registered in `src/lib/schedules/aiVisibilitySchedules.jobs.ts`, imported from `src/lib/jobs/kinds.ts`. The F01 tick runs every minute, so a window starts within about 5 minutes of its time (OpenSEO's cron is `*/5`). Ten schedules per tick × 12 ticks per hour bounds the start rate; each started scan runs on the existing scan worker and P0 claim path.
+Registered in `src/server/schedules/aiVisibilitySchedules.jobs.ts`, imported from `src/server/jobs/kinds.ts`. The F01 tick runs every minute, so a window starts within about 5 minutes of its time (OpenSEO's cron is `*/5`). Ten schedules per tick × 12 ticks per hour bounds the start rate; each started scan runs on the existing scan worker and P0 claim path.
 
 **Skip reasons (closed vocabulary; `src/shared/schedule.ts`):**
 
@@ -360,7 +360,7 @@ F10 makes no provider calls. Scheduled scans run through the existing scan worke
 
 ### 6.5 API routes
 
-Contracts in `src/lib/schedules/schedule.contract.ts`. Both verbs: `requireWorkspace`; flag `customer_scheduling` off → `AppError(404,"feature_unavailable","This page is not available for your workspace yet.")`; `toErrorResponse`; `Cache-Control: no-store`.
+Contracts in `src/server/schedules/schedule.contract.ts`. Both verbs: `requireWorkspace`; flag `customer_scheduling` off → `AppError(404,"feature_unavailable","This page is not available for your workspace yet.")`; `toErrorResponse`; `Cache-Control: no-store`.
 
 **`GET /api/customer/schedule?brand_key=`** (`src/app/api/customer/schedule/route.ts`; members and owners) → 200:
 
@@ -403,7 +403,7 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 
 ### 6.6 UI
 
-**Settings tab.** `src/components/portal/settings/tabs.ts` appends `{ href: "/portal/settings/schedule", label: "Schedule", flag: "customer_scheduling" }`. Page `src/app/portal/settings/schedule/page.tsx` renders `ScheduleSettings`. Components in `src/components/portal/schedule/`: `ScheduleSettings.tsx`, `ScheduleField.tsx` (PORT `ScheduleField.tsx`, without "Manual only"), `ScheduleSummary.tsx` (PORT `TrackingScheduleSummary.tsx`), `ScheduleHistory.tsx`, `NextRunBadge.tsx`, `hooks/useSchedule.ts` (`useQuery(keys.schedule(brandKey))`, `useSaveSchedule`). `src/lib/query/keys.ts` gains `schedule: (brandKey) => ["schedule", brandKey]`. `src/lib/features/clientFeatures.ts` appends `"customer_scheduling"`. F04 primitives: `CardShell`, `Field`, `Select`, `Input type="time"`, `Button`, `Badge`, `Alert`, `Skeleton`, `Tooltip`; F09 `CostReviewDialog`, `MonthlyProjection`, `usePriceQuote`.
+**Settings tab.** `src/components/portal/settings/tabs.ts` appends `{ href: "/portal/settings/schedule", label: "Schedule", flag: "customer_scheduling" }`. Page `src/app/portal/settings/schedule/page.tsx` renders `ScheduleSettings`. Components in `src/components/portal/schedule/`: `ScheduleSettings.tsx`, `ScheduleField.tsx` (PORT `ScheduleField.tsx`, without "Manual only"), `ScheduleSummary.tsx` (PORT `TrackingScheduleSummary.tsx`), `ScheduleHistory.tsx`, `NextRunBadge.tsx`, `hooks/useSchedule.ts` (`useQuery(keys.schedule(brandKey))`, `useSaveSchedule`). `src/shared/query/keys.ts` gains `schedule: (brandKey) => ["schedule", brandKey]`. `src/server/features/clientFeatures.ts` appends `"customer_scheduling"`. F04 primitives: `CardShell`, `Field`, `Select`, `Input type="time"`, `Button`, `Badge`, `Alert`, `Skeleton`, `Tooltip`; F09 `CostReviewDialog`, `MonthlyProjection`, `usePriceQuote`.
 
 **`ScheduleSettings` states** (inside `CardShell title="Scheduled scans"`, description "Scan your approved questions automatically. Each scan asks exactly the questions you approved."):
 
@@ -434,7 +434,7 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 
 - Enable, change and resume: owner only (recurring spend). Pause and read: members and owners. Operator rows are read-only to customers. The tick uses the service role and filters by `brand`.
 - Logs: `[schedules] tick { due, started, skipped, failed }`, `[schedules] start failed { key }`, `[schedules] block failed { key }`. No panel text or prices beyond the approved amount are logged.
-- PostHog (F26 names, registered when `src/lib/telemetry/events.ts` exists): `schedule:enabled { interval, approved_usd }`, `schedule:paused {}`, `schedule:changed { interval }`, `schedule:skipped { reason }` (server, from the tick).
+- PostHog (F26 names, registered when `src/shared/telemetry/events.ts` exists): `schedule:enabled { interval, approved_usd }`, `schedule:paused {}`, `schedule:changed { interval }`, `schedule:skipped { reason }` (server, from the tick).
 
 ## 7. Code reuse map
 
@@ -442,9 +442,9 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 |---|---|---|---|
 | `openseo:src/shared/rank-tracking.ts:151-229, 296-392` (+ `rank-tracking.test.ts:53-160`) | `src/shared/schedule.ts` (+ `schedule.test.ts`) | PORT | `computeNextCheckAt` → `computeNextRunAt` with injectable clock and random; `planWindows` added for bounded catch-up; manual interval dropped. |
 | `openseo:src/types/schemas/schedule-time.ts:1-37` | `src/shared/schedule.ts` (`scheduleTimeSchema`) | COPY | zod v4. |
-| `openseo:src/server/features/ai-visibility/services/scheduledAiVisibility.ts:16-83` (+ `.test.ts:60-85`) | `src/lib/schedules/runDue.ts`, `aiVisibilitySchedules.ts` (+ tests) | PORT | Claim-and-advance moved into SQL functions that also write the R11 window ledger; credits → F09 price + F01 spend + P0 checks; answer budget → 10 schedules per tick. |
+| `openseo:src/server/features/ai-visibility/services/scheduledAiVisibility.ts:16-83` (+ `.test.ts:60-85`) | `src/server/schedules/runDue.ts`, `aiVisibilitySchedules.ts` (+ tests) | PORT | Claim-and-advance moved into SQL functions that also write the R11 window ledger; credits → F09 price + F01 spend + P0 checks; answer budget → 10 schedules per tick. |
 | `openseo:src/server/features/ai-visibility/repositories/AiVisibilityRepository.ts:226-243, 263-277` | `start_customer_window`/`block_customer_window` (compare on observed `next_run_at`), `listDueCustomerSchedules` | PORT | Compare-and-set kept; oldest-first ordering kept. |
-| `openseo:src/server/features/ai-visibility/services/aiVisibilitySchedule.ts:14-71` | `src/lib/schedules/customerSchedule.ts` | PORT | Same "unchanged schedule keeps its slot" rule; no automatic baseline; owner-only enable with price approval. |
+| `openseo:src/server/features/ai-visibility/services/aiVisibilitySchedule.ts:14-71` | `src/server/schedules/customerSchedule.ts` | PORT | Same "unchanged schedule keeps its slot" rule; no automatic baseline; owner-only enable with price approval. |
 | `openseo:src/db/ai-visibility.schema.ts:32-43` | `085_f10_customer_schedules.sql` columns on `scan_schedules` | PORT | `schedule_interval`, `next_run_at` (existing), `last_skip_reason` (+ `last_skip_at`). |
 | `openseo:src/client/features/rank-tracking/ScheduleField.tsx:27-152`, `scheduleTime.ts:1-106` | `src/components/portal/schedule/ScheduleField.tsx`, `src/shared/schedule.ts` | PORT | "Manual only" removed; "credits" copy → cost copy. |
 | `openseo:src/client/features/ai-visibility/TrackingScheduleSummary.tsx:7-69` | `ScheduleSummary.tsx` | PORT | "Next run" → "Next scan"; owner gating. |
@@ -457,8 +457,8 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 - [x] **P1.T1 Schedule maths**
   - [x] **P1.T1.S1** *Files:* `src/shared/schedule.ts`, `src/shared/schedule.test.ts`. *Do:* §6.2.1; port `rank-tracking.test.ts:53-160` cases (monthly end-of-month, advancing past now, chosen time next occurrence, timezone with weekday, monthly on the user's last day across a UTC date change), plus `planWindows` cases (none due; one due; three elapsed → run = third, missed = first two; `next > now`), `skipReasonMessage` for every reason, and an import guard (file text has no `"../lib/"` or `"@/lib/"`). *Verify:* `node --test src/shared/schedule.test.ts` → pass (F10-AC-01, 02).
 - [x] **P1.T2 Generic runner and soak ledger**
-  - [x] **P1.T2.S1** *Files:* `src/lib/schedules/runDue.ts`, `runDue.test.ts`. *Do:* §6.2.2; fake adapters: not-due item untouched; skip → block called once; start; thrown start → block `start_failed`; failing block counted in `failed` and the next item still runs; `wrap` receives `window:<key>:<iso>`. *Verify:* `node --test src/lib/schedules/runDue.test.ts` → pass (F10-AC-15).
-  - [x] **P1.T2.S2** *Files:* `src/lib/schedules/soakLedger.ts`, `soakLedger.test.ts`, `scripts/qa/f10-window-ledger.mjs`. *Do:* `expectedWindows({ interval, anchor, from, to })` (walks `computeNextRunAt`), `unexplainedGaps(expected, recorded)` (expected windows with no `measurement_windows` row); the script (service-role read, `--brand`, `--from`, `--to`) prints one line per window `{windowAt} {disposition} {reason}` and `gaps=N`; read-only. *Verify:* `node --test src/lib/schedules/soakLedger.test.ts` → pass; `node scripts/qa/f10-window-ledger.mjs --help` exits 0 (F10-AC-16).
+  - [x] **P1.T2.S1** *Files:* `src/server/schedules/runDue.ts`, `runDue.test.ts`. *Do:* §6.2.2; fake adapters: not-due item untouched; skip → block called once; start; thrown start → block `start_failed`; failing block counted in `failed` and the next item still runs; `wrap` receives `window:<key>:<iso>`. *Verify:* `node --test src/server/schedules/runDue.test.ts` → pass (F10-AC-15).
+  - [x] **P1.T2.S2** *Files:* `src/server/schedules/soakLedger.ts`, `soakLedger.test.ts`, `scripts/qa/f10-window-ledger.mjs`. *Do:* `expectedWindows({ interval, anchor, from, to })` (walks `computeNextRunAt`), `unexplainedGaps(expected, recorded)` (expected windows with no `measurement_windows` row); the script (service-role read, `--brand`, `--from`, `--to`) prints one line per window `{windowAt} {disposition} {reason}` and `gaps=N`; read-only. *Verify:* `node --test src/server/schedules/soakLedger.test.ts` → pass; `node scripts/qa/f10-window-ledger.mjs --help` exits 0 (F10-AC-16).
 
 **Checkpoint:** `npm test`, `npm run typecheck`. ACs 01, 02, 15, 16.
 
@@ -467,10 +467,10 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 
 - [x] **P2.T1 Migration and paperwork**
   - [x] **P2.T1.S1** *Files:* `supabase/migrations/085_f10_customer_schedules.sql`. *Do:* §6.1. *Verify:* CI `customer-database` → green.
-  - [x] **P2.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`, `.github/workflows/ci.yml` (add `node scripts/qa/check-f10-db.mjs` after `check-repair-workflows.mjs`). *Verify:* `node --test src/lib/migrationsRunner.test.mjs` → pass.
-  - [x] **P2.T1.S3** *Files:* `README.md` (row `085_f10_customer_schedules` "Customer-managed scan schedules: interval, approved maximum, skip reasons; start/block window functions; legacy path ignores customer rows."), `docs/OPERATOR_LEDGER.md` § C (append; "apply after 080"), `docs/PROD_MIGRATIONS.md` (one bullet). *Verify:* `node --test src/lib/docStatus.test.mjs src/lib/migrationsRunner.test.mjs` → pass.
+  - [x] **P2.T1.S2** *Files:* `scripts/setup-supabase.mjs`, `tests/customer-uat.sql`, `.github/workflows/ci.yml` (add `node scripts/qa/check-f10-db.mjs` after `check-repair-workflows.mjs`). *Verify:* `node --test src/server/migrationsRunner.test.mjs` → pass.
+  - [x] **P2.T1.S3** *Files:* `README.md` (row `085_f10_customer_schedules` "Customer-managed scan schedules: interval, approved maximum, skip reasons; start/block window functions; legacy path ignores customer rows."), `docs/OPERATOR_LEDGER.md` § C (append; "apply after 080"), `docs/PROD_MIGRATIONS.md` (one bullet). *Verify:* `node --test src/server/docStatus.test.mjs src/server/migrationsRunner.test.mjs` → pass.
 - [x] **P2.T2 Legacy filter**
-  - [x] **P2.T2.S1** *Files:* `src/lib/db/analytics.js` (`listDueSchedules` filter), `src/lib/db/analytics.test.mjs` (new case: a recorded query includes `managed_by = operator`). *Verify:* `node --test src/lib/db/analytics.test.mjs` → pass (F10-AC-03 unit).
+  - [x] **P2.T2.S1** *Files:* `src/server/db/analytics.js` (`listDueSchedules` filter), `src/server/db/analytics.test.mjs` (new case: a recorded query includes `managed_by = operator`). *Verify:* `node --test src/server/db/analytics.test.mjs` → pass (F10-AC-03 unit).
 - [x] **P2.T3 Database harness**
   - [x] **P2.T3.S1** *Files:* `scripts/qa/check-f10-db.mjs` (loopback `_qa` guard; seeds a workspace with an approved `panel/default`, `probe_dispatch_control` row, F09 080 columns). Groups: `schema` (constraint rejects a customer row without interval/max; `enqueue_measurement_window` → `customer_managed`), `legacy` (032 behaviours on an operator row unchanged), `start` (job row fields, window `started`, schedule advanced, `last_skip_reason` cleared), `race` (two connections call `start_customer_window` with the same observed time → one job), `overlap` (active job → `overlap`), `skip-panel` (no approved head → `blocked panel_not_approved`), `block` (`block_customer_window` with `price_changed` → window, reason, advance; stale observed time → `not_due`), `pause` (disabled row → `not_due`, no window). *Verify:* `node scripts/qa/check-f10-db.mjs` → "ok 9 groups" (group 9 `guards` added in the phase 2 review) (F10-AC-03, 05 DB, 07 DB, 08, 09).
 
@@ -491,15 +491,15 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 **Goal:** schedules run themselves and customers can manage them through the API.
 
 - [x] **P3.T1 Flag and action**
-  - [x] **P3.T1.S1** *Files:* `src/lib/features/names.ts` (`customer_scheduling: { spend: ["ai_visibility.scan"] }`), `.env.example` (`FEATURE_CUSTOMER_SCHEDULING=`, `FEATURE_CUSTOMER_SCHEDULING_BRANDS=`). *Verify:* `node --test src/lib/features/*.test.ts` → pass.
-  - [x] **P3.T1.S2** *Files:* `src/lib/pricing/actions/scheduleSave.ts`, `scheduleSave.test.ts`, `src/lib/pricing/actions/index.ts`. *Do:* §6.2.4; tests: requires approval; monthly 30/4/1 × per-scan; blocked panel passes through; `schedule_note` warning. *Verify:* `node --test src/lib/pricing/actions/scheduleSave.test.ts` → pass.
+  - [x] **P3.T1.S1** *Files:* `src/server/features/names.ts` (`customer_scheduling: { spend: ["ai_visibility.scan"] }`), `.env.example` (`FEATURE_CUSTOMER_SCHEDULING=`, `FEATURE_CUSTOMER_SCHEDULING_BRANDS=`). *Verify:* `node --test src/server/features/*.test.ts` → pass.
+  - [x] **P3.T1.S2** *Files:* `src/shared/pricing/actions/scheduleSave.ts`, `scheduleSave.test.ts`, `src/shared/pricing/actions/index.ts`. *Do:* §6.2.4; tests: requires approval; monthly 30/4/1 × per-scan; blocked panel passes through; `schedule_note` warning. *Verify:* `node --test src/shared/pricing/actions/scheduleSave.test.ts` → pass.
 - [x] **P3.T2 Scan adapter and tick job**
-  - [x] **P3.T2.S1** *Files:* `src/lib/schedules/aiVisibilitySchedules.ts`, `aiVisibilitySchedules.test.ts`. *Do:* §6.2.3 with injected `isFeatureEnabled`, dispatch control, `quote`, `dispatchBudget`, `probeDaySpendToday`, F01 spend memory store, fake rpc and fake `wakeScanWorker`. Cases: each skip reason in order (F10-AC-07), no hold left after any skip, start path (hold subject, rpc args, one wake), `started:false` releases the hold, thrown rpc → `start_failed` and hold released, `23505` → `active_scan_overlap`, ten-item limit, OpenSEO's two scheduler tests ported (advance even when the start cannot happen; a spend refusal is recorded without a job). *Verify:* `node --test src/lib/schedules/aiVisibilitySchedules.test.ts` → pass (F10-AC-06 unit, 07, 10).
-  - [x] **P3.T2.S2** *Files:* `src/lib/schedules/aiVisibilitySchedules.jobs.ts`, `src/lib/jobs/kinds.ts`. *Do:* §6.3. *Verify:* `node --test src/lib/jobs/*.test.ts` → pass; `node scripts/qa/check-f10-db.mjs --group tick` (runs the job handler once against the DB with two due rows: one started, one skipped; both advanced) → ok (F10-AC-06 DB).
-  - [x] **P3.T2.S3** *Files:* `src/lib/schedules/queuedMode.test.ts`. *Do:* when `src/lib/engines/engineRoutes.ts` exports `DATAFORSEO_SCAN_MODES` and `QUEUED_COLLECTION_READY` is true, assert modes for `chatgpt`, `gemini`, `aio` are queued and the scheduled job path calls no live-only option; otherwise `test.skip("F02 phase 4 not merged")`. *Verify:* `node --test src/lib/schedules/queuedMode.test.ts` → pass or named skip (F10-AC-11).
+  - [x] **P3.T2.S1** *Files:* `src/server/schedules/aiVisibilitySchedules.ts`, `aiVisibilitySchedules.test.ts`. *Do:* §6.2.3 with injected `isFeatureEnabled`, dispatch control, `quote`, `dispatchBudget`, `probeDaySpendToday`, F01 spend memory store, fake rpc and fake `wakeScanWorker`. Cases: each skip reason in order (F10-AC-07), no hold left after any skip, start path (hold subject, rpc args, one wake), `started:false` releases the hold, thrown rpc → `start_failed` and hold released, `23505` → `active_scan_overlap`, ten-item limit, OpenSEO's two scheduler tests ported (advance even when the start cannot happen; a spend refusal is recorded without a job). *Verify:* `node --test src/server/schedules/aiVisibilitySchedules.test.ts` → pass (F10-AC-06 unit, 07, 10).
+  - [x] **P3.T2.S2** *Files:* `src/server/schedules/aiVisibilitySchedules.jobs.ts`, `src/server/jobs/kinds.ts`. *Do:* §6.3. *Verify:* `node --test src/server/jobs/*.test.ts` → pass; `node scripts/qa/check-f10-db.mjs --group tick` (runs the job handler once against the DB with two due rows: one started, one skipped; both advanced) → ok (F10-AC-06 DB).
+  - [x] **P3.T2.S3** *Files:* `src/server/schedules/queuedMode.test.ts`. *Do:* when `src/shared/engines/engineRoutes.ts` exports `DATAFORSEO_SCAN_MODES` and `QUEUED_COLLECTION_READY` is true, assert modes for `chatgpt`, `gemini`, `aio` are queued and the scheduled job path calls no live-only option; otherwise `test.skip("F02 phase 4 not merged")`. *Verify:* `node --test src/server/schedules/queuedMode.test.ts` → pass or named skip (F10-AC-11).
 - [x] **P3.T3 Routes**
-  - [x] **P3.T3.S1** *Files:* `src/app/api/customer/schedule/route.ts`, `src/lib/schedules/customerSchedule.ts`, `src/lib/schedules/schedule.contract.ts`. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [x] **P3.T3.S2** *Files:* `src/lib/schedules/schedule.route.test.mjs`. *Do:* GET states `off`/`on`/`paused`/`operator`, skip messages, last 10 windows; PUT enable (owner) with approval → row fields and approval `source 'schedule'`; member enable → 403 `owner_required`; member pause → 200; no `maxUsd` → 400 `approval_required`; low `maxUsd` → 409 `price_changed`; blocked panel → 409; operator-active → 409; unchanged slot kept; flag off → 404. *Verify:* `node --import ./src/lib/liveWriteGuardAuto.mjs --test src/lib/schedules/schedule.route.test.mjs` → pass (F10-AC-04, 05, 12).
+  - [x] **P3.T3.S1** *Files:* `src/app/api/customer/schedule/route.ts`, `src/server/schedules/customerSchedule.ts`, `src/server/schedules/schedule.contract.ts`. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass.
+  - [x] **P3.T3.S2** *Files:* `src/server/schedules/schedule.route.test.mjs`. *Do:* GET states `off`/`on`/`paused`/`operator`, skip messages, last 10 windows; PUT enable (owner) with approval → row fields and approval `source 'schedule'`; member enable → 403 `owner_required`; member pause → 200; no `maxUsd` → 400 `approval_required`; low `maxUsd` → 409 `price_changed`; blocked panel → 409; operator-active → 409; unchanged slot kept; flag off → 404. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/server/schedules/schedule.route.test.mjs` → pass (F10-AC-04, 05, 12).
 
 **Checkpoint:** suite, typecheck, build, DB harness. ACs 04–07, 10–12.
 
@@ -507,7 +507,7 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 **Goal:** owners schedule scans and everyone sees the next one.
 
 - [x] **P4.T1 Hooks**
-  - [x] **P4.T1.S1** *Files:* `src/lib/query/keys.ts` (+ test), `src/components/portal/schedule/hooks/useSchedule.ts`, `src/lib/features/clientFeatures.ts`. *Verify:* `node --test src/lib/query/keys.test.ts` → pass.
+  - [x] **P4.T1.S1** *Files:* `src/shared/query/keys.ts` (+ test), `src/components/portal/schedule/hooks/useSchedule.ts`, `src/server/features/clientFeatures.ts`. *Verify:* `node --test src/shared/query/keys.test.ts` → pass.
 - [x] **P4.T2 Components**
   - [x] **P4.T2.S1** *Files:* `src/components/portal/schedule/{ScheduleSettings,ScheduleField,ScheduleSummary,ScheduleHistory}.tsx`, `src/app/portal/settings/schedule/page.tsx`, `src/components/portal/settings/tabs.ts`. *Do:* §6.6 with exact copy. *Verify:* `npm run build` → exit 0.
   - [x] **P4.T2.S2** *Files:* `src/components/portal/schedule/NextRunBadge.tsx`, `nextRunBadge.test.ts` (render harness: each state's text; nothing when flag off), `src/app/portal/page.jsx`, `src/app/portal/scans/page.jsx`, `src/components/portal/portalRegressions.test.mjs` and `src/components/portal/portalProgress.test.mjs` (add `@/components/portal/schedule/NextRunBadge` to their module maps as `autoNull`). *Verify:* `node --test src/components/portal/schedule/nextRunBadge.test.ts src/components/portal/portalRegressions.test.mjs` → pass (F10-AC-14).
@@ -521,13 +521,13 @@ The F09 estimate route already serves the quote: `POST /api/customer/price/estim
 | Test file | Cases | ACs |
 |---|---|---|
 | `src/shared/schedule.test.ts` | ported schedule maths, `planWindows`, messages, import guard | 01, 02, 15 |
-| `src/lib/schedules/runDue.test.ts` | generic runner semantics | 15 |
-| `src/lib/schedules/soakLedger.test.ts` | expected windows, gaps | 16 |
-| `src/lib/db/analytics.test.mjs` (new case) | legacy filter | 03 |
-| `src/lib/pricing/actions/scheduleSave.test.ts` | quote, approval required | 04 |
-| `src/lib/schedules/aiVisibilitySchedules.test.ts` | skip order, holds, start, failures, limit | 06, 07, 10 |
-| `src/lib/schedules/queuedMode.test.ts` | queued routes for scheduled scans | 11 |
-| `src/lib/schedules/schedule.route.test.mjs` | GET/PUT, roles, prices, flag | 04, 05, 12 |
+| `src/server/schedules/runDue.test.ts` | generic runner semantics | 15 |
+| `src/server/schedules/soakLedger.test.ts` | expected windows, gaps | 16 |
+| `src/server/db/analytics.test.mjs` (new case) | legacy filter | 03 |
+| `src/shared/pricing/actions/scheduleSave.test.ts` | quote, approval required | 04 |
+| `src/server/schedules/aiVisibilitySchedules.test.ts` | skip order, holds, start, failures, limit | 06, 07, 10 |
+| `src/server/schedules/queuedMode.test.ts` | queued routes for scheduled scans | 11 |
+| `src/server/schedules/schedule.route.test.mjs` | GET/PUT, roles, prices, flag | 04, 05, 12 |
 | `src/components/portal/schedule/nextRunBadge.test.ts` | badge states | 14 |
 | `scripts/qa/check-f10-db.mjs` | schema, legacy, start, race, overlap, skip-panel, block, pause, tick | 03, 05, 06, 07, 08, 09 |
 | `scripts/qa/check-f10-browser.mjs` | B1–B7 | 13, 14, 17 |

@@ -1,12 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { AppError } from "../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { readEmailConfig, type EmailConfig } from "../../../../../lib/email/config.ts";
-import { savePreferences } from "../../../../../lib/email/preferences.ts";
-import { verifyUnsubscribe, appLink } from "../../../../../lib/email/links.ts";
-import { trackEmailEvent } from "../../../../../lib/email/telemetry.ts";
-import { updateLoopsContact, type LoopsDeps } from "../../../../../lib/providers/loops/client.ts";
-import { emailUnsubscribeRequest } from "../../../../../lib/email/email.contract.ts";
+import { AppError } from "../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { readEmailConfig, type EmailConfig } from "../../../../../server/email/config.ts";
+import { savePreferences } from "../../../../../server/email/preferences.ts";
+import { verifyUnsubscribe, appLink } from "../../../../../server/email/links.ts";
+import { trackEmailEvent } from "../../../../../server/email/telemetry.ts";
+import { updateLoopsContact, type LoopsDeps } from "../../../../../shared/providers/loops/client.ts";
+import { emailUnsubscribeRequest } from "../../../../../server/email/email.contract.ts";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +47,7 @@ async function adminOrUnavailable(deps?: UnsubscribeRouteDeps): Promise<Supabase
   if (deps?.getSupabaseAdmin) {
     admin = deps.getSupabaseAdmin();
   } else {
-    const mod = await import("../../../../../lib/supabase/admin.js");
+    const mod = await import("../../../../../shared/supabase/admin.js");
     admin = mod.getSupabaseAdmin() as SupabaseClient | null;
   }
   if (!admin) {

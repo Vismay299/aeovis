@@ -8,7 +8,7 @@ import Link from "next/link";
 import { Plus, Check, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { trackEvent } from "@/lib/telemetry/client";
+import { trackEvent } from "@/shared/telemetry/client";
 import { useTrackExploreQuestion } from "./hooks/useExplore";
 
 type Props = {

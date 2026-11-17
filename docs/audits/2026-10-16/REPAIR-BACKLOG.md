@@ -171,7 +171,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 **Current status:** Production adapter/configuration selection has been inspected. The current P0 release record tracks the hosted migration, bounded provider, Storage, browser and rollout qualification; configured credentials alone still do not establish readiness.
 
-**Priority/dependencies:** P0; harness bootstrap. **Primary code:** `src/lib/vendorRegistry.js`, `health.js`, `engines/httpFailureKind.js`, engine adapters, `scripts/check-secrets.mjs`. **Problem:** configured credentials were reported healthy while persisted calls failed authentication or key limits.
+**Priority/dependencies:** P0; harness bootstrap. **Primary code:** `src/server/vendorRegistry.js`, `health.js`, `engines/httpFailureKind.js`, engine adapters, `scripts/check-secrets.mjs`. **Problem:** configured credentials were reported healthy while persisted calls failed authentication or key limits.
 
 ### Implementation tasks and subtasks
 
@@ -220,7 +220,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 **Current status:** Implementation is connected in this change and tested against real disposable PostgreSQL. Attempts are immutable once settled; dispatch/reconciliation transitions append evidence. Lease renewal is fenced; expired intents require explicit reconciliation. R02-12 remains unverified because offered adapters do not expose provider idempotency.
 
-**Priority/dependencies:** P0; R01 classification and R06 identity contract. **Primary code:** `src/lib/workers/scanWorker.js`, `db/analytics.js`, `probeQueue.js`, lease helpers, new additive migrations. **Regression:** A08.
+**Priority/dependencies:** P0; R01 classification and R06 identity contract. **Primary code:** `src/server/workers/scanWorker.js`, `db/analytics.js`, `probeQueue.js`, lease helpers, new additive migrations. **Regression:** A08.
 
 ### Implementation tasks and subtasks
 
@@ -494,7 +494,7 @@ For each case, the implementer must supply: fixture/setup and cleanup; the actua
 
 **Current status:** Sample manifest/isolation code merged. Eight named browser cases remain required; offline guards do not prove sessionStorage/navigation effects.
 
-**Priority/dependencies:** P1; R03/R05 contracts. **Primary code:** `src/data/mockData.js`, `services/api.js`, dashboard/sample routes, `/demo`, content/scan action handlers. **Regression:** A06.
+**Priority/dependencies:** P1; R03/R05 contracts. **Primary code:** `src/shared/mockData.js`, `services/api.js`, dashboard/sample routes, `/demo`, content/scan action handlers. **Regression:** A06.
 
 ### Implementation tasks and subtasks
 

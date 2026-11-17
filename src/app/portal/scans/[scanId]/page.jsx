@@ -34,12 +34,12 @@ import {
 } from "@/components/portal/scans/reportData";
 import { questionExportRows } from "@/components/portal/scans/reportExport";
 import { ScanCostCard } from "@/components/portal/cost/ScanCostCard";
-import { exportFilename } from "@/lib/export/filenames";
+import { exportFilename } from "@/shared/export/filenames";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { useDebouncedDraft } from "@/components/app/hooks/useDebouncedDraft";
-import { scanReportQueryOptions } from "@/lib/query/portalQueries";
-import { isApiError } from "@/lib/query/fetchJson";
-import { describeError } from "@/lib/query/errors";
+import { scanReportQueryOptions } from "@/shared/query/portalQueries";
+import { isApiError } from "@/shared/query/fetchJson";
+import { describeError } from "@/shared/query/errors";
 import "@/components/portal/scans/scans.css";
 
 const questionFiltersSchema = z.object({

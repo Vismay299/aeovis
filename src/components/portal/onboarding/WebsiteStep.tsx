@@ -15,8 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { fetchJson, isApiError } from "@/lib/query/fetchJson";
-import { describeError } from "@/lib/query/errors";
+import { fetchJson, isApiError } from "@/shared/query/fetchJson";
+import { describeError } from "@/shared/query/errors";
 import { trackOnboardingEvent } from "./telemetry";
 import type { OnboardingState } from "./hooks/useOnboardingState";
 

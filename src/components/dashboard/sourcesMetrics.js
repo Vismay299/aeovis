@@ -2,11 +2,11 @@
  * Source counting for the Sources view (finding A10).
  *
  * WHAT v9 ACTUALLY WRITES. Every probe result row produced by the v9 engine
- * pipeline (src/lib/scoring/enginePipeline.js — probeAio and probeTextEngine)
+ * pipeline (src/shared/scoring/enginePipeline.js — probeAio and probeTextEngine)
  * carries `references` (objects: { href, title, source, domain }) and
  * `citations` (the deduped, normalized hrefs of those references). The v8
  * names `aio_references` / `aio_citations` are written by the legacy
- * src/lib/scoring/aioPipeline.js only, and finalize stores each probe result
+ * src/shared/scoring/aioPipeline.js only, and finalize stores each probe result
  * verbatim in raw_results.results (scanWorker.js), so a v9 scan reaching the
  * dashboard has NO `aio_citations` key at all. SourcesView read only that dead
  * name, summed nothing, and printed "Sources cited: 0" next to a populated

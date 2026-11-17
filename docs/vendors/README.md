@@ -13,9 +13,9 @@ under R6.3.2 · **Verified at:** `b35e387`
 > touched of them was last changed by `6c8193b`:
 >
 > ```
-> git log --oneline 6c8193b..HEAD -- src/lib/engines/serp.js src/lib/engines/gsc.js \
->   src/lib/health.js src/lib/db.js src/lib/docStatus.test.mjs \
->   src/lib/checkSecrets.test.mjs src/lib/scoring/asyncJob.test.mjs \
+> git log --oneline 6c8193b..HEAD -- src/shared/engines/serp.js src/shared/engines/gsc.js \
+>   src/server/health.js src/server/db.js src/server/docStatus.test.mjs \
+>   src/server/checkSecrets.test.mjs src/shared/scoring/asyncJob.test.mjs \
 >   scripts/test-gsc.mjs package.json supabase/migrations/001_initial_schema.sql
 > ```
 >
@@ -23,10 +23,10 @@ under R6.3.2 · **Verified at:** `b35e387`
 > empty at `b35e387`. Non-empty means **re-derive before trusting this file.**
 >
 > Two sets are deliberately off that list. Six churning files are cited by
-> greppable anchor instead of by line — `src/lib/workers/scanWorker.js`,
-> `src/lib/scoring/promptGen.js`, `scripts/check-secrets.mjs`,
-> `src/middleware.js`, `src/lib/operatorPerimeter.js` and
-> `src/lib/operatorPerimeter.test.mjs`; see
+> greppable anchor instead of by line — `src/server/workers/scanWorker.js`,
+> `src/shared/scoring/promptGen.js`, `scripts/check-secrets.mjs`,
+> `src/middleware.js`, `src/server/operatorPerimeter.js` and
+> `src/server/operatorPerimeter.test.mjs`; see
 > ["A note on citing `check-secrets.mjs`"](#a-note-on-citing-check-secretsmjs).
 > And four **sibling docs in this directory** carry ten line citations between
 > them — `brightdata.md` (`:62`, `:63-64`, `:65`, `:91-95`, `:97`), `mimo.md`
@@ -80,7 +80,7 @@ happened here:
    a citation.
 
 Every file here carries a `<!-- doc-status -->` header. The guard is
-`src/lib/docStatus.test.mjs`, which walks `docs/` and fails on an unheadered
+`src/server/docStatus.test.mjs`, which walks `docs/` and fails on an unheadered
 file.
 
 ### A note on citing `check-secrets.mjs`
@@ -99,7 +99,7 @@ a different comment, and `name: "gsc"` became a closing brace. A wrong line
 number is worse than no line number, so these docs name **the vendor entry and a
 greppable string** instead — "the `perplexity` entry", "grep `max_tokens: 16`".
 The churn is real and ongoing: between two greps taken minutes apart during this
-revision, `await import("../src/lib/engines/gsc.js")` moved from `:299` to
+revision, `await import("../src/shared/engines/gsc.js")` moved from `:299` to
 `:305`.
 
 **A greppable string only survives the churn if it exists.** An earlier
@@ -140,9 +140,9 @@ command — two docs revised in the same commit cannot pin each other by line.
 
 Three more files joined the anchor list under R6.3.2 and two more under this
 revision, for the same reason and with the same remedy: `src/middleware.js`,
-`src/lib/operatorPerimeter.js` and `src/lib/operatorPerimeter.test.mjs` are
+`src/server/operatorPerimeter.js` and `src/server/operatorPerimeter.test.mjs` are
 being edited by concurrent tasks as this is written, and
-`src/lib/workers/scanWorker.js` and `src/lib/scoring/promptGen.js` joined them
+`src/server/workers/scanWorker.js` and `src/shared/scoring/promptGen.js` joined them
 after [the second drift](#a-second-drift-98df5c8-2026-09-04). Every other file
 cited in this directory is pinned by line and was asserted, at `b35e387`, to
 contain the code described.
@@ -158,7 +158,7 @@ recorded here because R6.3.2's blast radius is `docs/vendors/` only.
 
 ### What happened
 
-`ee5504e` (R6.5.6) fixed the inert abort signal in `src/lib/gemini.js`, adding
+`ee5504e` (R6.5.6) fixed the inert abort signal in `src/shared/gemini.js`, adding
 thirty lines. [`gemini.md`](./gemini.md) had described that bug as current the
 day before. The fix did not touch the doc, so for one commit the file asserted a
 resolved bug as live, its quirk-3 heading was false, and **thirteen**
@@ -167,7 +167,7 @@ block the fix itself added. Nothing failed.
 
 ### Why the suite did not catch it
 
-`src/lib/docStatus.test.mjs` is the only guard over `docs/`. Its ten `test(`
+`src/server/docStatus.test.mjs` is the only guard over `docs/`. Its ten `test(`
 blocks cover status headers, the three permitted header values, `SUPERSEDED-BY`
 targets, the single-live-design-authority rule, the close rule, three ADR rules
 and the README migration table. Its walker (`docStatus.test.mjs:19-30`) collects
@@ -206,7 +206,7 @@ Those numbers are the whole argument:
 
   "A guess" is too strong for the individual cases. Of the 15, **four** have
   more than one file of that basename in the tree: `route.js` (34 files),
-  `gemini.js` (2 — `src/lib/gemini.js` and `src/lib/engines/gemini.js`, which
+  `gemini.js` (2 — `src/shared/gemini.js` and `src/shared/engines/gemini.js`, which
   this directory discusses in the same paragraph), `prompts.js` (2) and
   `package.json` (2, the second being `worker/`'s own sub-package manifest,
   which nothing here cites — so **three** are genuine source-code
@@ -254,7 +254,7 @@ write to `docs/vendors/`. **It needs its own ledger item, owning `src/`.**
 
 **It happened again while this section was being revised, to this file, and
 this file did not notice.** `98df5c8` ("one scan_runs row per chunk execution")
-grew `src/lib/workers/scanWorker.js` from 1264 lines to 1726 and moved every
+grew `src/server/workers/scanWorker.js` from 1264 lines to 1726 and moved every
 symbol in the SerpAPI reachability chain further down. **Six** citations in the
 "Deliberate omissions" section below went stale in one commit:
 
@@ -279,10 +279,10 @@ Three things follow, and none of them is a guess:
    all six — **0 of 6**, matching the **0 of 13** measured on `ee5504e`. Two
    independent incidents, the same result.
 2. **The tripwire would have fired.** `98df5c8` touched
-   `src/lib/workers/scanWorker.js` and its two test files
+   `src/server/workers/scanWorker.js` and its two test files
    (`scanChunkLedger.test.mjs`, `scanChunkLedgerLive.test.mjs`) and **not**
    `docs/vendors/README.md` — `git show --name-only 98df5c8`. The
-   `docs/vendors/README.md → src/lib/workers/scanWorker.js` edge was confirmed
+   `docs/vendors/README.md → src/server/workers/scanWorker.js` edge was confirmed
    present in the manifest at `18fa380`. That is a firing outside the
    40-commit window the **7** was measured over, and a true positive on the
    document that recommends the tripwire.
@@ -310,7 +310,7 @@ Three things follow, and none of them is a guess:
 The six citations were **not renumbered**. They were converted to greppable
 anchors, per [the note above](#a-note-on-citing-check-secretsmjs), because a
 file that moved 462 lines in a day is exactly the case that rule exists for.
-`src/lib/scoring/promptGen.js` was converted with them: it is dirty in the
+`src/shared/scoring/promptGen.js` was converted with them: it is dirty in the
 working tree as this is written, by a concurrent task, so any line number taken
 from it would be a number that is two things at once.
 
@@ -387,7 +387,7 @@ two are decisions.
 
 ### Google Search Console — no doc, because nothing *served* reads it
 
-`src/lib/engines/gsc.js` signs a service-account JWT with node's own `crypto`
+`src/shared/engines/gsc.js` signs a service-account JWT with node's own `crypto`
 (`gsc.js:78`), exchanges it at `https://oauth2.googleapis.com/token`
 (`gsc.js:15`) and reads `https://searchconsole.googleapis.com/webmasters/v3`
 (`gsc.js:16`).
@@ -405,7 +405,7 @@ revision of this paragraph got it wrong:
 2026-09-03 this paragraph said the opposite — that the `gsc` entry "validates
 the key's shape offline… explicitly making no live call — grep `offline check
 only`". That string occurs nowhere in the script. Its only occurrence **in
-code** is `src/lib/checkSecrets.test.mjs:206`, a **guard asserting it must not
+code** is `src/server/checkSecrets.test.mjs:206`, a **guard asserting it must not
 appear** ("the offline-only disclaimer is obsolete — the check is live"). Scoped
 to *code* on purpose: the retired string also survives as quotation in this
 directory's own prose — in the table above, and in the sentence you just read —
@@ -419,14 +419,14 @@ Re-verified at HEAD by sweeping `src`, `scripts`, `worker` and `supabase` for
 exports (`getGscServiceAccount`, `listGscSites`, `candidateSiteUrls`,
 `fetchSearchQueries`, `fetchSearchQueriesForUrl`). Outside the module that
 sweep returns exactly **four** files: the two scripts above; the test of one of
-them, `src/lib/checkSecrets.test.mjs` (`test-gsc.mjs` has no test); and one
-non-call, `src/lib/health.js:31`, which reports only whether the credential is
-*configured*. `src/lib/db.js:37,425` is deliberately **not** in that list: those
+them, `src/server/checkSecrets.test.mjs` (`test-gsc.mjs` has no test); and one
+non-call, `src/server/health.js:31`, which reports only whether the credential is
+*configured*. `src/server/db.js:37,425` is deliberately **not** in that list: those
 lines are the `gsc_queries jsonb` column written as `[]`, they match none of the
 seven terms, and they surface only under a looser case-insensitive grep for
 `gsc` — alongside that column's migration
 (`supabase/migrations/001_initial_schema.sql:65,99`) and the test that pins it
-empty (`src/lib/scoring/asyncJob.test.mjs:24`). The only write to that column
+empty (`src/shared/scoring/asyncJob.test.mjs:24`). The only write to that column
 anywhere in the tree is the `[]` at `db.js:425`. No route file imports
 `gsc.js`, and neither `vercel.json` cron path (`/api/scan/worker`,
 `/api/content/worker`) reaches it.
@@ -457,13 +457,13 @@ reports zero rather than failing.
 ### SerpAPI — no standalone doc, because it is superseded
 
 SerpAPI is still **reachable**, not dead. `getSerpProvider()`
-(`src/lib/engines/serp.js:10-17`) selects it when either
+(`src/shared/engines/serp.js:10-17`) selects it when either
 `SERP_PROVIDER=serpapi` with a resolvable `SERPAPI_KEY` (`:13`), or
 `BRIGHTDATA_API_KEY` is absent and `SERPAPI_KEY` is present (`:15`). On that
 branch `fetchPeopleAlsoAsk` (`:312`) hits `https://serpapi.com/search` (`:63`),
 and that path is cron-**reachable**. The chain below is given by **greppable
-anchor rather than by line**, because `src/lib/workers/scanWorker.js` and
-`src/lib/scoring/promptGen.js` are both moving — see
+anchor rather than by line**, because `src/server/workers/scanWorker.js` and
+`src/shared/scoring/promptGen.js` are both moving — see
 ["A second drift"](#a-second-drift-98df5c8-2026-09-04) below; every string was
 grepped in the `b35e387` blob and each is unique in its file:
 
@@ -526,7 +526,7 @@ It gets no file here for two reasons:
   correction to `:94-98` went stale within the same edit session, because
   repointing the `AUTO-DISCOVERED` grep string three sections above added lines.
   Both numbers above were re-derived after the last edit to that file.)
-  `src/lib/docStatus.test.mjs:103-135` enforces the supersession marker and the
+  `src/server/docStatus.test.mjs:103-135` enforces the supersession marker and the
   absence of unmeasured cost claims.
 - **A response-shape doc would be a liability here**, because it would read as
   an invitation to keep the path alive. The plan is the opposite: `R1.7.3`
@@ -559,9 +559,9 @@ six drifted `scanWorker.js` numbers and the invented `gemini.md:79` were found.
 root `README.md:74` is still `## Setup` and `:142` still `## Database`.*
 
 *Six files are cited by name and greppable string rather than by line —
-`scripts/check-secrets.mjs`, `src/middleware.js`, `src/lib/operatorPerimeter.js`,
-`src/lib/operatorPerimeter.test.mjs`, `src/lib/workers/scanWorker.js` and
-`src/lib/scoring/promptGen.js`. See
+`scripts/check-secrets.mjs`, `src/middleware.js`, `src/server/operatorPerimeter.js`,
+`src/server/operatorPerimeter.test.mjs`, `src/server/workers/scanWorker.js` and
+`src/shared/scoring/promptGen.js`. See
 [the note above](#a-note-on-citing-check-secretsmjs). Each anchor string was
 grepped in the `b35e387` blob and each is unique in its file. The four
 `scanWorker.js`/`promptGen.js`-shaped numbers that appear in the
@@ -583,7 +583,7 @@ parser in the tree that nothing runs would be its own finding.*
 *The 0-of-6 and the eighth tripwire firing in
 ["A second drift"](#a-second-drift-98df5c8-2026-09-04) were derived at
 `b35e387` from `git show 98df5c8 --name-only` and from the line counts of
-`src/lib/workers/scanWorker.js` at `18fa380` (1264) and `b35e387` (1726).
+`src/server/workers/scanWorker.js` at `18fa380` (1264) and `b35e387` (1726).
 **Neither the tripwire nor any citation guard has been built or has ever run in
 CI**; every claim about what one "would have" caught is a replay over git
 history, not a test result.*

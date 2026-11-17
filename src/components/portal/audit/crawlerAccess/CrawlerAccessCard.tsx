@@ -15,7 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { CardShell } from "@/components/app/CardShell";
 import { QueryError } from "@/components/app/QueryState";
-import { describeError } from "@/lib/query/errors";
+import { describeError } from "@/shared/query/errors";
 import {
   useCrawlerAccessList,
   useRemoveCrawlerAccess,

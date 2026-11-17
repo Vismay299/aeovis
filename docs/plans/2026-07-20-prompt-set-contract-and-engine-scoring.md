@@ -37,9 +37,9 @@
 
 ### Phase 1 — Identity & stability (the contract)
 
-1. **`src/lib/scoring/brandKey.js`** — `resolveBrandKey(brand, url)`:
+1. **`src/shared/scoring/brandKey.js`** — `resolveBrandKey(brand, url)`:
    domain of `url` (via `extractBrandDomain`, strips www/protocol, lowercased) if present, else `brand.trim().toLowerCase()`. Pure, shared client+server. Tests.
-2. **`src/lib/db/prompts.js`**:
+2. **`src/server/db/prompts.js`**:
    - `getPromptsForBrand(key, includeDisabled, { strict })` — strict mode throws on DB error instead of returning `[]` (callers must distinguish "no set yet" from "couldn't load").
    - Order: `created_at ASC, id ASC` (deterministic slice).
 3. **`scanWorker.sourceUnbrandedQueries`**:

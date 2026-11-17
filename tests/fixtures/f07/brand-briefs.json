@@ -2,7 +2,7 @@
   "_notes": [
     "F07 §9 fixtures. All synthetic; no provider payloads.",
     "The seeded healthcare preset is NOT copied here: briefImport.test.ts builds it from",
-    "src/lib/content/briefs/healthcareCxo.js so the two cannot drift apart.",
+    "src/shared/content/briefs/healthcareCxo.js so the two cannot drift apart.",
     "brand_key below is a placeholder workspace; tests pass their own key."
   ],
   "brand_key": "offcult.in",

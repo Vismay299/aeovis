@@ -17,9 +17,9 @@
  * (brand, date, engine) primary key — safe to re-run any number of times.
  *
  * Two pipeline vintages exist in raw_results.results and are both handled:
- *   - v9 multi-engine (src/lib/scoring/enginePipeline.js): rows carry
+ *   - v9 multi-engine (src/shared/scoring/enginePipeline.js): rows carry
  *     `engine`, `answer_present`, `text`, `citations`, `references`.
- *   - v8.1 AIO-only (src/lib/scoring/aioPipeline.js): rows never set `engine`
+ *   - v8.1 AIO-only (src/shared/scoring/aioPipeline.js): rows never set `engine`
  *     and use `aio_present`, `aio_text`, `aio_citations`, `aio_references`
  *     instead. This is the exact fallback scanWorker.js itself already uses
  *     for `normalizedForCompetitors` — mirrored here, not invented.
@@ -29,7 +29,7 @@
  * (reproducing plan.md §4 P0.1 exactly) declares `prompt_results.job_id uuid
  * NOT NULL`. Leaving it null is not executable against that schema — every
  * insert would fail its NOT NULL check. Resolution used here: `insertScan`
- * has exactly one call site (src/lib/workers/scanWorker.js, inside
+ * has exactly one call site (src/server/workers/scanWorker.js, inside
  * `startScanJob(jobId, ...)`), and every successful scan is immediately
  * followed by `updateScanJob(jobId, { result_id: savedScanId, ... })` — so a
  * real `scan_jobs` row with `result_id = scans.id` exists for essentially
@@ -62,7 +62,7 @@
  * citations included, and reported it as an error, which is not what it is.
  *
  * Now every engine slice of every scan lands in exactly one of five outcomes
- * (src/lib/analytics/historicalBackfill.js, DENOMINATOR_OUTCOME) and all five
+ * (src/shared/analytics/historicalBackfill.js, DENOMINATOR_OUTCOME) and all five
  * are counted and printed in the summary below:
  *
  *   slice_carried          the stored summary already had the number
@@ -84,19 +84,19 @@
  */
 
 import crypto from "crypto";
-import { supabase } from "../src/lib/db.js";
-import { resolveBrandKey } from "../src/lib/scoring/brandKey.js";
-import { getBrandAliases } from "../src/lib/scoring/aliases.js";
-import { detectMention } from "../src/lib/scoring/judge.js";
-import { extractBrandDomain } from "../src/lib/scoring/citations.js";
-import { toDateOnly } from "../src/lib/analytics/rollup.js";
+import { supabase } from "../src/server/db.js";
+import { resolveBrandKey } from "../src/shared/scoring/brandKey.js";
+import { getBrandAliases } from "../src/shared/scoring/aliases.js";
+import { detectMention } from "../src/shared/scoring/judge.js";
+import { extractBrandDomain } from "../src/shared/scoring/citations.js";
+import { toDateOnly } from "../src/shared/analytics/rollup.js";
 import {
   buildHistoricalMetricsRows,
   preserveMeasuredDenominator,
   createCitationDenominatorTally,
   formatCitationDenominatorReport,
   DENOMINATOR_OUTCOME,
-} from "../src/lib/analytics/historicalBackfill.js";
+} from "../src/shared/analytics/historicalBackfill.js";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const PAGE_SIZE = 200;

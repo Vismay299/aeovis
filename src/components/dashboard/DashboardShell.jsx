@@ -17,18 +17,18 @@ import {
   fetchScanHistory,
   normalizeResult,
   getHistoryNonBrandedCount,
-} from "@/services/api";
-import { scoreTier, formatTimestamp, relativeTime, hasTimestamp, formatCollectionWindow } from "@/utils/format";
-import { getBrandAliases } from "@/lib/scoring/aliases";
-import { resolveBrandKey } from "@/lib/scoring/brandKey";
+} from "@/shared/api";
+import { scoreTier, formatTimestamp, relativeTime, hasTimestamp, formatCollectionWindow } from "@/shared/format";
+import { getBrandAliases } from "@/shared/scoring/aliases";
+import { resolveBrandKey } from "@/shared/scoring/brandKey";
 import {
   AIO_ERROR_RATE_LIMIT_PCT,
   AIO_MIN_NON_BRANDED_COVERAGE,
-} from "@/lib/scoring/aioConstants";
+} from "@/shared/scoring/aioConstants";
 /**
  * KNOWN COST, NOT A SECRET: this is a client component, and enginePipeline.js
  * also imports the probe modules (brightdata/openai/perplexity) and, through
- * judge.js, src/lib/gemini.js. package.json declares no `sideEffects`, so
+ * judge.js, src/shared/gemini.js. package.json declares no `sideEffects`, so
  * webpack keeps those modules in the dashboard client bundle even though only
  * describeScanDataSourceIssue is used here — @google/generative-ai ships to the
  * browser as a result. Nothing leaks (Next inlines only NEXT_PUBLIC_* env, so
@@ -38,14 +38,14 @@ import {
  * scoped not to create. Written down rather than left for someone to discover
  * in a bundle report.
  */
-import { describeScanDataSourceIssue } from "@/lib/scoring/enginePipeline";
+import { describeScanDataSourceIssue } from "@/shared/scoring/enginePipeline";
 /**
  * R2.1.1 — kept as a SECOND import from the same module rather than folded into
  * the line above, deliberately: degradedEngineBanner.test.mjs guards that exact
  * import statement by regex, and widening it would break a sibling task's proof
  * that this component defers to the pipeline for its degradation wording.
  */
-import { describeScanMeasurement } from "@/lib/scoring/enginePipeline";
+import { describeScanMeasurement } from "@/shared/scoring/enginePipeline";
 
 /**
  * R2.1.1 — the hero trend, or NOTHING and why.
@@ -700,7 +700,7 @@ export default function DashboardShell({ scan, scanId, error = null }) {
     setRerunStage(0);
     setRerunProgress(0);
     try {
-      const { runScan, saveScan } = await import("@/services/api");
+      const { runScan, saveScan } = await import("@/shared/api");
       const compStr =
         result.competitorsRaw !== undefined
           ? result.competitorsRaw

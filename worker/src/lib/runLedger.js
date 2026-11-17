@@ -26,14 +26,14 @@
  * safe, and without it the sweep would close a live fleet's row every 6 minutes.
  *
  * WHY THE OPEN/CLOSE PAIRING IS IN SQL
- * This workspace may not import from src/ (src/lib/workerIsolation.test.mjs
+ * This workspace may not import from src/ (src/server/workerIsolation.test.mjs
  * fails the build on any crossing import), so a JS implementation would exist
  * twice and drift. `open_scan_run`, `heartbeat_scan_run` and `close_scan_run`
  * are one implementation with two callers.
  *
  * WHAT IS COPIED, AND WHY THAT IS CHECKED
  * The vocabulary and the two pure readers below are byte-identical to
- * `src/lib/scanRuns.js`, deliberately and unavoidably. `src/lib/scanRuns.test.mjs`
+ * `src/server/scanRuns.js`, deliberately and unavoidably. `src/server/scanRuns.test.mjs`
  * asserts the two copies still agree on every case, so the duplication is
  * checked rather than trusted.
  */
@@ -68,7 +68,7 @@ export const RUN_OUTCOME_LIST = Object.freeze([
 
 /**
  * Who ran. The fleet only ever writes RUNNERS.FLEET; the rest are R3.2's and
- * R3.3's. REAPER is here because src/lib/scanRuns.test.mjs asserts this list is
+ * R3.3's. REAPER is here because src/server/scanRuns.test.mjs asserts this list is
  * byte-identical to the app's — the fleet never writes it, but it is the runner
  * that CLOSES the fleet's rows when a container dies, so a reader of this file
  * must be able to find the name.
@@ -89,7 +89,7 @@ export const FLEET_PHASES = Object.freeze({
 /**
  * The sweep's staleness threshold, COPIED (R1.2.23).
  *
- * `src/lib/workers/scanWorker.js` owns it: REAP_STALE_AFTER_MS =
+ * `src/server/workers/scanWorker.js` owns it: REAP_STALE_AFTER_MS =
  * RUN_HEARTBEAT_TTL_MS (180 000, db.js's HEARTBEAT_STALE_MS) x REAP_TTL_MULTIPLE
  * (2) = 360 000 ms. Its listing (`listStaleScanRuns`) filters on neither
  * `runner` nor `phase`, so from R1.2.23 on — when an idle stretch is ONE row
@@ -97,7 +97,7 @@ export const FLEET_PHASES = Object.freeze({
  * exactly as reapable as anyone else's open row.
  *
  * This workspace may not import src/, so the number lives here twice. It is
- * CHECKED rather than trusted: src/lib/workers/scanRunReaper.test.mjs asserts
+ * CHECKED rather than trusted: src/server/workers/scanRunReaper.test.mjs asserts
  * the two constants are equal, because a fleet that believes it is beating fast
  * enough while the sweep closes its live row every six minutes would look, from
  * the ledger, exactly like a fleet that keeps dying.
@@ -204,7 +204,7 @@ function countOut(value) {
 
 /**
  * Read a scan_runs row into the shape callers use. PURE — copied from
- * src/lib/scanRuns.js for the reason above.
+ * src/server/scanRuns.js for the reason above.
  */
 export function normalizeRun(raw) {
   if (!raw || typeof raw !== "object" || !raw.id) {

@@ -8,7 +8,7 @@
 | ID | F14 |
 | Wave | 2 |
 | Comparison rows covered | "Domain and competitor research" (OpenSEO: traffic estimate, ranked keywords with about 20 filters, top pages, SERP competitors. Perceev: none) |
-| Depends on | F13 phase 1 (merged): `createLabsClient().domain.*` and `.labs.serpCompetitors`, `src/lib/providers/dataforseo/{filters,researchScopeFilters}.ts`, `src/shared/researchScope.ts`, `src/lib/research/{target,cache,providerErrors}.ts`, `ResearchScopeSelect`, `SearchCard`, `PricedActionButton`, `LABS_LOCATION_OPTIONS`, `workspaceMarket`. F13 phase 3: `upsertKeywordMetrics`, `POST /api/customer/keywords/saved`. F01, F02 phase 2, F03 phase 1, F07 phase 1 (`applyContextUpdates`, `declaredCompetitors`, `appendResearch`, `findRecentResearch`), F09 phase 1. UI phases also need F04, F05, F06 merged. |
+| Depends on | F13 phase 1 (merged): `createLabsClient().domain.*` and `.labs.serpCompetitors`, `src/shared/providers/dataforseo/{filters,researchScopeFilters}.ts`, `src/shared/researchScope.ts`, `src/server/research/{target,cache,providerErrors}.ts`, `ResearchScopeSelect`, `SearchCard`, `PricedActionButton`, `LABS_LOCATION_OPTIONS`, `workspaceMarket`. F13 phase 3: `upsertKeywordMetrics`, `POST /api/customer/keywords/saved`. F01, F02 phase 2, F03 phase 1, F07 phase 1 (`applyContextUpdates`, `declaredCompetitors`, `appendResearch`, `findRecentResearch`), F09 phase 1. UI phases also need F04, F05, F06 merged. |
 | Blocks | F27 (free-tool hand-off preset), F15 (keyword suggestions from a domain, optional), F21/F22 (domain tools) |
 | Reserved migrations | 105–109. **None used**: F14 stores nothing new (lookups live in F01's provider cache, saved keywords in F13's tables, competitors in F07's). |
 | Feature flag | `FEATURE_DOMAIN_RESEARCH` (feature name `domain_research`, spend `["domain.research"]`): page, routes, sidebar item. In `CLIENT_FEATURES`. Off in production by default. |
@@ -42,7 +42,7 @@ Customers look up any domain, subdomain, folder or page and see its estimated or
 
 ## 3. What Perceev has today
 
-- No domain research. Competitor information exists only on the tracking side (extracted from answers, `src/lib/scoring/competitorExtract.js:92`), which is the deferred Mixed row "Competitors (tracking side)"; F07 adds a declared competitor list in project memory (`project_competitors`).
+- No domain research. Competitor information exists only on the tracking side (extracted from answers, `src/shared/scoring/competitorExtract.js:92`), which is the deferred Mixed row "Competitors (tracking side)"; F07 adds a declared competitor list in project memory (`project_competitors`).
 - F13 phase 1 provides the Labs client (including `domain.*` and `serpCompetitors`), research scope, filters, target parsing and cache helpers; F13 phase 3 the saved-keyword service and the shared `keyword_metrics` table.
 - **Must not break:** P0 controls (F14 calls only Labs endpoints through `metered()`, never an answer engine); scan competitor extraction and roster continuity (F14 writes only F07's declared list, which scans do not read); F13's saved keywords.
 
@@ -50,14 +50,14 @@ Customers look up any domain, subdomain, folder or page and see its estimated or
 
 | ID | Statement | Verified by |
 |---|---|---|
-| F14-AC-01 | `buildKeywordFilters` and the page filter builder pass OpenSEO's six cases (translation, LIKE escaping, search OR-group last, exactly 8 accepted, 9 refused with `400 filters_over_budget`, search counts 2) with scope clauses consuming the budget. | unit `src/lib/domain/domainKeywordFilters.test.ts` |
-| F14-AC-02 | The overview calls `domain_rank_overview` once per hostname and market, maps traffic and keywords rounded, sets `hasData = keywords > 0`, caches 12 h only when `hasData`, and echoes scope and display target; a narrower scope reuses the hostname entry. | unit `src/lib/domain/domainService.test.ts` |
-| F14-AC-03 | Keyword and page tables page through `ranked_keywords`/`relevant_pages` with OpenSEO's offsets, sort fields, scope filters and `hasMore`; every page is cached 12 h per filter/search/sort/page combination. | unit `domainService.test.ts`; `src/lib/domain/pagination.test.ts` |
+| F14-AC-01 | `buildKeywordFilters` and the page filter builder pass OpenSEO's six cases (translation, LIKE escaping, search OR-group last, exactly 8 accepted, 9 refused with `400 filters_over_budget`, search counts 2) with scope clauses consuming the budget. | unit `src/server/domain/domainKeywordFilters.test.ts` |
+| F14-AC-02 | The overview calls `domain_rank_overview` once per hostname and market, maps traffic and keywords rounded, sets `hasData = keywords > 0`, caches 12 h only when `hasData`, and echoes scope and display target; a narrower scope reuses the hostname entry. | unit `src/server/domain/domainService.test.ts` |
+| F14-AC-03 | Keyword and page tables page through `ranked_keywords`/`relevant_pages` with OpenSEO's offsets, sort fields, scope filters and `hasMore`; every page is cached 12 h per filter/search/sort/page combination. | unit `domainService.test.ts`; `src/server/domain/pagination.test.ts` |
 | F14-AC-04 | Domain lookups are cached with `scope: "workspace"`: workspace B looking up the same domain pays again; workspace A repeating it pays nothing within 12 h. | unit `domainService.test.ts`; route test |
-| F14-AC-05 | Every paid call is metered under `domain.research` (tables) or `domain.competitors` (competitors) with F03 estimates; `cacheOnly: true` never reserves or calls; a link or reload of `/portal/domain?...` never spends. | route `src/lib/domain/domain.route.test.mjs`; browser B2 |
+| F14-AC-05 | Every paid call is metered under `domain.research` (tables) or `domain.competitors` (competitors) with F03 estimates; `cacheOnly: true` never reserves or calls; a link or reload of `/portal/domain?...` never spends. | route `src/server/domain/domain.route.test.mjs`; browser B2 |
 | F14-AC-06 | Ranked keyword rows from a fetch (not a cache hit) are upserted into F13's `keyword_metrics` with `source "labs_ranked"` (volume, CPC, difficulty only) without delaying the response. | unit `domainService.test.ts` |
-| F14-AC-07 | Priced actions `domain.lookup.run` (overview + first table page; approval optional), `domain.keywords.page`, `domain.pages.page` (approval optional) and `domain.competitors.run` (approval **required**) quote §6.4's lines; a stale `maxUsd` returns `409 price_changed` before anything is reserved. | unit `src/lib/pricing/actions/domain.test.ts`; route test |
-| F14-AC-08 | SERP competitors for 1–100 keywords exclude the researched host and its subdomains, sort by visibility (desc), traffic (desc), average position (asc) or keyword count (desc), and flag each row `isOwnSite` and `isDeclaredCompetitor`. | unit `src/lib/domain/serpCompetitors.test.ts` |
+| F14-AC-07 | Priced actions `domain.lookup.run` (overview + first table page; approval optional), `domain.keywords.page`, `domain.pages.page` (approval optional) and `domain.competitors.run` (approval **required**) quote §6.4's lines; a stale `maxUsd` returns `409 price_changed` before anything is reserved. | unit `src/shared/pricing/actions/domain.test.ts`; route test |
+| F14-AC-08 | SERP competitors for 1–100 keywords exclude the researched host and its subdomains, sort by visibility (desc), traffic (desc), average position (asc) or keyword count (desc), and flag each row `isOwnSite` and `isDeclaredCompetitor`. | unit `src/server/domain/serpCompetitors.test.ts` |
 | F14-AC-09 | "Add as competitor" writes through F07 `applyContextUpdates` (`addCompetitors`, author `user`), refuses the workspace's own host with F07's message, maps F07 caps, and is offered only when `project_memory` is on and the domain is not already declared. Scan competitor extraction is unchanged. | route test; browser B7 |
 | F14-AC-10 | "Save keywords" saves the selected rows to F13's list with the shown market and optional tags, without sending metrics; it is disabled when the form's market differs from the shown market or the overview has no data, and hidden when `keyword_research` is off. | browser B5; route test |
 | F14-AC-11 | URL state carries domain, scope, sort, order, tab, location, page, size and all eighteen filters (page filters prefixed `p`), drops defaults and non-Labs locations; `buildDomainResearchHref({ domain, preset: "striking_distance" })` yields `/portal/domain?domain=<d>&minRank=4&maxRank=20&sort=volume&order=desc`. | unit `src/shared/domain.test.ts` (ported route-state cases) |
@@ -78,13 +78,13 @@ Customers look up any domain, subdomain, folder or page and see its estimated or
 
 No migration. Migrations 105–109 stay unused, so no migration paperwork applies. Data lives in: F01 `provider_cache` (namespaces in §6.4), F13 `saved_keywords`/`keyword_metrics`, F07 `project_competitors` and `project_research_log`.
 
-### 6.2 Server modules (`src/lib/domain/`, TypeScript, relative imports with `.ts`)
+### 6.2 Server modules (`src/server/domain/`, TypeScript, relative imports with `.ts`)
 
 | File | Mode | Exports and behaviour |
 |---|---|---|
 | `domainKeywordFilters.ts` | COPY `openseo:src/server/features/domain/services/domainKeywordFilters.ts` | `DomainKeywordsSortMode`, `DomainKeywordsSortOrder`, `buildOrderBy`, `buildKeywordFilters(filters, search?, scopeFilter?)`. Imports F13's `filters.ts` and `researchScopeFilters.ts`. |
 | `domainPagesFilters.ts` | PORT `domainPagesPage.ts:22-120` | `DomainPagesSortMode`, `buildPagesOrderBy`, `buildPageFilters(filters, search?, scopeFilter)` (local helpers replaced by F13's `filters.ts`). |
-| `domainKeywordMapper.ts` | COPY | `mapKeywordItem(item)`; `toRelativePath` from F13 `src/lib/research/target.ts`. |
+| `domainKeywordMapper.ts` | COPY | `mapKeywordItem(item)`; `toRelativePath` from F13 `src/server/research/target.ts`. |
 | `pagination.ts` | COPY | `computeHasMore`. |
 | `domainService.ts` | PORT `DomainService.ts`, `domainKeywordsPage.ts`, `domainPagesPage.ts` | `DOMAIN_CACHE_SCOPE = "workspace"`; `getOverview(input, deps)`, `getKeywordsPage(input, deps)`, `getPagesPage(input, deps)`, `getSuggestedKeywords(input, deps)`. `deps = { labs: LabsClient; brandKey; requestId; maxUsd?: number; cacheOnly: boolean; upsertMetrics; keepAlive }`. Calls `labs.domain.rankOverview/rankedKeywords/relevantPages({ brandKey, feature: "domain.research", idempotencyKey: "domain.research:<requestId>:<call>", maxUsd }, input)`. Caching: overview `cachedIf(..., (r) => r.hasData)`; pages `cached`; `cacheOnly` → `peekCached` → `null` means not cached. Ranked rows from a fetch → `keepAlive(upsertMetrics(rows → { keyword, location_code, language_code, search_volume, cpc, competition: null, keyword_difficulty, intent: null, monthly_searches: [], source: "labs_ranked" }))`. |
 | `serpCompetitors.ts` | PORT `dataforseo-research-tools.ts:560-578`, `:612-620`, `:1110-1150` | `SERP_COMPETITOR_RESULT_TYPES = ["organic","paid","featured_snippet","local_pack"]`; `hostMatchesDomain(host, domain)`; `sortCompetitors(rows, sortBy)`; `findSerpCompetitors(input, deps)` → `labs.labs.serpCompetitors({ brandKey, feature: "domain.competitors", idempotencyKey: "domain.competitors:<requestId>", maxUsd }, { keywords, locationCode, languageCode, itemTypes, includeSubdomains, limit, offset: 0 })`, cached `cachedIf` (workspace, 12 h, keep when rows > 0), then excludes the researched host, maps rows and flags `isOwnSite` (workspace `website_host` without `www.`) and `isDeclaredCompetitor` (F07 `declaredCompetitors`). |
@@ -132,7 +132,7 @@ None. Every F14 call is a single synchronous paid request (≤ 60 s), as OpenSEO
 
 **Cache scope decision: workspace.** A domain lookup reveals which sites a workspace studies (often its competitors), and the same target is less often shared across tenants than a keyword. Global caching would let a request's instant $0 answer reveal that another workspace looked at the same domain in the last 12 hours. The cost of the choice: two workspaces researching the same domain each pay (about $0.03 per lookup). `DOMAIN_CACHE_SCOPE` is one constant if the owner prefers global later. OpenSEO also keys per organisation and project (`DomainService.ts:58-64`). Keyword market data extracted from these lookups still goes into F13's shared `keyword_metrics` (public data, no identity).
 
-**Priced actions** (`src/lib/pricing/actions/domain.ts`, registered in `src/lib/pricing/actions/index.ts`):
+**Priced actions** (`src/shared/pricing/actions/domain.ts`, registered in `src/shared/pricing/actions/index.ts`):
 
 | Key | Feature | Input (`z.strictObject`) | `requireApproval` | Lines (exact labels) |
 |---|---|---|---|---|
@@ -179,7 +179,7 @@ Not `cacheOnly`: `requireApprovedPrice("domain.lookup.run", ctx, { domain, scope
 
 **`POST /api/customer/domain/competitors`** — `z.strictObject({ domain, scope?, locationCode?, languageCode?, keywords: z.array(z.string().trim().min(1).max(120)).min(1).max(100), resultTypes: z.array(z.enum(SERP_COMPETITOR_RESULT_TYPES)).min(1).max(4).default(["organic","local_pack"]), includeSubdomains: z.boolean().default(true), sortBy: z.enum(["visibility","traffic_estimate","avg_position","keyword_count"]).default("visibility"), limit: z.int().min(10).max(100).default(50), cacheOnly: z.boolean().default(false), maxUsd?, requestId: z.uuid() })`. Not `cacheOnly`: `requireApprovedPrice("domain.competitors.run", ctx, { domain, scope, locationCode, languageCode, keywordCount: keywords.length, limit }, maxUsd)` (required). On a miss, `appendResearch(kind "domain.competitors")`. Response:
 
-The route body after auth and parsing lives in `src/lib/domain/serpCompetitors.ts` as `runSerpCompetitorsRequest(ws: Workspace, i: { domain; scope?; locationCode?; languageCode?; keywords: string[]; resultTypes?; limit; maxUsd?: number; requestId: string }): Promise<{ competitors; totalCount }>`; the route is a thin wrapper and F22's `find_serp_competitors` tool calls it directly with the same price check (`domain.competitors.run`).
+The route body after auth and parsing lives in `src/server/domain/serpCompetitors.ts` as `runSerpCompetitorsRequest(ws: Workspace, i: { domain; scope?; locationCode?; languageCode?; keywords: string[]; resultTypes?; limit; maxUsd?: number; requestId: string }): Promise<{ competitors; totalCount }>`; the route is a thin wrapper and F22's `find_serp_competitors` tool calls it directly with the same price check (`domain.competitors.run`).
 
 ```json
 { "status": "ok", "keywordCount": 50,
@@ -192,7 +192,7 @@ The route body after auth and parsing lives in `src/lib/domain/serpCompetitors.t
 
 **`GET /api/customer/domain/competitors/declared`** → `{ "available": true, "competitors": [ { "domain": "bewakoof.com", "name": "Bewakoof" } ], "ownHost": "offcult.in" }`; `available: false, competitors: []` when `project_memory` is off. Free.
 
-Job status: none. Contracts in `src/lib/domain/domain.contract.ts`.
+Job status: none. Contracts in `src/server/domain/domain.contract.ts`.
 
 ### 6.6 UI
 
@@ -243,14 +243,14 @@ Accessibility and phone: inputs labelled; tables keep `aria-sort`; tabs are `rol
 
 | OpenSEO source | Perceev target | Mode | Adaptation notes |
 |---|---|---|---|
-| `openseo:src/server/features/domain/services/domainKeywordFilters.ts` (+ test) | `src/lib/domain/domainKeywordFilters.ts` (+ `.test.ts`) | COPY | Imports F13's `filters.ts`; six cases ported. |
-| `openseo:src/server/features/domain/services/domainPagesPage.ts:22-134` | `src/lib/domain/domainPagesFilters.ts` | PORT | Uses F13 `filters.ts` helpers instead of local copies. |
-| `openseo:src/server/features/domain/services/domainKeywordMapper.ts` | `src/lib/domain/domainKeywordMapper.ts` | COPY | — |
-| `openseo:src/server/features/domain/services/pagination.ts` (+ test) | `src/lib/domain/pagination.ts` (+ `.test.ts`) | COPY | — |
-| `openseo:src/server/features/domain/services/DomainService.ts`, `domainKeywordsPage.ts`, `domainPagesPage.ts:136-227` | `src/lib/domain/domainService.ts` | PORT | R2 + `waitUntil` → F01 `cached`/F13 `cachedIf` (writes already run in `keepAlive`); workspace scope; metered F13 Labs client; ranked rows feed `keyword_metrics`. |
-| `openseo:src/server/mcp/tools/dataforseo-research-tools.ts:62-67,325-372,560-578,612-620,829-836,1093-1150` | `src/lib/domain/serpCompetitors.ts`, `src/app/api/customer/domain/competitors/route.ts` | PORT | MCP tool → customer route; cache added; own-site and declared flags added. |
+| `openseo:src/server/features/domain/services/domainKeywordFilters.ts` (+ test) | `src/server/domain/domainKeywordFilters.ts` (+ `.test.ts`) | COPY | Imports F13's `filters.ts`; six cases ported. |
+| `openseo:src/server/features/domain/services/domainPagesPage.ts:22-134` | `src/server/domain/domainPagesFilters.ts` | PORT | Uses F13 `filters.ts` helpers instead of local copies. |
+| `openseo:src/server/features/domain/services/domainKeywordMapper.ts` | `src/server/domain/domainKeywordMapper.ts` | COPY | — |
+| `openseo:src/server/features/domain/services/pagination.ts` (+ test) | `src/server/domain/pagination.ts` (+ `.test.ts`) | COPY | — |
+| `openseo:src/server/features/domain/services/DomainService.ts`, `domainKeywordsPage.ts`, `domainPagesPage.ts:136-227` | `src/server/domain/domainService.ts` | PORT | R2 + `waitUntil` → F01 `cached`/F13 `cachedIf` (writes already run in `keepAlive`); workspace scope; metered F13 Labs client; ranked rows feed `keyword_metrics`. |
+| `openseo:src/server/mcp/tools/dataforseo-research-tools.ts:62-67,325-372,560-578,612-620,829-836,1093-1150` | `src/server/domain/serpCompetitors.ts`, `src/app/api/customer/domain/competitors/route.ts` | PORT | MCP tool → customer route; cache added; own-site and declared flags added. |
 | `openseo:src/serverFunctions/domain.ts` | `src/app/api/customer/domain/**/route.ts` | PORT | `requireWorkspace`, priced actions, `cacheOnly`. |
-| `openseo:src/types/schemas/domain.ts:41-209` | `src/shared/domain.ts`, `src/lib/domain/domain.contract.ts` | PORT | Strict request schemas; `competitors` tab added. |
+| `openseo:src/types/schemas/domain.ts:41-209` | `src/shared/domain.ts`, `src/server/domain/domain.contract.ts` | PORT | Strict request schemas; `competitors` tab added. |
 | `openseo:src/client/features/domain/{domainRouteState,domainFilterUtils,utils,types,domainSearchValidation}.ts` (+ `domainRouteState.test.ts`, `components/domainResultLinks.test.ts`) | `src/shared/domain.ts` (+ `.test.ts`) | PORT | Next search params; F05 URL helpers; tests ported. |
 | `openseo:src/client/features/domain/useDomainFilterPreferences.ts` | `src/components/portal/domain/hooks/useDomainFilterPreferences.ts` | PORT | On F05 `useLocalPref`. |
 | `openseo:src/client/features/domain/DomainOverviewPage.tsx`, `components/*`, `hooks/*`, `domainActions.ts`, `mutations.ts` | `src/components/portal/domain/**` | PORT | F04/F05/F06 components; save through F13 without metrics; competitors tab and quick picks added. |
@@ -263,26 +263,26 @@ Accessibility and phone: inputs labelled; tables keep `aria-sort`; tabs are `rol
 **Goal:** paid, cached, priced overview, keywords and pages routes.
 
 - [x] **P1.T1 Registration**
-  - [x] **P1.T1.S1** *Files:* `src/shared/spend-features.ts` (`"domain.research"`, `"domain.competitors"`; labels "Domain research", "SERP competitor research"), `src/lib/features/names.ts` (`domain_research: { spend: ["domain.research"] as const }`), `src/lib/features/clientFeatures.ts` (append `"domain_research"`), `.env.example` (`FEATURE_DOMAIN_RESEARCH=`, `FEATURE_DOMAIN_RESEARCH_BRANDS=`). *Verify:* `node --test src/lib/features/flags.test.ts src/shared/*.test.ts` → pass; `grep -c "^FEATURE_DOMAIN_RESEARCH=$" .env.example` → 1.
+  - [x] **P1.T1.S1** *Files:* `src/shared/spend-features.ts` (`"domain.research"`, `"domain.competitors"`; labels "Domain research", "SERP competitor research"), `src/server/features/names.ts` (`domain_research: { spend: ["domain.research"] as const }`), `src/server/features/clientFeatures.ts` (append `"domain_research"`), `.env.example` (`FEATURE_DOMAIN_RESEARCH=`, `FEATURE_DOMAIN_RESEARCH_BRANDS=`). *Verify:* `node --test src/server/features/flags.test.ts src/shared/*.test.ts` → pass; `grep -c "^FEATURE_DOMAIN_RESEARCH=$" .env.example` → 1.
 - [x] **P1.T2 Services**
-  - [x] **P1.T2.S1** *Files:* `src/lib/domain/domainKeywordFilters.ts`, `domainKeywordFilters.test.ts`, `domainPagesFilters.ts`, `domainPagesFilters.test.ts`, `domainKeywordMapper.ts`, `pagination.ts`, `pagination.test.ts`. *Do:* §6.2; port `domainKeywordFilters.test.ts:4-86` and `pagination.test.ts`; page filters: include/exclude on `page_address`, ranges on `metrics.organic.etv`/`count`, scope slots counted. *Verify:* `node --test src/lib/domain/domainKeywordFilters.test.ts src/lib/domain/domainPagesFilters.test.ts src/lib/domain/pagination.test.ts` → pass (F14-AC-01).
-  - [x] **P1.T2.S2** *Files:* `src/lib/domain/domainService.ts`, `domainService.test.ts`, `researchLog.ts`, fixtures `tests/fixtures/f14/labs-*.json`. *Do:* §6.2. Tests with a fake Labs client and F01 memory cache: overview mapping and rounding; no cache write when `organicKeywords` is 0; `subfolder` lookup reuses the hostname entry and echoes scope/display; keywords page offset/order/filters/scope; every page cached; workspace B misses A's entry; `cacheOnly` miss → `null` and zero client calls; metered context has `feature "domain.research"` and `idempotencyKey "domain.research:<requestId>:keywords"`; `upsertMetrics` called with `source "labs_ranked"` only on a fetch. *Verify:* `node --test src/lib/domain/domainService.test.ts` → pass (F14-AC-02, 03, 04, 06).
-  - [x] **P1.T2.S3** *Files:* `src/lib/pricing/actions/domain.ts`, `src/lib/pricing/actions/index.ts` (one import), `src/lib/pricing/actions/domain.test.ts`. *Do:* §6.4 table; tests: worked example $0.03012; pages tab line; competitors line; `recent_research` warning; `invalid_target` block. *Verify:* `node --test src/lib/pricing/actions/domain.test.ts` → pass (F14-AC-07 unit half, F14-AC-13 quote half).
+  - [x] **P1.T2.S1** *Files:* `src/server/domain/domainKeywordFilters.ts`, `domainKeywordFilters.test.ts`, `domainPagesFilters.ts`, `domainPagesFilters.test.ts`, `domainKeywordMapper.ts`, `pagination.ts`, `pagination.test.ts`. *Do:* §6.2; port `domainKeywordFilters.test.ts:4-86` and `pagination.test.ts`; page filters: include/exclude on `page_address`, ranges on `metrics.organic.etv`/`count`, scope slots counted. *Verify:* `node --test src/server/domain/domainKeywordFilters.test.ts src/server/domain/domainPagesFilters.test.ts src/server/domain/pagination.test.ts` → pass (F14-AC-01).
+  - [x] **P1.T2.S2** *Files:* `src/server/domain/domainService.ts`, `domainService.test.ts`, `researchLog.ts`, fixtures `tests/fixtures/f14/labs-*.json`. *Do:* §6.2. Tests with a fake Labs client and F01 memory cache: overview mapping and rounding; no cache write when `organicKeywords` is 0; `subfolder` lookup reuses the hostname entry and echoes scope/display; keywords page offset/order/filters/scope; every page cached; workspace B misses A's entry; `cacheOnly` miss → `null` and zero client calls; metered context has `feature "domain.research"` and `idempotencyKey "domain.research:<requestId>:keywords"`; `upsertMetrics` called with `source "labs_ranked"` only on a fetch. *Verify:* `node --test src/server/domain/domainService.test.ts` → pass (F14-AC-02, 03, 04, 06).
+  - [x] **P1.T2.S3** *Files:* `src/shared/pricing/actions/domain.ts`, `src/shared/pricing/actions/index.ts` (one import), `src/shared/pricing/actions/domain.test.ts`. *Do:* §6.4 table; tests: worked example $0.03012; pages tab line; competitors line; `recent_research` warning; `invalid_target` block. *Verify:* `node --test src/shared/pricing/actions/domain.test.ts` → pass (F14-AC-07 unit half, F14-AC-13 quote half).
 - [x] **P1.T3 Routes**
-  - [x] **P1.T3.S1** *Files:* `src/app/api/customer/domain/overview/route.ts`, `keywords/route.ts`, `pages/route.ts`, `src/lib/domain/domain.contract.ts`. *Do:* §6.5; research-log append on an overview miss. *Verify:* `node --test src/lib/http/routeContract.test.ts` → pass.
-  - [x] **P1.T3.S2** *Files:* `src/lib/domain/domain.route.test.mjs` (hook pattern of `src/lib/customerRoutes.test.hooks.mjs`). Cases: flag off → 404; unknown field → 400; non-Labs location → 400 `invalid_location`; `cacheOnly` miss → `not_cached`, zero spend calls; stale `maxUsd` → 409 `price_changed`; 9 filter conditions → 400 `filters_over_budget`; invalid target → 400 `invalid_target`; spend refusal passes through. *Verify:* `node --test src/lib/domain/domain.route.test.mjs` → pass (F14-AC-04, 05, 07, 15 route half).
-  - [x] **P1.T3.S3** *Files:* `src/lib/domain/tools.ts`, `tools.test.ts`. *Verify:* `node --test src/lib/domain/tools.test.ts` → pass.
-  - [x] **P1.T3.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/lib/platform/thirdPartyNotices.test.mjs` → pass.
+  - [x] **P1.T3.S1** *Files:* `src/app/api/customer/domain/overview/route.ts`, `keywords/route.ts`, `pages/route.ts`, `src/server/domain/domain.contract.ts`. *Do:* §6.5; research-log append on an overview miss. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass.
+  - [x] **P1.T3.S2** *Files:* `src/server/domain/domain.route.test.mjs` (hook pattern of `src/server/customerRoutes.test.hooks.mjs`). Cases: flag off → 404; unknown field → 400; non-Labs location → 400 `invalid_location`; `cacheOnly` miss → `not_cached`, zero spend calls; stale `maxUsd` → 409 `price_changed`; 9 filter conditions → 400 `filters_over_budget`; invalid target → 400 `invalid_target`; spend refusal passes through. *Verify:* `node --test src/server/domain/domain.route.test.mjs` → pass (F14-AC-04, 05, 07, 15 route half).
+  - [x] **P1.T3.S3** *Files:* `src/server/domain/tools.ts`, `tools.test.ts`. *Verify:* `node --test src/server/domain/tools.test.ts` → pass.
+  - [x] **P1.T3.S4** *Files:* `THIRD_PARTY_NOTICES.md`. *Verify:* `node --test src/server/platform/thirdPartyNotices.test.mjs` → pass.
 
-**Checkpoint:** full suite `node --import ./src/lib/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'`, `npm run typecheck`, `npm run build` green. Completes F14-AC-01…07, 13, 15 (route half).
+**Checkpoint:** full suite `node --import ./src/server/liveWriteGuardAuto.mjs --test-concurrency=4 --test 'src/**/*.test.mjs' 'src/**/*.test.ts'`, `npm run typecheck`, `npm run build` green. Completes F14-AC-01…07, 13, 15 (route half).
 
 ### Phase 2 — Competitors
 
 **Goal:** SERP competitors and the F07 bridge.
 
 - [x] **P2.T1 Competitor search and F07 bridge**
-  - [x] **P2.T1.S1** *Files:* `src/lib/domain/serpCompetitors.ts`, `serpCompetitors.test.ts`, fixture `labs-serp-competitors.json`. *Do:* §6.2; tests: four sort modes (avg position ascending), exclusion of `www.` and subdomains of the target, `isOwnSite`, `isDeclaredCompetitor`, metered feature `domain.competitors`, cache keep only when rows > 0. *Verify:* `node --test src/lib/domain/serpCompetitors.test.ts` → pass (F14-AC-08).
-  - [x] **P2.T1.S2** *Files:* `src/lib/domain/addCompetitor.ts`, `addCompetitor.test.ts`, `src/app/api/customer/domain/competitors/route.ts`, `competitors/add/route.ts`, `competitors/declared/route.ts`, contracts, `domain.route.test.mjs` (extend: `project_memory` off → add 404 and declared `available:false`; own host → 400 `context_invalid` with F07 copy; competitors without `maxUsd` → 400 `approval_required`; research-log append on a miss). *Verify:* `node --test src/lib/domain/addCompetitor.test.ts src/lib/domain/domain.route.test.mjs src/lib/http/routeContract.test.ts` → pass (F14-AC-09 route half, F14-AC-13).
+  - [x] **P2.T1.S1** *Files:* `src/server/domain/serpCompetitors.ts`, `serpCompetitors.test.ts`, fixture `labs-serp-competitors.json`. *Do:* §6.2; tests: four sort modes (avg position ascending), exclusion of `www.` and subdomains of the target, `isOwnSite`, `isDeclaredCompetitor`, metered feature `domain.competitors`, cache keep only when rows > 0. *Verify:* `node --test src/server/domain/serpCompetitors.test.ts` → pass (F14-AC-08).
+  - [x] **P2.T1.S2** *Files:* `src/server/domain/addCompetitor.ts`, `addCompetitor.test.ts`, `src/app/api/customer/domain/competitors/route.ts`, `competitors/add/route.ts`, `competitors/declared/route.ts`, contracts, `domain.route.test.mjs` (extend: `project_memory` off → add 404 and declared `available:false`; own host → 400 `context_invalid` with F07 copy; competitors without `maxUsd` → 400 `approval_required`; research-log append on a miss). *Verify:* `node --test src/server/domain/addCompetitor.test.ts src/server/domain/domain.route.test.mjs src/shared/http/routeContract.test.ts` → pass (F14-AC-09 route half, F14-AC-13).
 
 **Checkpoint:** full suite, typecheck, build. Completes F14-AC-08, 09 (server), 13.
 
@@ -293,7 +293,7 @@ Accessibility and phone: inputs labelled; tables keep `aria-sort`; tabs are `rol
 - [x] **P3.T1 Shared state**
   - [x] **P3.T1.S1** *Files:* `src/shared/domain.ts`, `src/shared/domain.test.ts`. *Do:* §6.2 module; port `domainRouteState.test.ts:5-70` (scope omission, US fallback for Ads markets, ignoring Ads URL location) and `domainResultLinks.test.ts`; add preset href and filter-condition counting cases. *Verify:* `node --test src/shared/domain.test.ts` → pass (F14-AC-11, F14-AC-12 logic).
 - [x] **P3.T2 Components**
-  - [x] **P3.T2.S1** *Files:* `src/app/portal/domain/page.tsx`, `src/components/portal/domain/{DomainOverviewPage,DomainSearchCard,DomainQuickPicks,DomainOverviewCard,DomainOverviewLoadingState,DomainNotLoadedCard,KeywordsTab,PagesTab,DomainFilterPanel,DomainTableToolbar,DomainKeywordsTable,DomainPagesTable,DomainPageLink}.tsx`, `hooks/{useDomainOverviewQuery,useDomainKeywordsQuery,useDomainPagesQuery,useDomainFilterPreferences,useDomainSearchHistory,useDomainSearchTabs,useDomainLiveMode}.ts`, `src/components/portal/domain/telemetry.ts`, `src/components/app/navigation/items.ts` (entry), `src/lib/query/keys.ts` (five factories). *Do:* §6.6 except the Competitors tab and the bulk save. *Verify:* `npm run build` → exit 0.
+  - [x] **P3.T2.S1** *Files:* `src/app/portal/domain/page.tsx`, `src/components/portal/domain/{DomainOverviewPage,DomainSearchCard,DomainQuickPicks,DomainOverviewCard,DomainOverviewLoadingState,DomainNotLoadedCard,KeywordsTab,PagesTab,DomainFilterPanel,DomainTableToolbar,DomainKeywordsTable,DomainPagesTable,DomainPageLink}.tsx`, `hooks/{useDomainOverviewQuery,useDomainKeywordsQuery,useDomainPagesQuery,useDomainFilterPreferences,useDomainSearchHistory,useDomainSearchTabs,useDomainLiveMode}.ts`, `src/components/portal/domain/telemetry.ts`, `src/components/app/navigation/items.ts` (entry), `src/shared/query/keys.ts` (five factories). *Do:* §6.6 except the Competitors tab and the bulk save. *Verify:* `npm run build` → exit 0.
   - [x] **P3.T2.S2** *Files:* `scripts/qa/check-f14-browser.mjs` (Playwright, local app, fixture APIs). B1 flag off; B2 loading `/portal/domain?domain=offcult.in` sends only `cacheOnly: true` requests and shows "Run lookup · up to $0.03"; B3 click → overview + keywords render, cost hint visible, next page sends `maxUsd`; B4 filters apply, URL updates, reload restores last-used filters, over-budget saved filters show the held-back alert; B8 375 px no horizontal scroll. *Verify:* `node scripts/qa/check-f14-browser.mjs --only B1-B4,B8` → "ok 5 scenarios" (F14-AC-05 browser half, F14-AC-12, F14-AC-14 part, F14-AC-15).
 
 **Checkpoint:** full suite, build, browser B1–B4, B8.
@@ -312,16 +312,16 @@ Accessibility and phone: inputs labelled; tables keep `aria-sort`; tabs are `rol
 
 | File | Cases | ACs |
 |---|---|---|
-| `src/lib/domain/domainKeywordFilters.test.ts` | six ported cases + scope slots | 01 |
-| `src/lib/domain/domainPagesFilters.test.ts` | page filters, scope slots, budget | 01 |
-| `src/lib/domain/pagination.test.ts` | ported | 03 |
-| `src/lib/domain/domainService.test.ts` | §8 P1.T2.S2 list | 02, 03, 04, 06, 13 |
-| `src/lib/domain/serpCompetitors.test.ts` | sort, exclusion, flags, cache | 08 |
-| `src/lib/domain/addCompetitor.test.ts` | F07 call, `added` | 09 |
-| `src/lib/pricing/actions/domain.test.ts` | lines, warnings, blocks | 07, 13 |
+| `src/server/domain/domainKeywordFilters.test.ts` | six ported cases + scope slots | 01 |
+| `src/server/domain/domainPagesFilters.test.ts` | page filters, scope slots, budget | 01 |
+| `src/server/domain/pagination.test.ts` | ported | 03 |
+| `src/server/domain/domainService.test.ts` | §8 P1.T2.S2 list | 02, 03, 04, 06, 13 |
+| `src/server/domain/serpCompetitors.test.ts` | sort, exclusion, flags, cache | 08 |
+| `src/server/domain/addCompetitor.test.ts` | F07 call, `added` | 09 |
+| `src/shared/pricing/actions/domain.test.ts` | lines, warnings, blocks | 07, 13 |
 | `src/shared/domain.test.ts` | ported route state, preset, filter counts | 11, 12 |
-| `src/lib/domain/tools.test.ts` | closed inputs | — |
-| `src/lib/domain/domain.route.test.mjs` | flags, auth, strict bodies, cacheOnly, prices, budgets, F07 bridge | 04, 05, 07, 09, 15 |
+| `src/server/domain/tools.test.ts` | closed inputs | — |
+| `src/server/domain/domain.route.test.mjs` | flags, auth, strict bodies, cacheOnly, prices, budgets, F07 bridge | 04, 05, 07, 09, 15 |
 | `scripts/qa/check-f14-browser.mjs` | B1–B9 | 05, 09, 10, 12, 14, 15 |
 | `scripts/qa/check-f14-live.mjs` (owner-run) | one overview + one keywords page (India, page size 50) for a brand-owned domain; refuses without `--brand <key> --max-spend-usd 0.10` and an enabled `domain.research` control; prints counts and ledger rows only | — |
 

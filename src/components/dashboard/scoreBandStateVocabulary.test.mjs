@@ -8,7 +8,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { transform } from "sucrase";
 
-import { ENGINE_MEASUREMENT_STATE } from "../../lib/scoring/enginePipeline.js";
+import { ENGINE_MEASUREMENT_STATE } from "../../shared/scoring/enginePipeline.js";
 
 /**
  * R2.1.2 — an engine chip may not print a machine token at a customer.

@@ -11,26 +11,26 @@ import { transform } from "sucrase";
 import {
   describeEngineSetChange,
   ENGINE_SET_STATES,
-} from "../../lib/scoring/enginePipeline.js";
-import * as apiClient from "../../services/api.js";
-import * as formatModule from "../../utils/format.js";
-import * as aliasesModule from "../../lib/scoring/aliases.js";
-import * as brandKeyModule from "../../lib/scoring/brandKey.js";
-import * as aioConstantsModule from "../../lib/scoring/aioConstants.js";
-import * as enginePipelineModule from "../../lib/scoring/enginePipeline.js";
+} from "../../shared/scoring/enginePipeline.js";
+import * as apiClient from "../../shared/api.js";
+import * as formatModule from "../../shared/format.js";
+import * as aliasesModule from "../../shared/scoring/aliases.js";
+import * as brandKeyModule from "../../shared/scoring/brandKey.js";
+import * as aioConstantsModule from "../../shared/scoring/aioConstants.js";
+import * as enginePipelineModule from "../../shared/scoring/enginePipeline.js";
 
 /**
  * R3.2.5 (finding B3) — THE RENDERED SURFACE.
  *
  * The worker half of this finding is proven by execution in
- * src/lib/workers/engineSetChange.test.mjs: a frozen engine driven out of the
+ * src/server/workers/engineSetChange.test.mjs: a frozen engine driven out of the
  * registry between two probing chunks finalizes with a lower engines_counted
  * and a `summary_stats.engine_set_change` record naming what happened. That
  * file stops at the record insertScan is handed.
  *
  * It shipped once with exactly that much and the second half of the accept
  * criterion — "the dashboard can tell a user why engines_counted fell" — was
- * still false, because src/services/api.js read `summary_stats` into a LOCAL
+ * still false, because src/shared/api.js read `summary_stats` into a LOCAL
  * and never put it on the normalized record, and nothing in src/components
  * mentioned `engine_set_change` at all. The number moved and the screen was
  * silent: computed correctly, read by nobody, one hop later.
@@ -54,7 +54,7 @@ import * as enginePipelineModule from "../../lib/scoring/enginePipeline.js";
  *     the REAL describeEngineSetChange rather than hand-written, so the copy
  *     asserted here is the copy the worker persists.
  *   - It does not run enrichScanForClient (the /api/scans route shaper); that
- *     module imports @/lib/db, which constructs a Supabase client at import
+ *     module imports @/server/db, which constructs a Supabase client at import
  *     time. It is covered separately. To keep this file honest about that gap,
  *     the row handed to normalizeResult below is the UNENRICHED stored row —
  *     if the shaper were the only thing carrying the field, this would fail.
@@ -163,17 +163,17 @@ async function renderDashboardShell(props) {
       usePathname: () => "/dashboard",
       useSearchParams: () => new URLSearchParams(),
     }],
-    ["@/services/api", apiStub],
-    ["@/utils/format", formatModule],
-    ["@/lib/scoring/aliases", aliasesModule],
-    ["@/lib/scoring/brandKey", brandKeyModule],
-    ["@/lib/scoring/aioConstants", aioConstantsModule],
-    ["@/lib/scoring/enginePipeline", enginePipelineModule],
+    ["@/shared/api", apiStub],
+    ["@/shared/format", formatModule],
+    ["@/shared/scoring/aliases", aliasesModule],
+    ["@/shared/scoring/brandKey", brandKeyModule],
+    ["@/shared/scoring/aioConstants", aioConstantsModule],
+    ["@/shared/scoring/enginePipeline", enginePipelineModule],
   ]);
 
   const requireShim = (specifier) => {
     if (modules.has(specifier)) return modules.get(specifier);
-    if (specifier.startsWith("@/components/") || specifier.startsWith("@/lib/")) {
+    if (specifier.startsWith("@/components/") || specifier.startsWith("@/server/") || specifier.startsWith("@/shared/")) {
       return anyNamedExport;
     }
     // Loud, not silent: an import this harness has not been told about would

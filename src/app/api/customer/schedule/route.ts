@@ -2,20 +2,20 @@
 //   src/server/features/ai-visibility/services/aiVisibilitySchedule.ts
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../lib/workspace/requireWorkspace.ts";
-import { toErrorResponse, jsonOk, AppError } from "../../../../lib/http/errors.ts";
-import { isFeatureEnabled, type FeatureFlagDeps } from "../../../../lib/features/flags.ts";
+import { requireWorkspace, type RequireWorkspaceDeps } from "../../../../server/workspace/requireWorkspace.ts";
+import { toErrorResponse, jsonOk, AppError } from "../../../../shared/http/errors.ts";
+import { isFeatureEnabled, type FeatureFlagDeps } from "../../../../server/features/flags.ts";
 import {
   getCustomerSchedule,
   saveCustomerSchedule,
   type CustomerScheduleView,
   type SaveCustomerScheduleDeps,
-} from "../../../../lib/schedules/customerSchedule.ts";
+} from "../../../../server/schedules/customerSchedule.ts";
 import {
   getScheduleQuery,
   saveScheduleBody,
-} from "../../../../lib/schedules/schedule.contract.ts";
-import { captureServerEvent } from "../../../../lib/telemetry/server.ts";
+} from "../../../../server/schedules/schedule.contract.ts";
+import { captureServerEvent } from "../../../../shared/telemetry/server.ts";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";

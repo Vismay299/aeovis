@@ -18,7 +18,7 @@
  *     under its provenance label for readers who scroll past the bar)
  */
 
-import { formatCollectionWindow } from '@/utils/format';
+import { formatCollectionWindow } from '@/shared/format';
 
 /**
  * Sum a numeric field across all per-engine slices, returning null when every

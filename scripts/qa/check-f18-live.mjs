@@ -79,8 +79,8 @@ async function main() {
 
   const [{ Pool }, { getSupabaseAdmin }, { isFeatureEnabled }] = await Promise.all([
     import("pg"),
-    import("../../src/lib/supabase/admin.js"),
-    import("../../src/lib/features/flags.ts"),
+    import("../../src/shared/supabase/admin.js"),
+    import("../../src/server/features/flags.ts"),
   ]);
   const pool = new Pool({
     host: pgHost,
@@ -150,8 +150,8 @@ async function main() {
       admin,
     };
 
-    await import("../../src/lib/pricing/actions/index.ts");
-    const { startSiteAudit, getAuditStatus } = await import("../../src/lib/audit/service.ts");
+    await import("../../src/shared/pricing/actions/index.ts");
+    const { startSiteAudit, getAuditStatus } = await import("../../src/server/audit/service.ts");
     const started = await startSiteAudit(
       workspace,
       {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { isCronAuthorized } from "@/lib/cronAuth";
-import { pruneNoopScanRuns } from "@/lib/scanRunsRetention";
+import { isCronAuthorized } from "@/server/cronAuth";
+import { pruneNoopScanRuns } from "@/server/scanRunsRetention";
 
 // Deletes rows — never at build time.
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ const warnedNoSecret = { value: false };
  *
  * Same perimeter as the workers and /api/evidence/retention: the CRON_SECRET
  * bearer is the only credential, and the path is SELF_GATED in
- * src/lib/operatorPerimeter.js.
+ * src/server/operatorPerimeter.js.
  *
  * WHY A NON-OK REPORT IS A 500 AND NOT A 200 WITH A SAD BODY
  * `pruneNoopScanRuns` never throws for a failed delete; it returns

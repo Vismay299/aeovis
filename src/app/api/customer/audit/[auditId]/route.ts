@@ -1,10 +1,10 @@
-import { requireWorkspace } from "../../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { AppError, toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { getAuditStatus, deleteAudit } from "../../../../../lib/audit/service.ts";
-import { getOwnedAudit } from "../../../../../lib/audit/results.ts";
-import { reconcileRunningAudit } from "../../../../../lib/audit/reconcile.ts";
+import { requireWorkspace } from "../../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { AppError, toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { getAuditStatus, deleteAudit } from "../../../../../server/audit/service.ts";
+import { getOwnedAudit } from "../../../../../server/audit/results.ts";
+import { reconcileRunningAudit } from "../../../../../server/audit/reconcile.ts";
 
 export const dynamic = "force-dynamic";
 const FEATURE_OFF = "This page is not available for your workspace yet.";

@@ -1,8 +1,8 @@
 import crypto from "crypto";
 import { NextResponse } from "next/server";
-import { getCustomerContext } from "@/lib/supabase/customer";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { normalizeCustomerBrand } from "@/lib/customerProvisioning";
+import { getCustomerContext } from "@/shared/supabase/customer";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { normalizeCustomerBrand } from "@/server/customerProvisioning";
 
 export const dynamic = "force-dynamic";
 

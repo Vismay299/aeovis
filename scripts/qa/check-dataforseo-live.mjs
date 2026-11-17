@@ -1,15 +1,15 @@
 #!/usr/bin/env node
 import pg from "pg";
-import { createSpendStore } from "../../src/lib/spend/store.ts";
-import { createProbeDispatchStore } from "../../src/lib/db/probeDispatch.js";
-import { dispatchCanaries } from "../../src/lib/ops/providerCanary.js";
-import { createDataforseoClient } from "../../src/lib/providers/dataforseo/client.ts";
-import { DATAFORSEO_LOCATION_BY_COUNTRY } from "../../src/lib/providers/dataforseo/locations.ts";
+import { createSpendStore } from "../../src/shared/spend/store.ts";
+import { createProbeDispatchStore } from "../../src/server/db/probeDispatch.js";
+import { dispatchCanaries } from "../../src/server/ops/providerCanary.js";
+import { createDataforseoClient } from "../../src/shared/providers/dataforseo/client.ts";
+import { DATAFORSEO_LOCATION_BY_COUNTRY } from "../../src/shared/providers/dataforseo/locations.ts";
 import {
   LIVE_ENGINES_ALLOWED_HOSTS,
   assertLiveEnginesEnvironment,
   parseLiveEnginesArgs,
-} from "../../src/lib/providers/dataforseo/liveEngines.ts";
+} from "../../src/shared/providers/dataforseo/liveEngines.ts";
 
 function parseArgs(argv) {
   const args = {};

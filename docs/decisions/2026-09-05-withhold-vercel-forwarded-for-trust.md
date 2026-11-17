@@ -8,7 +8,7 @@
 **Task:** R0.1.20 (`needs-vercel`), filed by the R0.1.18 implementer, who closed
 the three trust-knob footguns and honestly declined to claim this one.
 **Status:** accepted, shipped in the same commit as the code and the tests.
-**Scope:** `src/lib/rateLimit.js` only. `src/app/api/scan/route.js` is
+**Scope:** `src/server/rateLimit.js` only. `src/app/api/scan/route.js` is
 unchanged — it never read the `trusted` flag.
 
 ---
@@ -50,7 +50,7 @@ path that can silently do nothing must say so — applied to a trust claim.
 **Withdraw the `trusted: true` label from `x-vercel-forwarded-for`. Change
 nothing else about how the address is chosen.**
 
-Concretely, in `src/lib/rateLimit.js`:
+Concretely, in `src/server/rateLimit.js`:
 
 - `TRUSTED_IP_HEADER` is renamed **`PLATFORM_IP_HEADER`**. It names the header
   the platform is *supposed* to control; it no longer promises trust the module

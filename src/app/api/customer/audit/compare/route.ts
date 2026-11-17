@@ -1,9 +1,9 @@
 import { z, ZodError } from "zod";
-import { requireWorkspace } from "../../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../lib/workspace/requireWorkspace.ts";
-import { AppError, toErrorResponse } from "../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../lib/features/flags.ts";
-import { getAuditCompare } from "../../../../../lib/audit/compare.ts";
+import { requireWorkspace } from "../../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
+import { AppError, toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { getAuditCompare } from "../../../../../server/audit/compare.ts";
 
 export const dynamic = "force-dynamic";
 

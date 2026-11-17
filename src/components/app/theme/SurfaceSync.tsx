@@ -7,7 +7,7 @@ import {
   resolveTheme,
   parsePreference,
   THEME_STORAGE_KEY,
-} from "@/lib/theme/theme";
+} from "@/shared/theme/theme";
 
 export function SurfaceSync() {
   const pathname = usePathname();

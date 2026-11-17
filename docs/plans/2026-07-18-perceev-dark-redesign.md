@@ -30,11 +30,11 @@ Replace the current light-cream/serif "AnswerRank" visual identity with the Perc
 
 ### 0.2 What does NOT change
 
-- All backend (`src/lib/`, `src/services/`, `src/app/api/`)
+- All backend (`src/lib/`, `src/shared/`, `src/app/api/`)
 - All data shapes and `normalizeResult()` output
 - All test IDs (`data-testid` attributes)
 - All routing paths, API signatures, event handlers
-- The `src/lib/scoring/` pipeline
+- The `src/shared/scoring/` pipeline
 - All 46 shadcn/ui files in `src/components/ui/` (tokens updated, not removed)
 
 ### 0.3 Hard rules

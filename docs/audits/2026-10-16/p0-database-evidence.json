@@ -11,8 +11,8 @@
   "source_hashes": {
     "supabase/migrations/027_durable_probe_dispatch.sql": "437d7274bff6fa8569b202fe20d318fb6901e86af0e2b055b9ce0f0b90fe7697",
     "scripts/qa/check-probe-dispatch.mjs": "0474e993fca4a734a026531c343c9c087b5dbb85f6626273304346f30dbf5d33",
-    "src/lib/workers/durableProbing.js": "b63ca0718069c4453fe661fe91684d3cb11fb8839b9bc27e4c385c5b79d301a2",
-    "src/lib/db/probeDispatch.js": "38bd2a64486606397e42414b3717b83f175b85defe94d414b87869d4fc686731"
+    "src/server/workers/durableProbing.js": "b63ca0718069c4453fe661fe91684d3cb11fb8839b9bc27e4c385c5b79d301a2",
+    "src/server/db/probeDispatch.js": "38bd2a64486606397e42414b3717b83f175b85defe94d414b87869d4fc686731"
   },
   "cases": [
     {

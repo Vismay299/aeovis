@@ -1,9 +1,9 @@
-import { requireWorkspace as defaultRequireWorkspace, type RequireWorkspaceDeps, type Workspace } from "../../../../lib/workspace/requireWorkspace.ts";
-import { AppError } from "../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../lib/http/errors.ts";
-import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../lib/features/flags.ts";
-import { getSetupActivation as defaultGetSetupActivation } from "../../../../lib/onboarding/setup.ts";
-import { setupGetQuerySchema } from "../../../../lib/onboarding/onboarding.contract.ts";
+import { requireWorkspace as defaultRequireWorkspace, type RequireWorkspaceDeps, type Workspace } from "../../../../server/workspace/requireWorkspace.ts";
+import { AppError } from "../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../shared/http/errors.ts";
+import { isFeatureEnabled as defaultIsFeatureEnabled } from "../../../../server/features/flags.ts";
+import { getSetupActivation as defaultGetSetupActivation } from "../../../../server/onboarding/setup.ts";
+import { setupGetQuerySchema } from "../../../../server/onboarding/onboarding.contract.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

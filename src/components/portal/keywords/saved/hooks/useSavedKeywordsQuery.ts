@@ -11,9 +11,9 @@ import { z } from "zod";
 import { usePortal } from "@/components/portal/PortalShell";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
 import { useDebouncedFilters } from "@/components/app/hooks/useDebouncedFilters";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys, stableStringify } from "@/lib/query/keys";
-import { filterValuesToSearch } from "@/lib/query/filterSearchParams";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys, stableStringify } from "@/shared/query/keys";
+import { filterValuesToSearch } from "@/shared/query/filterSearchParams";
 import {
   EMPTY_SAVED_KEYWORDS_FILTERS,
   compileSavedKeywordsFilters,

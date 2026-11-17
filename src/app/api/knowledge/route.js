@@ -4,9 +4,9 @@ import {
   insertKnowledgeBlock,
   reorderKnowledgeBlocks,
   KNOWLEDGE_TYPES,
-} from "@/lib/db/knowledge";
-import { scrapeSite } from "@/lib/firecrawl";
-import { SsrfBlockedError, isPolicyRefusal, normalizeTargetUrl } from "@/lib/ssrfGuard";
+} from "@/server/db/knowledge";
+import { scrapeSite } from "@/server/firecrawl";
+import { SsrfBlockedError, isPolicyRefusal, normalizeTargetUrl } from "@/server/ssrfGuard";
 
 /**
  * What we tell a caller whose URL the SSRF guard refused.

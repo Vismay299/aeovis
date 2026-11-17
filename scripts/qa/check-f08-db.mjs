@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import pg from "pg";
-import { artifactHash, canonicalJson } from "../../src/lib/repairs/workflow.js";
-import { normalizeQuestionText } from "../../src/lib/questions/workspaceQuestions.ts";
+import { artifactHash, canonicalJson } from "../../src/server/repairs/workflow.js";
+import { normalizeQuestionText } from "../../src/server/questions/workspaceQuestions.ts";
 
 if (
   !["127.0.0.1", "localhost", "::1"].includes(process.env.PGHOST) ||

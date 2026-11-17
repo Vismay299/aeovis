@@ -1,5 +1,5 @@
-import { collectFetch } from "../../../../../../lib/local/fetches.ts";
-import { fetchIdParams, localBrandQuery } from "../../../../../../lib/local/local.contract.ts";
+import { collectFetch } from "../../../../../../server/local/fetches.ts";
+import { fetchIdParams, localBrandQuery } from "../../../../../../server/local/local.contract.ts";
 import {
   gate,
   jsonOk,
@@ -8,7 +8,7 @@ import {
   respond,
   type LocalRouteDeps,
   type RouteContext,
-} from "../../../../../../lib/local/routeKit.ts";
+} from "../../../../../../server/local/routeKit.ts";
 
 export const dynamic = "force-dynamic";
 

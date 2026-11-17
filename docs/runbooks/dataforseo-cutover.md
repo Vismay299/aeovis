@@ -15,7 +15,7 @@ it into a prompt, transcript, or this runbook — pipe it from a file.
 
 1. Confirm the decision record above is committed and
    `DATAFORSEO_APPROVED_ENGINES` matches its approved list
-   (`node --test src/lib/engines/dataforseoGate.test.mjs`).
+   (`node --test src/shared/engines/dataforseoGate.test.mjs`).
 2. Confirm no scan has posted rows waiting on an old code version:
    `select count(*) from probe_observations where state='posted';` must be 0
    before deploying a routing change or reverting one.

@@ -4,7 +4,7 @@
 //   src/client/components/ui/skeleton.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { cn } from "@/lib/utils";
+import { cn } from "@/shared/utils";
 
 // bg-muted is the page background in the light theme, so a muted skeleton
 // would not show outside a card. A foreground tint shows on both surfaces.

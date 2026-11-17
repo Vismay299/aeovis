@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import { chromium } from "../../worker/node_modules/playwright/index.mjs";
-import {qualifyVisibilityPoint,computeQualifiedVisibilitySummary} from "../../src/lib/analytics/visibilitySeries.js";
+import {qualifyVisibilityPoint,computeQualifiedVisibilitySummary} from "../../src/shared/analytics/visibilitySeries.js";
 const origin = process.argv[2] || "http://127.0.0.1:3340";
 if (!["127.0.0.1", "localhost"].includes(new URL(origin).hostname))
   throw Error("Browser acceptance requires isolated local app");
@@ -17,10 +17,10 @@ for (const key of [
 ])
   delete process.env[key];
 const { runFinalizePhase } = await import(
-  "../../src/lib/workers/scanWorker.js"
+  "../../src/server/workers/scanWorker.js"
 );
 const { makeMemoryScanBackend } = await import(
-  "../../src/lib/demo/memoryScanBackend.js"
+  "../../src/server/demo/memoryScanBackend.js"
 );
 async function fixture(valid,planned=30,mentions=valid) {
   const backend = makeMemoryScanBackend(),

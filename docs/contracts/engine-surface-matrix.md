@@ -55,9 +55,9 @@ re-derives it at any commit. **This document contains no line citations at all.*
 **How to tell whether this file has gone stale:**
 
 ```
-git log --oneline 1a5ed81..HEAD -- src/lib/scoring/enginePipeline.js \
-  src/lib/scoring/aioPipeline.js src/lib/engines/ src/lib/workers/scanWorker.js \
-  src/lib/vendorRegistry.js scripts/check-secrets.mjs worker/src/lib/probe.js \
+git log --oneline 1a5ed81..HEAD -- src/shared/scoring/enginePipeline.js \
+  src/shared/scoring/aioPipeline.js src/shared/engines/ src/server/workers/scanWorker.js \
+  src/server/vendorRegistry.js scripts/check-secrets.mjs worker/src/lib/probe.js \
   vercel.json .env.example
 ```
 
@@ -70,10 +70,10 @@ uncommitted when this was written:
 
 | File | Why it matters here |
 |---|---|
-| `src/lib/engines/perplexity.js` | R2.2.2 (`in_verification`) is landing a `citations_state` vocabulary in it. §3.3's citations row describes `1a5ed81` and is **already being changed**. |
-| `src/lib/scoring/enginePipeline.js` | Under edit; `ENGINE_REGISTRY` and `probeAio`/`probeTextEngine` are cited by symbol for this reason. |
-| `src/lib/engines/brightdata.js`, `src/lib/workers/scanWorker.js`, `src/lib/db.js`, `src/app/api/scan/route.js` | Under edit; cited by symbol only. |
-| `src/lib/engines/perplexity.test.mjs`, `src/lib/engines/serp.test.mjs`, `src/lib/engines/types.test.mjs` | Under edit; no claim here depends on them. |
+| `src/shared/engines/perplexity.js` | R2.2.2 (`in_verification`) is landing a `citations_state` vocabulary in it. §3.3's citations row describes `1a5ed81` and is **already being changed**. |
+| `src/shared/scoring/enginePipeline.js` | Under edit; `ENGINE_REGISTRY` and `probeAio`/`probeTextEngine` are cited by symbol for this reason. |
+| `src/shared/engines/brightdata.js`, `src/server/workers/scanWorker.js`, `src/server/db.js`, `src/app/api/scan/route.js` | Under edit; cited by symbol only. |
+| `src/shared/engines/perplexity.test.mjs`, `src/shared/engines/serp.test.mjs`, `src/shared/engines/types.test.mjs` | Under edit; no claim here depends on them. |
 
 A drift table is worth writing only if it is true when read. If you are reading
 this after those commits landed, treat the table as history and re-run the
@@ -94,7 +94,7 @@ Two failures recur, and a matrix is the cheapest thing that prevents both.
 > **A green cell you cannot point at code for is a lie.** The landing page
 > advertised "Google AI Overview, ChatGPT and Perplexity" while the deployment
 > ran without `OPENAI_API_KEY` at all — R2.10.1, recorded in the header comment
-> of `src/lib/engines/deployedEngines.js`. The claim was wrong in the direction
+> of `src/shared/engines/deployedEngines.js`. The claim was wrong in the direction
 > that flatters.
 
 > **"The engine is registered" and "the engine can run" are different facts.**
@@ -110,8 +110,8 @@ in this repo finds three different lists and two of them are dead.
 
 | Vocabulary | Where | Live? | Evidence |
 |---|---|---|---|
-| `ENGINE_REGISTRY` — `aio`, `chatgpt`, `perplexity` | `src/lib/scoring/enginePipeline.js` | **Yes.** This is the fleet. | Traced in §2.1. |
-| `Engine` / `ENGINES` / `ENGINE_DEFAULT_WEIGHTS` / `ENGINE_HYBRID_WEIGHTS` / `getEnabledEngines` — `gemini`, `openai`, `perplexity`, `google_ai_overview` | `src/lib/engines/types.js` | **No.** | Its only importers are `src/lib/scoring/aggregate.js` and `src/lib/scoring/qualityGate.js`. `aggregate.js` is imported only by `src/lib/scoring/computeVisibilityScore.test.mjs`; `qualityGate.js` only by `src/lib/scoring/controlPrompts.test.mjs`. Both chains terminate in tests. This is the "dead second engine registry" R1.7.3 exists to delete. |
+| `ENGINE_REGISTRY` — `aio`, `chatgpt`, `perplexity` | `src/shared/scoring/enginePipeline.js` | **Yes.** This is the fleet. | Traced in §2.1. |
+| `Engine` / `ENGINES` / `ENGINE_DEFAULT_WEIGHTS` / `ENGINE_HYBRID_WEIGHTS` / `getEnabledEngines` — `gemini`, `openai`, `perplexity`, `google_ai_overview` | `src/shared/engines/types.js` | **No.** | Its only importers are `src/shared/scoring/aggregate.js` and `src/shared/scoring/qualityGate.js`. `aggregate.js` is imported only by `src/shared/scoring/computeVisibilityScore.test.mjs`; `qualityGate.js` only by `src/shared/scoring/controlPrompts.test.mjs`. Both chains terminate in tests. This is the "dead second engine registry" R1.7.3 exists to delete. |
 | `PROBE_OUTCOMES` — the eight typed outcomes | `worker/src/lib/probe.js` | **Frozen and enforced, with no producer.** | `probeBatch` in the same file throws by design. See `probe-result.md` §2.3. |
 
 The three use different names for the same engine (`openai` vs `chatgpt`,
@@ -123,9 +123,9 @@ needs to: only the first one runs.
 Hop by hop, each hop read at `1a5ed81`, each named by symbol:
 
 1. `ENGINE_REGISTRY` entries are selected by `resolveEnabledEngines`
-   (`src/lib/scoring/enginePipeline.js`), which reads the `ENGINES` env var and
+   (`src/shared/scoring/enginePipeline.js`), which reads the `ENGINES` env var and
    defaults to `"aio"`.
-2. `runProbingPhase` (`src/lib/workers/scanWorker.js`) calls `resolveEngines()`
+2. `runProbingPhase` (`src/server/workers/scanWorker.js`) calls `resolveEngines()`
    and then `engine.probe(...)` per query.
 3. `runScanChunk` (same file) calls `runProbingPhase`.
 4. `runScanChunk` is imported and called by `src/app/api/scan/route.js` (`POST`),
@@ -138,7 +138,7 @@ Hop by hop, each hop read at `1a5ed81`, each named by symbol:
 same registry, used in-process rather than by the chunk worker. It is not the
 production path; the chunk worker is.
 
-`runAioScan` in `src/lib/scoring/aioPipeline.js` is a **third** and it is dead —
+`runAioScan` in `src/shared/scoring/aioPipeline.js` is a **third** and it is dead —
 no importer anywhere. Only `summarizeAioResults` and `aggregateAioTopDomains`
 from that file are live (imported by `scanWorker.js`), and neither probes.
 
@@ -158,7 +158,7 @@ that gets flattered if nobody checks it.
 | 4 | *(none)* | `perplexity.ai` logged-out UI | Playwright in `worker/` | none (logged out) | no | **no — not built.** R1.3 | planned | planned `no_charge` |
 | 5 | *(none)* | `chatgpt.com` logged-out, search mode | Playwright in `worker/` | none (logged out) | no | **no — not built.** R1.4 | planned | planned `no_charge` |
 | 6 | *(none)* | Google **AI Mode** | undecided | — | no | **no — stretch, §4.3** | unknown | unknown |
-| 7 | `gemini` (adapter file only) | Gemini API text generation — **not a search surface** | `src/lib/gemini.js` SDK | `GEMINI_API_KEY` | **no** | **no — dead code**, §3.4 | none: returns `citations: []` unconditionally | **fabricated** — R3.6.5 |
+| 7 | `gemini` (adapter file only) | Gemini API text generation — **not a search surface** | `src/shared/gemini.js` SDK | `GEMINI_API_KEY` | **no** | **no — dead code**, §3.4 | none: returns `citations: []` unconditionally | **fabricated** — R3.6.5 |
 | 8 | `google_ai_overview` via SerpAPI | Google SERP via `serpapi.com` | HTTPS JSON | `SERPAPI_KEY` | **no** | **no — dead probe path**, §3.5 | yes, when it ran | **fabricated** — flat `0.0015`, R3.6.4 |
 | 9 | Copilot / Grok | — | — | — | no | **no — deferred, §4.4** | — | — |
 | 10 | `gsc` | Google Search Console **query data** — not an answer engine | `searchconsole.googleapis.com` | `GSC_SERVICE_ACCOUNT_KEY` | n/a | **scripts only**, §3.6 | n/a | n/a |
@@ -170,22 +170,22 @@ No row in this table is `no_answer`-capable except row 1. That restriction is
 
 | | |
 |---|---|
-| **Producer** | `probeAio`, `src/lib/scoring/enginePipeline.js` |
-| **Transport** | `brightDataSearch` → `extractBrightDataAiOverview` / `extractBrightDataOrganic`, all in `src/lib/engines/brightdata.js` |
+| **Producer** | `probeAio`, `src/shared/scoring/enginePipeline.js` |
+| **Transport** | `brightDataSearch` → `extractBrightDataAiOverview` / `extractBrightDataOrganic`, all in `src/shared/engines/brightdata.js` |
 | **Request** | `buildGoogleSearchUrl` builds `https://www.google.com/search?q=…&hl=en&gl=<geo>&brd_json=1&brd_ai_overview=2`, posted to `https://api.brightdata.com/request` with `format: "json"` and `country: <geo>`. |
-| **Geo** | `resolveSerpGeo` (`src/lib/engines/serpGeo.js`), `DEFAULT_SERP_GEO = "in"`, overridable by `SERP_GEO`. Used for the request and **discarded** — not recorded on the row (R1.6.1). |
+| **Geo** | `resolveSerpGeo` (`src/shared/engines/serpGeo.js`), `DEFAULT_SERP_GEO = "in"`, overridable by `SERP_GEO`. Used for the request and **discarded** — not recorded on the row (R1.6.1). |
 | **Answer** | `answer_present: true`, `aio_present: true`, `text`, `citations`, `references` with a `domain` added, plus `organic` and `brand_organic_position`, which no other engine populates. |
 | **Answered-but-absent** | A SERP that renders with **no AI Overview block** returns `text: ""` and no citations from `extractBrightDataAiOverview` (its first branch: `if (!ao) return { text: "", citations: [], references: [] }`), so `probeAio` leaves `answer_present: false`, `error: null` — and still charges `0.0015`. This is the **only genuine `no_answer` surface in the product**. |
 | **Unavailable** | `brightDataSearch` throws (unconfigured, zone rejection, HTTP error, truncated body). `probeAio`'s `catch` sets `result.error = err.message` — free text — and leaves `cost: 0`, because `result.cost = 0.0015` is assigned *after* the awaited call. |
 | **The distinguishability problem** | A no-AI-Overview SERP and a Bright Data outage differ on this row only by `error` being a free-text string vs `null`, and `summarizeEngineSlice` puts both in the coverage denominator. That is V3 in `probe-result.md` §7 — reproduced there, **still unfixed, still unowned**. |
-| **Cost** | Hardcoded `0.0015` in `probeAio`. The same constant is duplicated in `probeGoogleAiOverviewBrightData` (`src/lib/engines/serp.js`) and in `probeQueryOnce` (`src/lib/scoring/aioPipeline.js`). Three copies, R3.6.4. |
+| **Cost** | Hardcoded `0.0015` in `probeAio`. The same constant is duplicated in `probeGoogleAiOverviewBrightData` (`src/shared/engines/serp.js`) and in `probeQueryOnce` (`src/shared/scoring/aioPipeline.js`). Three copies, R3.6.4. |
 | **Honest status** | **Implemented and live.** The extractor tolerates four response shapes (`texts`, `text_blocks`, `paragraphs`, bare `text`/`snippet`), which is a measured vendor quirk, not defensive padding — see `docs/vendors/brightdata.md`. |
 
 ### 3.2 `chatgpt` — OpenAI Responses API, `web_search` tool
 
 | | |
 |---|---|
-| **Producer** | `probeChatGpt`, `src/lib/engines/openai.js`, wrapped by `probeTextEngine` in `enginePipeline.js` |
+| **Producer** | `probeChatGpt`, `src/shared/engines/openai.js`, wrapped by `probeTextEngine` in `enginePipeline.js` |
 | **Request** | `POST https://api.openai.com/v1/responses`, model from `OPENAI_MODEL` (default `gpt-4o-mini`), `tools: [{ type: "web_search", user_location: { type: "approximate", country: "IN" } }]`. |
 | **Geo** | `country: "IN"` is **hardcoded in the request body** and ignores `SERP_GEO`. It is not recorded on the row. |
 | **Answer** | Text assembled from `output[].content[].output_text`; citations from `url_citation` annotations, normalized through `normalizeUrl`. |
@@ -198,7 +198,7 @@ No row in this table is `no_answer`-capable except row 1. That restriction is
 
 | | |
 |---|---|
-| **Producer** | `probePerplexity`, `src/lib/engines/perplexity.js`, wrapped by `probeTextEngine` |
+| **Producer** | `probePerplexity`, `src/shared/engines/perplexity.js`, wrapped by `probeTextEngine` |
 | **Request** | **Two independent calls in parallel**, via `Promise.all([probeAnswer, probeSearch])`: `POST https://api.perplexity.ai/chat/completions` (model from `PERPLEXITY_MODEL`, default `sonar`, `web_search_options.user_location.country = "IN"`) and `POST https://api.perplexity.ai/search` (`max_results: 10`). |
 | **Which leg supplies what** | The **answer** leg supplies `text` and nothing else. The **search** leg supplies **every** citation and reference. They are separate products, billed separately. |
 | **Geo** | `country: "IN"` hardcoded in the answer body only. The `/search` call carries no geo at all. Neither is recorded on the row. |
@@ -210,14 +210,14 @@ No row in this table is `no_answer`-capable except row 1. That restriction is
 
 ### 3.4 `gemini` — an adapter with no caller
 
-`probeGemini` (`src/lib/engines/gemini.js`) wraps `generateContent` from
-`src/lib/gemini.js`.
+`probeGemini` (`src/shared/engines/gemini.js`) wraps `generateContent` from
+`src/shared/gemini.js`.
 
 - **It is dead.** `git grep "engines/gemini"` over `src/`, `worker/` and
   `scripts/` returns nothing. It is not in `ENGINE_REGISTRY`. Nothing imports it.
-- **Beware the near-miss.** `src/lib/gemini.js` is a *different, live* file whose
-  `generateContent` is imported by `src/lib/prompts.js` and
-  `src/lib/scoring/judge.js`. Grepping for `gemini.js` finds those and proves
+- **Beware the near-miss.** `src/shared/gemini.js` is a *different, live* file whose
+  `generateContent` is imported by `src/server/prompts.js` and
+  `src/shared/scoring/judge.js`. Grepping for `gemini.js` finds those and proves
   nothing about the adapter.
 - **It is also not a search surface.** It returns `citations: []`
   unconditionally, so it could never measure citation share even if wired.
@@ -229,18 +229,18 @@ No row in this table is `no_answer`-capable except row 1. That restriction is
 
 ### 3.5 The SerpAPI AI-Overview path — dead probe, live sibling
 
-`src/lib/engines/serp.js` contains a complete second AIO probe,
+`src/shared/engines/serp.js` contains a complete second AIO probe,
 `probeGoogleAiOverview`, which dispatches on `getSerpProvider()` to either
 `probeGoogleAiOverviewBrightData` or a direct `serpapi.com` call.
 
 - **The probe is dead:** `probeGoogleAiOverview`'s only importers are
-  `src/lib/engines/serp.test.mjs` and `src/lib/engines/serpGeo.test.mjs`.
+  `src/shared/engines/serp.test.mjs` and `src/shared/engines/serpGeo.test.mjs`.
 - **Its failure shape is the anti-pattern:** every failure path returns
   `{ text: "", model_used: "google_ai_overview-skipped", citations: [], cost: 0.0, tokens: 0 }`
   with **no error field**. A missing provider, an invalid credential and a
   successful SERP with no AI Overview are one value.
 - **The file is not dead.** `fetchPeopleAlsoAsk` and `fetchAutocomplete` from the
-  same module are imported by `src/lib/scoring/promptGen.js`, which is imported
+  same module are imported by `src/shared/scoring/promptGen.js`, which is imported
   by `scanWorker.js` and runs on every scan. So `serp.js` is **live code
   containing a dead probe** — the distinction that matters when someone proposes
   deleting the file.
@@ -253,13 +253,13 @@ No row in this table is `no_answer`-capable except row 1. That restriction is
 
 ### 3.6 `gsc` — in `engines/`, but not an engine
 
-`src/lib/engines/gsc.js` reads Google Search Console query data via a service
+`src/shared/engines/gsc.js` reads Google Search Console query data via a service
 account (`GSC_SERVICE_ACCOUNT_KEY`). It probes nothing and answers nothing. Its
 only importers are `scripts/check-secrets.mjs` (a dynamic import, for a health
-read) and `scripts/test-gsc.mjs`. Nothing in `src/app/` or `src/lib/workers/`
+read) and `scripts/test-gsc.mjs`. Nothing in `src/app/` or `src/server/workers/`
 imports it, so **it is not wired into prompt sourcing today** — R4.1.2 is the
 task that would wire it. It is listed here only so that "there are six files in
-`src/lib/engines/`" never gets read as "there are six engines".
+`src/shared/engines/`" never gets read as "there are six engines".
 
 ---
 
@@ -314,7 +314,7 @@ established.
 
 | Surface | Why deferred | What would reopen it |
 |---|---|---|
-| **Gemini** | The only Gemini code in the tree is `src/lib/engines/gemini.js`, which is dead (§3.4), is a text-generation API rather than a search surface, and returns no citations. Wiring it would add an engine that cannot measure citation share, priced by three fabricated zeros. | A logged-out Gemini *search* surface with extractable citations, plus a real price. The dead adapter is not a head start on it and should be deleted first. |
+| **Gemini** | The only Gemini code in the tree is `src/shared/engines/gemini.js`, which is dead (§3.4), is a text-generation API rather than a search surface, and returns no citations. Wiring it would add an engine that cannot measure citation share, priced by three fabricated zeros. | A logged-out Gemini *search* surface with extractable citations, plus a real price. The dead adapter is not a head start on it and should be deleted first. |
 | **Copilot** | No code, no fixtures, no vendor doc, no ledger task. Nothing in this repo has ever contacted it. | A measured India-egress block rate and a decided browser host, i.e. R1.1.2 landing first. |
 | **Grok** | Same: no code, no fixtures, no vendor doc, no ledger task. | Same. |
 
@@ -346,7 +346,7 @@ coverage denominator full of rows that measured nothing (§3.1, V3).
 `ENGINE_REGISTRY.isConfigured` deliberately so it is not stricter than the fleet.
 
 **The partial mitigation, stated precisely so it is not over-read.**
-`src/lib/vendorRegistry.js` lists `brightdata` with `required: true`, so
+`src/server/vendorRegistry.js` lists `brightdata` with `required: true`, so
 `check:secrets` fails a deployment that has no `BRIGHTDATA_API_KEY` **at deploy
 time**. That does not close R2.10.4: it is a boot-time check on presence, not a
 runtime check on validity. A key revoked, exhausted or zone-rejected after
@@ -372,13 +372,13 @@ The `cost` field on a probe row is a bare number that is never null
 
 The `chatgpt` case is filed nowhere. R3.6.4 names the three `0.0015` sites;
 R3.6.5 names `gemini` and `perplexity` explicitly and says so in its own detail;
-R3.6.1 closed the OpenRouter path only. `src/lib/engines/openai.js` is in none
+R3.6.1 closed the OpenRouter path only. `src/shared/engines/openai.js` is in none
 of them. `docs/vendors/chatgpt.md` records the `0.01` fee as a fact of the
 adapter without recording that it is an invention. **This document does not file
 the task; it records that one is missing.**
 
 The vocabulary that fixes all four already exists one layer over
-(`src/lib/llmPricing.js`'s `cost_source`, mapped to `cost.basis` in
+(`src/shared/llmPricing.js`'s `cost_source`, mapped to `cost.basis` in
 `probe-result.md` §3.9) and **no probe adapter uses it**.
 
 ### 5.3 A perplexity answer-leg failure discards measured citations — resolved in R2.2.9
@@ -394,7 +394,7 @@ citations and references on the row alongside the answer error and `citations_st
 
 ### 5.4 The dead second registry is still importable
 
-`src/lib/engines/types.js` and its two consumers (`aggregate.js`,
+`src/shared/engines/types.js` and its two consumers (`aggregate.js`,
 `qualityGate.js`) are reachable by one added import and carry engine weights
 (`ENGINE_HYBRID_WEIGHTS`, with `google_ai_overview` at `0.50`) that no live code
 honours. R1.7.3 and R6.5.2 own the deletion. Until then, a reader who greps for
@@ -402,8 +402,8 @@ engine weights finds numbers that do not affect any score.
 
 ### 5.5 A stale line citation in `deployedEngines.js`
 
-The header comment of `src/lib/engines/deployedEngines.js` cites
-`resolveEnabledEngines (src/lib/scoring/enginePipeline.js:527)`. At `1a5ed81`
+The header comment of `src/shared/engines/deployedEngines.js` cites
+`resolveEnabledEngines (src/shared/scoring/enginePipeline.js:527)`. At `1a5ed81`
 that function is not at `:527` — it has moved at least three times across the
 commits `probe-result.md` has been baselined at. The prose in that comment is
 correct; the number is not. Already recorded in `probe-result.md` §7 and still

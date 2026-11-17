@@ -27,16 +27,16 @@ function findSkillFiles(dir: string): string[] {
 test("nothing under src/assistant reads the content prompt folder", () => {
   for (const file of filesUnder(ASSISTANT_DIR).filter((candidate) => !candidate.endsWith(".test.ts"))) {
     const text = readFileSync(file, "utf8");
-    assert.ok(!text.includes("content/skills"), `${path.relative(ROOT, file)} must not read src/lib/content/skills`);
+    assert.ok(!text.includes("content/skills"), `${path.relative(ROOT, file)} must not read src/shared/content/skills`);
   }
 });
 
 test("the content loader still reads only its own folder", () => {
-  const loader = readFileSync(path.join(ROOT, "src", "lib", "content", "skills", "loader.js"), "utf8");
-  assert.ok(loader.includes(`"src", "lib", "content", "skills"`));
+  const loader = readFileSync(path.join(ROOT, "src", "shared", "content", "skills", "loader.js"), "utf8");
+  assert.ok(loader.includes(`"src", "shared", "content", "skills"`));
   assert.ok(!loader.includes("assistant"));
 });
 
-test("no SKILL.md exists under src/lib/content", () => {
-  assert.deepEqual(findSkillFiles(path.join(ROOT, "src", "lib", "content")), []);
+test("no SKILL.md exists under src/shared/content", () => {
+  assert.deepEqual(findSkillFiles(path.join(ROOT, "src", "shared", "content")), []);
 });

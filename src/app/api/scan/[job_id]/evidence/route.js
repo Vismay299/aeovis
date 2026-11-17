@@ -1,9 +1,9 @@
-import { getScanJob } from "@/lib/db";
+import { getScanJob } from "@/server/db";
 import {
   EVIDENCE_SIGNED_URL_TTL_SECONDS,
   EVIDENCE_SIGN_REASONS,
   signEvidenceForResult,
-} from "@/lib/evidenceSignedUrl";
+} from "@/server/evidenceSignedUrl";
 
 // Signs a Storage object per request — never prerendered, never cached.
 export const dynamic = "force-dynamic";
@@ -26,13 +26,13 @@ export const revalidate = 0;
  * gets you the job's answers. Inventing a session check here would be a second,
  * different perimeter around one scan, and the first door would still be open.
  * When scans get an owner, both routes change together. Concretely: this path
- * is listed in `src/lib/operatorPerimeter.js`'s free-scan allowlist (GET only),
+ * is listed in `src/server/operatorPerimeter.js`'s free-scan allowlist (GET only),
  * beside the status poll, and that addition is asserted deliberately in
  * operatorPerimeter.test.mjs's "is that deliberate?" set.
  *
  * What this route DOES add over "knows a uuid" is scoping: the result row must
  * belong to the job in the path, and the object key is read off that row. A
- * caller can never name an object (see src/lib/evidenceSignedUrl.js).
+ * caller can never name an object (see src/server/evidenceSignedUrl.js).
  *
  * WHY A 302 AND NOT `{ url }` JSON:
  *   * The affordance is a plain `<a target="_blank">`. A link cannot be
@@ -80,7 +80,7 @@ export async function GET(request, context = {}, deps = {}) {
   }
   if (!job) return plain("Job not found.", 404);
   if (job.brand_key) {
-    const { getCustomerContext } = await import("@/lib/supabase/customer");
+    const { getCustomerContext } = await import("@/shared/supabase/customer");
     const context = await getCustomerContext();
     if (context.error || !context.brands.some((brand) => brand.brandKey === job.brand_key)) return plain("Job not found.", 404);
   }

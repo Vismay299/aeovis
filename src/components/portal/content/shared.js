@@ -2,7 +2,7 @@
  * Shared helpers for the Content Studio portal page: the customer API client,
  * playbook labels and small text utilities. No React here.
  */
-import { FORMATS } from "../../../lib/content/agents/formats.js";
+import { FORMATS } from "../../../shared/content/agents/formats.js";
 
 export const cx = (...parts) => parts.filter(Boolean).join(" ");
 

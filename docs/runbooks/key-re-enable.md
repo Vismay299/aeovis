@@ -26,7 +26,7 @@ The rule is not "cost must be non-zero"; it is **"the price must be known"**
 passes honestly when its zero is *stated* — by the `:free` suffix, the price
 table, or the gateway's own `usage.cost` — rather than defaulted.
 
-Make one real call through `generateContent` (`src/lib/openrouter.js`) with a
+Make one real call through `generateContent` (`src/server/openrouter.js`) with a
 `stats` object and read the result:
 
 - **Pass:** `cost` is a number and `cost_source` is one of `gateway`,

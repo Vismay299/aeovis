@@ -10,7 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-import { primaryDeployedEngineLabel } from '@/lib/engines/deployedEngines';
+import { primaryDeployedEngineLabel } from '@/shared/engines/deployedEngines';
 
 /* R2.10.5 — this chip was the string 'Perplexity', typed. Rebuilt under
    NEXT_PUBLIC_ENGINES=aio the hero sentence and the engine rail both narrowed

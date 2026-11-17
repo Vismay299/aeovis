@@ -4,9 +4,9 @@
 //   src/client/features/audit/AuditDetail.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { keys } from "@/lib/query/keys";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { isJobActive } from "@/lib/query/polling";
+import { keys } from "@/shared/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { isJobActive } from "@/shared/query/polling";
 import { useServerPacedQuery } from "./useServerPacedQuery";
 
 export type JobStatusResponse = {

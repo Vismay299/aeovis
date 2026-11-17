@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Deliberate operator dispatch. Health reads never dispatch a provider call.
 import { pathToFileURL } from "node:url";
-import { dispatchCanaries } from "../../src/lib/ops/providerCanary.js";
+import { dispatchCanaries } from "../../src/server/ops/providerCanary.js";
 export { dispatchCanaries };
 
 if (

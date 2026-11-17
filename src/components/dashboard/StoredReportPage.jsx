@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import DashboardShell from "./DashboardShell";
-import { reportResponseState, offlineReportState } from "@/lib/reportViewState";
+import { reportResponseState, offlineReportState } from "@/shared/reportViewState";
 export default function StoredReportPage({ url, scanId = null }) {
   const [resource, setResource] = useState({ state: "loading" });
   const [attempt, setAttempt] = useState(0);

@@ -1,12 +1,12 @@
-import { AppError } from "../../../../../../lib/http/appError.ts";
-import { toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
+import { AppError } from "../../../../../../shared/http/appError.ts";
+import { toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../../server/features/flags.ts";
 import {
   requireWorkspace,
   type RequireWorkspaceDeps,
-} from "../../../../../../lib/workspace/requireWorkspace.ts";
-import { domainBrandQuery } from "../../../../../../lib/domain/domain.contract.ts";
-import { declaredCompetitors as defaultDeclaredCompetitors } from "../../../../../../lib/projectContext/service.ts";
+} from "../../../../../../server/workspace/requireWorkspace.ts";
+import { domainBrandQuery } from "../../../../../../server/domain/domain.contract.ts";
+import { declaredCompetitors as defaultDeclaredCompetitors } from "../../../../../../server/projectContext/service.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

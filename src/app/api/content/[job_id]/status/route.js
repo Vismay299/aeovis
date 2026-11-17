@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getContentJob, listContentRunsForJob } from "@/lib/db/content";
-import { JOB_STAGES } from "@/lib/content/stages";
+import { getContentJob, listContentRunsForJob } from "@/server/db/content";
+import { JOB_STAGES } from "@/shared/content/stages";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

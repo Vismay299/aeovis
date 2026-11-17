@@ -7,7 +7,7 @@
  * as base64 data URIs.
  *
  *   node scripts/build-prototype.mjs
- *   design-options/prototype.src.html  ->  design-options/perceev-prototype.html
+ *   docs/design/options/prototype.src.html  ->  docs/design/options/perceev-prototype.html
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -15,8 +15,8 @@ import { dirname, join } from 'node:path';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-const SRC = join(root, 'design-options', 'prototype.src.html');
-const OUT = join(root, 'design-options', 'perceev-prototype.html');
+const SRC = join(root, 'docs', 'design', 'options', 'prototype.src.html');
+const OUT = join(root, 'docs', 'design', 'options', 'perceev-prototype.html');
 
 const FONTS = {
   __ARCHIVO_B64__: join(root, 'src', 'app', 'fonts', 'Archivo-VF.woff2'),

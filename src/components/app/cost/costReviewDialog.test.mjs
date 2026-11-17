@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import React from "react";
-import { compileJsx, renderToHtml, anyNamedExport, textOf } from "../../../lib/renderHarness.mjs";
+import { compileJsx, renderToHtml, anyNamedExport, textOf } from "../../../server/renderHarness.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const children = ({ children }) => React.createElement(React.Fragment, null, children);
@@ -23,7 +23,7 @@ async function loadDialog() {
       ["@/components/ui/alert", { Alert: children, AlertDescription: children, AlertTitle: children }],
       ["@/components/ui/skeleton", anyNamedExport],
       ["@/shared/pricing", await import("../../../shared/pricing.ts")],
-      ["@/lib/telemetry/client", { trackEvent() {} }],
+      ["@/shared/telemetry/client", { trackEvent() {} }],
     ]),
   });
 }

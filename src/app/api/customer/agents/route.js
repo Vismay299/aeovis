@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { customerRouteContext } from "@/lib/supabase/customerRoute";
-import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { insertAgent } from "@/lib/db/content";
-import { normalizeAgent, starterAgentsForWorkspace } from "@/lib/content/agents/model";
-import { FORMATS } from "@/lib/content/agents/formats";
-import { CREW } from "@/lib/content/agents/crew";
-import { BLOCKS, DEFAULT_PIPELINES } from "@/lib/content/agents/blocks";
+import { customerRouteContext } from "@/shared/supabase/customerRoute";
+import { getSupabaseAdmin } from "@/shared/supabase/admin";
+import { insertAgent } from "@/server/db/content";
+import { normalizeAgent, starterAgentsForWorkspace } from "@/shared/content/agents/model";
+import { FORMATS } from "@/shared/content/agents/formats";
+import { CREW } from "@/shared/content/agents/crew";
+import { BLOCKS, DEFAULT_PIPELINES } from "@/shared/content/agents/blocks";
 
 export const dynamic = "force-dynamic";
 const json = (value, status = 200) => NextResponse.json(value, { status, headers: { "Cache-Control": "no-store" } });

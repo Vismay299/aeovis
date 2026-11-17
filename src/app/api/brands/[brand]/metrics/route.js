@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getBrandMetricsSeries, getBrandMetricSources } from "@/lib/db/analytics";
-import { parseEngineParam, parseDateParam, MAX_SERIES_ROWS } from "@/lib/brandAnalyticsApi";
-import { qualifyVisibilityPoint, computeQualifiedVisibilitySummary } from "@/lib/analytics/visibilitySeries";
+import { getBrandMetricsSeries, getBrandMetricSources } from "@/server/db/analytics";
+import { parseEngineParam, parseDateParam, MAX_SERIES_ROWS } from "@/shared/brandAnalyticsApi";
+import { qualifyVisibilityPoint, computeQualifiedVisibilitySummary } from "@/shared/analytics/visibilitySeries";
 
 // This must always be fresh — a scheduled/manual re-scan lands new
 // brand_metrics_daily rows the client needs to see immediately (same reason
@@ -15,7 +15,7 @@ export const fetchCache = "force-no-store";
  * Brand-keying contract: the `[brand]` path param is ALREADY a
  * resolveBrandKey() output (the domain, e.g. "snitch.com") — every
  * brand_metrics_daily row is stored under that same key, never the typed
- * display name (see src/lib/scoring/brandKey.js and migration 005). This
+ * display name (see src/shared/scoring/brandKey.js and migration 005). This
  * route uses the decoded param VERBATIM as the lookup key; it never re-runs
  * resolveBrandKey (that function needs a url, which this route doesn't have).
  *

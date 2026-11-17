@@ -5,8 +5,8 @@
 // only renders for an owner, and the warning only reads the list for one.
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { fetchJson, withBrand } from "@/lib/query/fetchJson";
-import { keys } from "@/lib/query/keys";
+import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { keys } from "@/shared/query/keys";
 
 /** What the API returns for a saved signature; the values never leave the server. */
 export type CrawlerCredential = {

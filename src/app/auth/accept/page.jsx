@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { consumeCustomerAuthFragment } from "@/lib/supabase/authLink";
+import { getSupabaseBrowserClient } from "@/shared/supabase/browser";
+import { consumeCustomerAuthFragment } from "@/shared/supabase/authLink";
 import AuthLayout from "@/components/portal/AuthLayout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";

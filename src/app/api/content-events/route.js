@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getContentEvents, insertContentEvent, getScansForBrand } from "@/lib/db";
-import { computeContentLiftReports } from "@/lib/scoring/contentLift";
+import { getContentEvents, insertContentEvent, getScansForBrand } from "@/server/db";
+import { computeContentLiftReports } from "@/shared/scoring/contentLift";
 
 /**
  * R5.2.1 / finding B13 — the decision route used to synthesize

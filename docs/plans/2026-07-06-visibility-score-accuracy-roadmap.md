@@ -9,9 +9,9 @@
 
 **Related files**:
 - `src/app/api/scan/route.js` — current scan + scoring logic
-- `src/lib/prompts.js` — dynamic prompt generation
-- `src/lib/gemini.js` — LLM probing + extraction
-- `src/services/api.js` — result normalization for dashboard
+- `src/server/prompts.js` — dynamic prompt generation
+- `src/shared/gemini.js` — LLM probing + extraction
+- `src/shared/api.js` — result normalization for dashboard
 - `src/app/dashboard/page.js` — score display
 - `docs/aeo-visibility-tracker-mvp-implementation-document-v1.md` — original MVP spec
 
@@ -55,12 +55,12 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 *No scoring changes yet. Make the system observable and testable.*
 
 ### P0-S01 — Create scoring constants file
-- **What**: Add `src/lib/scoring/constants.js` with exported weight placeholders (all `1.0` for now)
+- **What**: Add `src/shared/scoring/constants.js` with exported weight placeholders (all `1.0` for now)
 - **Where**: new file
 - **Done when**: File exists, imported nowhere yet, weights documented in comments
 
 ### P0-S02 — Add `computeVisibilityScore()` stub
-- **What**: Add `src/lib/scoring/computeVisibilityScore.js` that accepts `results[]` and returns current binary formula (extract logic from `route.js`)
+- **What**: Add `src/shared/scoring/computeVisibilityScore.js` that accepts `results[]` and returns current binary formula (extract logic from `route.js`)
 - **Where**: new file + update `src/app/api/scan/route.js` to call it
 - **Done when**: Scan output unchanged; formula lives in one place
 
@@ -81,7 +81,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P0-S06 — Store model name used per probe
 - **What**: Return `model_used` from `generateContent()` and attach to each result
-- **Where**: `src/lib/gemini.js`, `src/app/api/scan/route.js`
+- **Where**: `src/shared/gemini.js`, `src/app/api/scan/route.js`
 - **Done when**: Each result has `model_used` string
 
 ### P0-S07 — Store probe temperature in result
@@ -96,12 +96,12 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P0-S09 — Extend `normalizeResult` to pass through new fields
 - **What**: Map `raw_response`, `model_used`, `scoring_version` in `normalizeResult()`
-- **Where**: `src/services/api.js`
+- **Where**: `src/shared/api.js`
 - **Done when**: Dashboard can read fields from normalized result (even if not displayed yet)
 
 ### P0-S10 — Add Supabase column for `scoring_version` (optional)
 - **What**: Document migration SQL for `scoring_version text` on `scans` table
-- **Where**: comment in `src/lib/db.js` or README
+- **Where**: comment in `src/server/db.js` or README
 - **Done when**: SQL snippet documented; insert doesn't break if column missing
 
 ---
@@ -112,22 +112,22 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P1-S01 — Define position numeric weights
 - **What**: In `constants.js`, set `POSITION_WEIGHTS`: `recommended: 1.0`, `compared: 0.6`, `cited: 0.3`, `omitted: 0`
-- **Where**: `src/lib/scoring/constants.js`
+- **Where**: `src/shared/scoring/constants.js`
 - **Done when**: Constants exported and documented
 
 ### P1-S02 — Define sentiment numeric weights
 - **What**: Set `SENTIMENT_WEIGHTS`: `positive: 1.0`, `neutral: 0.5`, `negative: 0`
-- **Where**: `src/lib/scoring/constants.js`
+- **Where**: `src/shared/scoring/constants.js`
 - **Done when**: Constants exported
 
 ### P1-S03 — Add `scorePromptResult()` function
 - **What**: Function that takes one result object, returns 0–1 float using mention × position × sentiment
-- **Where**: `src/lib/scoring/computeVisibilityScore.js`
+- **Where**: `src/shared/scoring/computeVisibilityScore.js`
 - **Done when**: Unit tests for: mentioned+recommended+positive ≈ 1.0, omitted = 0
 
 ### P1-S04 — Add citation bonus to per-prompt score
 - **What**: If `citations` includes brand's domain (from scan `url`), add `CITATION_BONUS` (e.g. 0.15) capped at 1.0
-- **Where**: `src/lib/scoring/computeVisibilityScore.js`
+- **Where**: `src/shared/scoring/computeVisibilityScore.js`
 - **Done when**: Test: mentioned + brand domain cited scores higher than mentioned alone
 
 ### P1-S05 — Add `prompt_score` field on each result
@@ -152,7 +152,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P1-S09 — Update `generateSummary()` thresholds
 - **What**: Tune copy thresholds in `api.js` if composite scores skew differently
-- **Where**: `src/services/api.js`
+- **Where**: `src/shared/api.js`
 - **Done when**: Summary text still reads naturally for low/mid/high scores
 
 ### P1-S10 — Show score breakdown tooltip on KPI card
@@ -178,7 +178,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P2-S01 — Add `PROBE_RUNS` constant (default: 3)
 - **What**: Config constant for number of probe runs per prompt
-- **Where**: `src/lib/scoring/constants.js`
+- **Where**: `src/shared/scoring/constants.js`
 - **Done when**: Constant exported
 
 ### P2-S02 — Refactor single-prompt probe into `probePromptOnce()`
@@ -193,7 +193,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P2-S04 — Compute per-prompt median `prompt_score`
 - **What**: Aggregate N runs: median score, majority-vote `mentioned`, most common `position`
-- **Where**: `src/lib/scoring/aggregate.js`
+- **Where**: `src/shared/scoring/aggregate.js`
 - **Done when**: One merged result per prompt from N runs
 
 ### P2-S05 — Store `run_details` array on each result
@@ -244,7 +244,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P3-S01 — Design DB schema: `brand_prompts` table
 - **What**: Document table: `id`, `brand`, `text`, `intent_tier`, `topic`, `weight`, `enabled`, `created_at`
-- **Where**: this doc + `src/lib/db.js` comment
+- **Where**: this doc + `src/server/db.js` comment
 - **Done when**: SQL migration snippet written
 
 ### P3-S02 — Create `brand_prompts` table in Supabase
@@ -252,19 +252,19 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 - **Where**: Supabase
 - **Done when**: Table exists
 
-### P3-S03 — Add `src/lib/db/prompts.js` CRUD helpers
+### P3-S03 — Add `src/server/db/prompts.js` CRUD helpers
 - **What**: `getPromptsForBrand()`, `upsertPrompts()`, `disablePrompt()`
 - **Where**: new file
 - **Done when**: Functions work against Supabase
 
 ### P3-S04 — Define intent tier enum
 - **What**: `high_intent | comparison | problem_aware | branded | exploratory`
-- **Where**: `src/lib/scoring/constants.js`
+- **Where**: `src/shared/scoring/constants.js`
 - **Done when**: Tiers + default weights documented (e.g. high_intent: 3.0, branded: 0.5)
 
 ### P3-S05 — Update prompt generator to tag intent tier
 - **What**: Modify `generatePromptsForBrand` JSON schema to return `{ text, intent_tier, topic_suggestion }`
-- **Where**: `src/lib/prompts.js`
+- **Where**: `src/server/prompts.js`
 - **Done when**: Generator returns tagged prompts
 
 ### P3-S06 — Save generated prompts to `brand_prompts` on first scan
@@ -325,7 +325,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P4-S01 — Define topic taxonomy helper
 - **What**: `normalizeTopic(name)` — slugify, trim
-- **Where**: `src/lib/scoring/topics.js`
+- **Where**: `src/shared/scoring/topics.js`
 - **Done when**: Helper exported
 
 ### P4-S02 — Assign topics during prompt generation
@@ -363,7 +363,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 *Stop using the same model to answer and grade.*
 
-### P5-S01 — Create `src/lib/scoring/judge.js`
+### P5-S01 — Create `src/shared/scoring/judge.js`
 - **What**: New module for mention detection
 - **Where**: new file
 - **Done when**: File exists
@@ -414,7 +414,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 - **Done when**: Stats persisted
 
 ### P5-S11 — Create calibration fixture file
-- **What**: `src/lib/scoring/fixtures/calibration.json` — 20 `{ response, brand, expected: { mentioned, position } }`
+- **What**: `src/shared/scoring/fixtures/calibration.json` — 20 `{ response, brand, expected: { mentioned, position } }`
 - **Where**: new file
 - **Done when**: Fixture exists with hand-labeled cases
 
@@ -476,7 +476,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P7-S01 — Add `extractBrandDomain(url)` helper
 - **What**: Parse hostname from brand website URL
-- **Where**: `src/lib/scoring/citations.js`
+- **Where**: `src/shared/scoring/citations.js`
 - **Done when**: `acme.io` from `https://www.acme.io/pricing`
 
 ### P7-S02 — Normalize citation URLs
@@ -527,7 +527,7 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 
 ### P8-S01 — Define `Engine` enum
 - **What**: `gemini | openai | perplexity` (extensible; Phase 8b adds `google_ai_overview`)
-- **Where**: `src/lib/engines/types.js`
+- **Where**: `src/shared/engines/types.js`
 - **Done when**: Types exported
 
 ### P8-S02 — Create engine adapter interface
@@ -536,17 +536,17 @@ Complete steps in order within each phase. Phases can overlap only where noted.
 - **Done when**: Interface documented
 
 ### P8-S03 — Refactor Gemini into adapter
-- **What**: `src/lib/engines/gemini.js` wraps existing `generateContent`
+- **What**: `src/shared/engines/gemini.js` wraps existing `generateContent`
 - **Where**: new file
 - **Done when**: Gemini scans work through adapter
 
 ### P8-S04 — Add OpenAI adapter stub
-- **What**: `src/lib/engines/openai.js` — requires `OPENAI_API_KEY`
+- **What**: `src/shared/engines/openai.js` — requires `OPENAI_API_KEY`
 - **Where**: new file
 - **Done when**: Returns response or graceful skip if no key
 
 ### P8-S05 — Add Perplexity adapter stub
-- **What**: `src/lib/engines/perplexity.js` — requires `PERPLEXITY_API_KEY`
+- **What**: `src/shared/engines/perplexity.js` — requires `PERPLEXITY_API_KEY`
 - **Where**: new file
 - **Done when**: Returns response with citations if available
 
@@ -619,7 +619,7 @@ Prompt set (same 15 queries every run)
 **Prerequisite**: Phase 8 adapter interface (`probe(engine, prompt, options) → ProbeResult`).
 
 ### P8b-S01 — Extend `Engine` enum with `google_ai_overview`
-- **What**: Add `google_ai_overview` to `src/lib/engines/types.js`; document hybrid probe roles in comments
+- **What**: Add `google_ai_overview` to `src/shared/engines/types.js`; document hybrid probe roles in comments
 - **Where**: `types.js`
 - **Done when**: Enum includes `gemini | openai | perplexity | google_ai_overview`
 
@@ -628,7 +628,7 @@ Prompt set (same 15 queries every run)
 - **Where**: this doc (decision note below P8b-S02) or `docs/decisions/serp-provider.md`
 - **Done when**: One provider selected; cost-per-scan estimate for 15 prompts documented
 
-### P8b-S03 — Create `src/lib/engines/serp.js` adapter
+### P8b-S03 — Create `src/shared/engines/serp.js` adapter
 - **What**: `probeGoogleAiOverview(query, options) → { text, citations, engine: "google_ai_overview", raw }`
 - **Where**: new file; implements Phase 8 adapter interface
 - **Done when**: Returns parsed overview text + citation URLs when `SERPAPI_KEY` set; graceful empty result when key missing
@@ -703,7 +703,7 @@ Prompt set (same 15 queries every run)
 
 ### P9-S01 — Add control prompts to every scan
 - **What**: Append 2–3 prompts with known answers (e.g. "Who makes the iPhone?")
-- **Where**: `src/lib/scoring/controlPrompts.js`
+- **Where**: `src/shared/scoring/controlPrompts.js`
 - **Done when**: Controls included in every scan
 
 ### P9-S02 — Validate control prompt responses
@@ -748,7 +748,7 @@ Prompt set (same 15 queries every run)
 
 ### P10-S02 — Implement Beta-Binomial posterior
 - **What**: `posteriorMean`, `credibleIntervalLow`, `credibleIntervalHigh` given prior + observed mentions
-- **Where**: `src/lib/scoring/bayesian.js`
+- **Where**: `src/shared/scoring/bayesian.js`
 - **Done when**: Unit tests with known inputs
 
 ### P10-S03 — Replace CI fields with Bayesian credible interval
@@ -794,7 +794,7 @@ Prompt set (same 15 queries every run)
 
 ### P11-S05 — Implement worker function
 - **What**: Background processor runs probe pipeline; updates job status
-- **Where**: `src/lib/workers/scanWorker.js`
+- **Where**: `src/server/workers/scanWorker.js`
 - **Done when**: Job completes end-to-end
 
 ### P11-S06 — Wire scan page to poll job status
@@ -854,7 +854,7 @@ Prompt set (same 15 queries every run)
 *LLM-generated prompts alone don't reflect real search demand. **Probing** via SERP/AI Overview is Phase 8b; this phase is **prompt sourcing** only (PAA, autocomplete, GSC).*
 
 ### P13-S01 — Reuse SERP provider from Phase 8b for PAA + autocomplete
-- **What**: Extend `src/lib/engines/serp.js` (or `src/lib/queryData/serp.js`) with PAA/autocomplete endpoints
+- **What**: Extend `src/shared/engines/serp.js` (or `src/lib/queryData/serp.js`) with PAA/autocomplete endpoints
 - **Done when**: Same API key as 8b; no second provider decision needed
 
 ### P13-S02 — Add `fetchPeopleAlsoAsk(industry, seedTerms)` stub

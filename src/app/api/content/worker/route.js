@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { isCronAuthorized } from "@/lib/cronAuth";
-import { recordCronTick } from "@/lib/db/analytics";
-import { supabase } from "@/lib/db";
+import { isCronAuthorized } from "@/server/cronAuth";
+import { recordCronTick } from "@/server/db/analytics";
+import { supabase } from "@/server/db";
 import {
   listResumableContentJobs,
   listRewoundContentJobs,
@@ -9,12 +9,12 @@ import {
   getContentJob,
   isRewoundContentJob,
   isDeliveredContentJob,
-} from "@/lib/db/content";
-import { acquireLease, newLeaseOwner } from "@/lib/jobLease";
-import { startContentJob, CONTENT_WORKER_PATH } from "@/lib/content/contentWorker";
-import { createDailyBatchJobs, getDailyBatchSize } from "@/lib/content/dailyBatch";
-import { keepAlive } from "@/lib/keepAlive";
-import { makeSelfContinue } from "@/lib/selfContinue";
+} from "@/server/db/content";
+import { acquireLease, newLeaseOwner } from "@/server/jobLease";
+import { startContentJob, CONTENT_WORKER_PATH } from "@/shared/content/contentWorker";
+import { createDailyBatchJobs, getDailyBatchSize } from "@/shared/content/dailyBatch";
+import { keepAlive } from "@/server/keepAlive";
+import { makeSelfContinue } from "@/server/selfContinue";
 
 // Side-effectful (spends real model budget) — must never run at build time.
 export const dynamic = "force-dynamic";
@@ -51,7 +51,7 @@ const warnedNoSecret = { value: false };
  * header no longer grants access (R0.1.8); Vercel's own cron invocations
  * authenticate with the bearer secret. When CRON_SECRET is unset the gate FAILS CLOSED in
  * production (401) and allows-with-a-warning everywhere else. The
- * implementation is shared with /api/scan/worker in src/lib/cronAuth.js so the
+ * implementation is shared with /api/scan/worker in src/server/cronAuth.js so the
  * two cannot drift.
  */
 function isAuthorized(request, searchParams) {
@@ -210,7 +210,7 @@ export async function dispatchWithLease(jobId, label, deps = {}) {
   let won = null;
   try {
     // R3.1.11 — `deps` is forwarded. acquireLease reads its client from
-    // `deps.client` / `deps.supabase` (src/lib/jobLease.js resolveClient) and
+    // `deps.client` / `deps.supabase` (src/server/jobLease.js resolveClient) and
     // its clock from `deps.nowMs`; without this argument an injected client
     // never reached the lease UPDATE, so the real single-flight gate could only
     // ever be tested by stubbing itself out. Real callers pass none of these
@@ -308,9 +308,9 @@ export function contentDirectResumeReport({
  *
  * Exported because the handler itself cannot be driven in-process with a live
  * client attached: its first act is `recordCronTick`, a WRITE, and the
- * live-write guard (src/lib/liveWriteGuard.js) refuses every write in a test
+ * live-write guard (src/server/liveWriteGuard.js) refuses every write in a test
  * process. This is the real decision, not a copy of it — the handler has no
- * other version of these lines. See src/lib/dbReadOutage.route.test.mjs.
+ * other version of these lines. See src/server/dbReadOutage.route.test.mjs.
  *
  * @param {{data: Array|null, error: object|null}} envelope postgrest's own reply
  * @returns {{brands: string[], unavailable: {reason: string, detail: string}|null}}
@@ -475,7 +475,7 @@ export async function GET(request, contextOrDeps = {}, maybeDeps = {}) {
   // THIS SPECIFIC job right now, UNCONDITIONALLY.
   //
   // The staleness sweep below deliberately does not cover this case and must
-  // not be consulted. shouldRescueContentJob (src/lib/db/content.js) requires
+  // not be consulted. shouldRescueContentJob (src/server/db/content.js) requires
   // a STALE heartbeat, and the invocation that fired this request heartbeated
   // on its very last write — so the sweep would report the job alive and skip
   // it, correctly for its own purpose and fatally for this one. The lease is

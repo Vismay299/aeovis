@@ -1,10 +1,10 @@
 import { z, ZodError } from "zod";
-import { requireWorkspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps, Workspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
-import { AppError, toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
-import { crawlerAccessQuery } from "../../../../../../lib/audit/siteAudit.contract.ts";
-import { deleteCrawlerCredential } from "../../../../../../lib/audit/crawlerAccess.ts";
+import { requireWorkspace } from "../../../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps, Workspace } from "../../../../../../server/workspace/requireWorkspace.ts";
+import { AppError, toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../../server/features/flags.ts";
+import { crawlerAccessQuery } from "../../../../../../server/audit/siteAudit.contract.ts";
+import { deleteCrawlerCredential } from "../../../../../../server/audit/crawlerAccess.ts";
 
 export const dynamic = "force-dynamic";
 

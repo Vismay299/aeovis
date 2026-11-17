@@ -38,7 +38,7 @@ ENGINES=aio,chatgpt,perplexity
 `gpt-4o-mini` — env-overridable via `OPENAI_MODEL` (default `gpt-4o-mini`) so
 upgrading later is config, not code. Do not use larger models or extra tool calls.
 
-**Rewrite `src/lib/engines/openai.js`** (the current chat-completions probe is dead code — replace it):
+**Rewrite `src/shared/engines/openai.js`** (the current chat-completions probe is dead code — replace it):
 
 - `export async function probeChatGpt(query, options = {})`
   - POST `https://api.openai.com/v1/responses` with:
@@ -55,9 +55,9 @@ upgrading later is config, not code. Do not use larger models or extra tool call
   - Cost: estimate `$0.01` per call + usage tokens if present in response; add to `options.stats`.
 - Config guard: `export function isChatGptConfigured()` → `!!process.env.OPENAI_API_KEY`.
 
-**Tests (`src/lib/engines/openai.test.mjs`):** parse fixtures for (a) response with citations, (b) response with no annotations, (c) API error shape → `{ error }`. Use dependency-injected `fetch` like existing tests do for other modules.
+**Tests (`src/shared/engines/openai.test.mjs`):** parse fixtures for (a) response with citations, (b) response with no annotations, (c) API error shape → `{ error }`. Use dependency-injected `fetch` like existing tests do for other modules.
 
-**Gate:** `node --test src/lib/engines/openai.test.mjs` green; no other file touched.
+**Gate:** `node --test src/shared/engines/openai.test.mjs` green; no other file touched.
 
 ---
 
@@ -69,7 +69,7 @@ not on `sonar-pro` (all empirically tested). Sources now come from the separate
 **Search API** (`POST /search` → `{ results: [{ url, title, ... }] }`, verified
 working). The adapter therefore makes TWO calls per query.
 
-**Rewrite `src/lib/engines/perplexity.js`:**
+**Rewrite `src/shared/engines/perplexity.js`:**
 
 **COST RULE (locked): cheapest configuration only while testing.** Model is `sonar`
 — NEVER `sonar-pro` (4x the request rate, 15x output tokens). Do not set
@@ -101,7 +101,7 @@ later is config, not code.
 
 ## Phase 3 — Multi-engine pipeline + worker
 
-**New `src/lib/scoring/enginePipeline.js`** (generalizes, does NOT replace, `aioPipeline.js`):
+**New `src/shared/scoring/enginePipeline.js`** (generalizes, does NOT replace, `aioPipeline.js`):
 
 - `ENGINE_REGISTRY = { aio: <wraps brightDataSearch+extract>, chatgpt: probeChatGpt, perplexity: probePerplexity }` with per-engine `{ probe, isConfigured, label }`.
 - `resolveEnabledEngines()` — parse `ENGINES` env, drop unconfigured ones with a `console.warn`.
@@ -110,7 +110,7 @@ later is config, not code.
 - `summarizeEngineResults(results)` — reuse `summarizeAioResults` logic per engine slice (it's already pure); returns `{ engines: { aio: {results, summary}, chatgpt: {...} }, headline }` where `headline = { visibility_index_pct, engines_counted }` per decision #5.
 - Reliability gates apply PER ENGINE (AIO keeps its coverage gate; chatgpt/perplexity gate only on error rate).
 
-**`src/lib/workers/scanWorker.js` changes (keep diffs surgical):**
+**`src/server/workers/scanWorker.js` changes (keep diffs surgical):**
 
 - After sourcing queries, call `runMultiEngineScan` instead of `runAioScan` when >1 engine enabled (single-engine path stays on `runAioScan` — zero regression risk).
 - Competitor extraction: feed it the union of all engines' non-branded answer text + citations (one batched OpenRouter call, same as today).
@@ -130,7 +130,7 @@ later is config, not code.
 
 ## Phase 4 — normalizeResult + dashboard
 
-**`src/services/api.js` → `normalizeResult`:** detect `engines` key → new shape `{ engines, visibilityIndex, ... }` while keeping every existing field the views already read (AIO values remain the defaults for legacy fields). Old records (v7/v8/v8.1) must render exactly as today — extend the dual-mode transformer, don't fork it.
+**`src/shared/api.js` → `normalizeResult`:** detect `engines` key → new shape `{ engines, visibilityIndex, ... }` while keeping every existing field the views already read (AIO values remain the defaults for legacy fields). Old records (v7/v8/v8.1) must render exactly as today — extend the dual-mode transformer, don't fork it.
 
 **Dashboard (minimal, no redesign):**
 1. `ScoreBand` — big numeral becomes `visibility_index_pct` when present; add small per-engine chips: `AIO 3.4% · ChatGPT 12% · PPLX 8%`.

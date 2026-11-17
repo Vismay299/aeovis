@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { generateContent } from "@/lib/gemini";
+import { generateContent } from "@/shared/gemini";
 
 export async function POST(request) {
   try {

@@ -1,10 +1,10 @@
 import { ZodError } from "zod";
-import { requireWorkspace } from "../../../../../../lib/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../../lib/workspace/requireWorkspace.ts";
-import { AppError, readJsonBody, toErrorResponse } from "../../../../../../lib/http/errors.ts";
-import { isFeatureEnabled } from "../../../../../../lib/features/flags.ts";
-import { cancelBody } from "../../../../../../lib/audit/siteAudit.contract.ts";
-import { cancelAudit } from "../../../../../../lib/audit/service.ts";
+import { requireWorkspace } from "../../../../../../server/workspace/requireWorkspace.ts";
+import type { RequireWorkspaceDeps } from "../../../../../../server/workspace/requireWorkspace.ts";
+import { AppError, readJsonBody, toErrorResponse } from "../../../../../../shared/http/errors.ts";
+import { isFeatureEnabled } from "../../../../../../server/features/flags.ts";
+import { cancelBody } from "../../../../../../server/audit/siteAudit.contract.ts";
+import { cancelAudit } from "../../../../../../server/audit/service.ts";
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ auditId: string }> | { auditId: string } };
 export type AuditCancelRouteDeps = RequireWorkspaceDeps & { requireWorkspace?: typeof requireWorkspace; isFeatureEnabled?: typeof isFeatureEnabled; cancelAudit?: typeof cancelAudit };
