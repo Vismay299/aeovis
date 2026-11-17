@@ -102,7 +102,7 @@ describe("assistant tool presentation", () => {
 });
 
 describe("humanizeToolName", () => {
-  it("copies the OpenSEO label behaviour", () => {
+  it("copies the openseo:src/client/components/chat/ChatMessage.tsx label behaviour", () => {
     assert.equal(humanizeToolName("get_serp_results"), "Get serp results");
     assert.equal(humanizeToolName("tool-activate_skill"), "Activate skill");
   });

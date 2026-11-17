@@ -615,7 +615,7 @@ export const TOOL_PRESENTATION: Record<string, ToolPresentation> = {
   },
 };
 
-/** Copy of OpenSEO `humanizeToolLabel` (ChatMessage.tsx:25-28). */
+/** Copy of openseo:src/client/components/chat/ChatMessage.tsx:25-28 `humanizeToolLabel`. */
 export function humanizeToolName(name: string): string {
   const pretty = name.replace(/^tool-/, "").replace(/_/g, " ");
   return pretty.charAt(0).toUpperCase() + pretty.slice(1);
