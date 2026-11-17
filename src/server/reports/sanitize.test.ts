@@ -568,3 +568,84 @@ test("SF-3/N-6 — same-document fragment URLs survive while remote ones do not"
   );
   assert.ok(style.html.includes("fill:url(#g)"));
 });
+
+// ---------------------------------------------------------------------------
+// B1 — one normalise pass is not a fixed point
+//
+// The first normalise decodes `\\` to `\`, which can expose a NEW CSS escape in
+// the text that gets stored (`\75 rl(` decodes to `url(` in a browser). The
+// dirty path therefore repeats normalise → filter until the text stops changing.
+// ---------------------------------------------------------------------------
+
+test("B1 — a doubly escaped url( is neutralised and the result is idempotent", () => {
+  const input =
+    "a{background:\\\\75 rl(https://evil.example/x.png)} b{background:url(https://evil2.example/x.png)}";
+  const once = filterCss(input);
+
+  assert.equal(once.css.includes("evil.example"), false, "the escaped remote URL must not survive");
+  assert.equal(once.css.includes("evil2.example"), false, "the plain remote URL must not survive");
+  assert.equal((once.css.match(/url\(\)/g) ?? []).length, 2, "both declarations become url()");
+  assert.equal(filterCss(once.css).css, once.css, "filtering the output again changes nothing");
+});
+
+test("B1 — the same shape through a style attribute with a dirty sibling", () => {
+  const html =
+    '<!doctype html><html><body><p style="background:\\\\75 rl(https://evil.example/x.png); color:red; ' +
+    'border:url(https://evil2.example/x.png)">x</p></body></html>';
+  const result = sanitizeReportHtml(html);
+
+  assert.equal(result.html.includes("evil.example"), false, "the escaped remote URL must not survive");
+  assert.equal(result.html.includes("evil2.example"), false, "the plain remote URL must not survive");
+  const style = /style="([^"]*)"/.exec(result.html)?.[1] ?? "";
+  assert.equal(style.includes("http"), false, "no remote URL may remain in the attribute");
+  assert.equal(sanitizeReportHtml(result.html).html, result.html, "the document is idempotent");
+});
+
+test("B1 — a doubly escaped @import is removed after the fixpoint", () => {
+  const input =
+    '\\\\40 import "https://evil.example/x.css"; b{background:url(https://evil2.example/x.png)}';
+  const once = filterCss(input);
+
+  assert.equal(once.css.includes("@import"), false, "the escaped at-rule must not survive");
+  assert.equal(once.css.includes("evil.example"), false);
+  assert.equal(once.css.includes("evil2.example"), false);
+  assert.equal(filterCss(once.css).css, once.css, "filtering the output again changes nothing");
+
+  const block = sanitizeReportHtml(
+    `<!doctype html><html><head><style>${input}</style></head><body><p>x</p></body></html>`
+  );
+  assert.equal(block.html.includes("@import"), false, "the stored stylesheet has no @import");
+  assert.equal(block.html.includes("evil.example"), false);
+  assert.equal(block.html.includes("evil2.example"), false);
+});
+
+test("B1 — a doubly escaped u\\\\rl becomes a live url on the next pass and is removed", () => {
+  const input =
+    "u\\\\rl(https://evil.example/x.png) b{background:url(https://evil2.example/x.png)}";
+  const once = filterCss(input);
+
+  assert.equal(once.css.includes("u\\rl"), false, "the decodable escape must not survive");
+  assert.equal(once.css.includes("evil.example"), false);
+  assert.equal(once.css.includes("evil2.example"), false);
+  assert.equal(filterCss(once.css).css, once.css, "filtering the output again changes nothing");
+});
+
+test("B1 — a stylesheet that never reaches a fixed point fails closed", () => {
+  // 2^17 backslashes: each pass decodes `\\` to `\`, so the run halves once per
+  // pass and the 16-pass budget is exhausted before the text settles. The dirty
+  // sibling forces the dirty path (the clean path would return the original,
+  // where the doubled backslashes are not an escape).
+  const input = `${"\\\\".repeat(65_536)}75 rl(https://evil.example/x.png) b{background:url(https://evil2.example/x.png)}`;
+  const result = filterCss(input);
+
+  assert.equal(result.css, "", "the stylesheet is dropped rather than stored with an unresolved escape");
+  assert.equal(result.blocked, 1, "the first pass's blocked count is preserved");
+});
+
+test("B1 — every corpus document is idempotent through the full sanitiser", () => {
+  for (const { file, html } of documents) {
+    const once = sanitizeReportHtml(html).html;
+    const twice = sanitizeReportHtml(once).html;
+    assert.equal(twice, once, `${file}: a second full sanitise pass changed the document`);
+  }
+});

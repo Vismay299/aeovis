@@ -110,6 +110,15 @@ const HEX_DIGIT = /[0-9a-fA-F]/;
 const BAD_DECLARATION = /expression\s*\(|behavior\s*:|-moz-binding/i;
 
 /**
+ * How many normalise → filter rounds the dirty path may run before it gives up
+ * and drops the stylesheet. Each round halves a run of escaped backslashes, so
+ * a construct hidden behind 2^16 of them is caught; a document that needs more
+ * than this is not CSS anyone wrote by hand, and failing closed is cheaper than
+ * storing text whose meaning on a later parse we cannot predict.
+ */
+const CSS_FILTER_MAX_PASSES = 16;
+
+/**
  * Decode one CSS escape at `backslash`, returning the replacement text and the
  * index after it. A hex escape takes 1–6 hex digits and one optional CSS
  * whitespace terminator; `\` plus a newline is a line continuation; any other
@@ -354,7 +363,15 @@ function filterNormalisedCss(css: string): { css: string; blocked: number } {
  * so `url/**` + `/(…)`, `u\72l(…)` and `@im\70 ort` cannot hide a construct a
  * browser will resolve (SF-1). When that copy is clean, the ORIGINAL text is
  * returned unchanged, so a comment-preserving stylesheet (the starter template)
- * keeps its bytes; when it is not, the filtered normalised text is returned.
+ * keeps its bytes.
+ *
+ * When it is dirty, one normalise pass is not enough: a source `\\75 rl(…)`
+ * normalises to `\75 rl(…)`, which a browser decodes again into a live `url(…)`.
+ * The dirty path therefore repeats normalise → filter on its own output until
+ * the text stops changing (B1). The first pass's blocked count is preserved, so
+ * the `url()` values that later passes neutralise internally are not counted
+ * twice. If no fixed point is reached inside the budget, the stylesheet is
+ * dropped rather than stored with an escape that a later parse could resolve.
  *
  * Order is the spec's: @import/@font-face blocks go first (so an imported URL is
  * not also counted as a blocked `url()`), then every non-safe `url()` becomes
@@ -366,7 +383,19 @@ export function filterCss(css: string): { css: string; blocked: number } {
   const normalised = normaliseCssForMatching(source);
   const filtered = filterNormalisedCss(normalised);
   if (filtered.blocked === 0 && filtered.css === normalised) return { css: source, blocked: 0 };
-  return filtered;
+
+  const firstBlocked = filtered.blocked;
+  let current = filtered.css;
+  for (let pass = 0; pass < CSS_FILTER_MAX_PASSES; pass += 1) {
+    const next = filterNormalisedCss(normaliseCssForMatching(current));
+    if (next.css === current) return { css: current, blocked: firstBlocked };
+    current = next.css;
+  }
+  // No fixed point inside the budget. A stylesheet that cannot be settled may
+  // still resolve to a disallowed construct on a later parse, so fail closed:
+  // an empty stylesheet (and therefore a removed style attribute) is the only
+  // answer that cannot fetch anything.
+  return { css: "", blocked: firstBlocked };
 }
 
 function metaIsAllowed(attribs: Record<string, string>): boolean {
