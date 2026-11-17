@@ -429,6 +429,14 @@ const FULL_CATALOG = [
   "assistant_gsc_query_summary",
   // F22 phase 2 migration 149 — F25 milestone compatibility column.
   "assistant_turns.created_at",
+  // F23 phase 1 migrations 150–151 — reports, report templates and anonymous
+  // share-view counters plus their service-role functions.
+  "reports", "report_templates", "report_share_views",
+  "reports_title_idx", "reports_share_token_idx", "reports_list_idx",
+  "report_templates_name_idx", "report_share_views_day_idx",
+  "set_report_share_token", "clear_report_share_token", "get_shared_report",
+  "report_workspace_usage", "record_report_view", "prune_report_share_views",
+  "reports_touch_content",
 ];
 
 function withRegister(dir) {

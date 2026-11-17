@@ -786,6 +786,14 @@ The three transactional templates' variables, subject, preview and body copy are
 - Objects (149): `assistant_turns.created_at`, generated from `started_at`, so F25's `email_milestone_candidates` reads the F22 column without editing 161.
 - Verify with scripts/qa/check-f22-db.mjs against a loopback _qa database and tests/customer-uat.sql.
 
+### `150_f23_reports`, `151_f23_report_share_views` (F23 phase 1)
+- Status: implemented in repo; **not yet applied to production**.
+- Apply 150 and 151 before deploying F23. Additive; no data backfill.
+- Objects (150): tables `reports` and `report_templates` with workspace RLS; unique indexes `reports_title_idx`, `reports_share_token_idx` (partial) and `report_templates_name_idx`; list index `reports_list_idx`; trigger function `reports_touch_content` (content-only `updated_at`, attribution restored); service-role functions `set_report_share_token`, `clear_report_share_token`, `get_shared_report`, `report_workspace_usage`.
+- Objects (151): table `report_share_views` (per link, per UTC day, browser vs other counts; no IP, user agent or cookie) with workspace RLS; service-role functions `record_report_view`, `prune_report_share_views`.
+- Deleting a workspace cascades reports, templates and view rows. Deleting a template never touches a report (there is no FK). View rows are pruned after 395 days by the `reports.retention` job.
+- Verify with scripts/qa/check-f23-db.mjs against a loopback _qa database and tests/customer-uat.sql.
+
 ## D. Content approval — the human gate, and what it does not yet do
 
 The content pipeline is human-in-the-loop by design. `POST /api/content-items/[id]/decision`

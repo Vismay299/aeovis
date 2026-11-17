@@ -21,3 +21,4 @@ import "../../shared/rank-tracking/jobs.ts";
 import "../explore/jobs.ts";
 import "../backlinks/jobs.ts";
 import "../assistant/jobs.ts";
+import "../reports/jobs.ts";

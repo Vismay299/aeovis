@@ -251,6 +251,12 @@ export const NEVER_WRITABLE = Object.freeze([
   "assistant_turns",
   "assistant_stream_chunks",
   "assistant_approvals",
+  // F23 phase 1 — migrations 150–151: reports, templates and anonymous share
+  // views are customer data; live tests use the loopback-only check-f23-db.mjs
+  // harness.
+  "reports",
+  "report_templates",
+  "report_share_views",
 ]);
 
 /**
@@ -325,6 +331,13 @@ export const WRITING_FUNCTIONS = Object.freeze({
   prune_assistant_stream_chunks: ["assistant_stream_chunks"],
   claim_assistant_approval: ["assistant_approvals"],
   expire_assistant_approvals: ["assistant_approvals"],
+  // F23 phase 1 — migrations 150–151: share mint/revoke and anonymous view
+  // counters. `get_shared_report` and `report_workspace_usage` are reads and
+  // deliberately absent here.
+  set_report_share_token: ["reports"],
+  clear_report_share_token: ["reports"],
+  record_report_view: ["report_share_views"],
+  prune_report_share_views: ["report_share_views"],
 });
 
 /** PostgREST builder methods that mutate. `select` is deliberately absent. */

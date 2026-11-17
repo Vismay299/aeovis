@@ -57,6 +57,8 @@ RESET ROLE;
 \ir ../supabase/migrations/147_f22_assistant_approvals.sql
 \ir ../supabase/migrations/148_f22_gsc_query_summary.sql
 \ir ../supabase/migrations/149_f22_assistant_milestone_fix.sql
+\ir ../supabase/migrations/150_f23_reports.sql
+\ir ../supabase/migrations/151_f23_report_share_views.sql
 DO $$ BEGIN
  IF (SELECT count(*) FROM public.customer_brands) <> 2 THEN RAISE EXCEPTION 'Idempotency keys must be scoped to each user'; END IF;
  IF public.create_customer_workspace('retry','%', 'https://same.example','same.example',
@@ -997,5 +999,99 @@ DO $f22$ BEGIN
 END $f22$;
 RESET ROLE;
 -- End F22 tenant check.
+
+-- F23 phase 1: one report, one template and one view row per workspace. Each
+-- user sees exactly their workspace's rows; anon sees none and cannot write.
+RESET ROLE;
+INSERT INTO public.reports(id,brand_key,title,summary,html,size_bytes,sanitizer_version,created_by,created_by_user_id,share_token,shared_at)
+SELECT '26000000-0000-4000-8000-000000000001','10000000-0000-0000-0000-000000000001','UAT report A',
+ 'Synthetic F23 summary A.','<!doctype html><html><body>UAT report A</body></html>',
+ octet_length('<!doctype html><html><body>UAT report A</body></html>'),1,'assistant',
+ '00000000-0000-0000-0000-000000000001',repeat('a',32),now();
+INSERT INTO public.reports(id,brand_key,title,summary,html,size_bytes,sanitizer_version,created_by,created_by_user_id,share_token,shared_at)
+SELECT '26000000-0000-4000-8000-000000000002','10000000-0000-0000-0000-000000000002','UAT report B',
+ 'Synthetic F23 summary B.','<!doctype html><html><body>UAT report B</body></html>',
+ octet_length('<!doctype html><html><body>UAT report B</body></html>'),1,'assistant',
+ '00000000-0000-0000-0000-000000000002',repeat('b',32),now();
+INSERT INTO public.report_templates(id,brand_key,name,description,instructions,created_by,created_by_user_id) VALUES
+ ('27000000-0000-4000-8000-000000000001','10000000-0000-0000-0000-000000000001',
+  'UAT template A','Synthetic F23 brief A.','Audience: UAT A.','app','00000000-0000-0000-0000-000000000001'),
+ ('27000000-0000-4000-8000-000000000002','10000000-0000-0000-0000-000000000002',
+  'UAT template B','Synthetic F23 brief B.','Audience: UAT B.','app','00000000-0000-0000-0000-000000000002');
+INSERT INTO public.report_share_views(report_id,brand_key,day,share_pseudonym,browser_views,other_views) VALUES
+ ('26000000-0000-4000-8000-000000000001','10000000-0000-0000-0000-000000000001',
+  (now() AT TIME ZONE 'utc')::date,'share:00000000000000a1',1,0),
+ ('26000000-0000-4000-8000-000000000002','10000000-0000-0000-0000-000000000002',
+  (now() AT TIME ZONE 'utc')::date,'share:00000000000000b1',1,0);
+
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',true);
+DO $f23$ BEGIN
+  IF (SELECT count(*) FROM public.reports) <> 1
+   OR (SELECT id FROM public.reports) <> '26000000-0000-4000-8000-000000000001'
+  THEN RAISE EXCEPTION 'F23 reports leaked across workspaces'; END IF;
+  IF (SELECT count(*) FROM public.report_templates) <> 1
+   OR (SELECT id FROM public.report_templates) <> '27000000-0000-4000-8000-000000000001'
+  THEN RAISE EXCEPTION 'F23 report_templates leaked across workspaces'; END IF;
+  IF (SELECT count(*) FROM public.report_share_views) <> 1
+   OR (SELECT report_id FROM public.report_share_views) <> '26000000-0000-4000-8000-000000000001'
+  THEN RAISE EXCEPTION 'F23 report_share_views leaked across workspaces'; END IF;
+  IF has_function_privilege('authenticated','public.get_shared_report(text)','EXECUTE')
+   OR has_function_privilege('authenticated','public.report_workspace_usage(text)','EXECUTE')
+   OR has_function_privilege('authenticated','public.set_report_share_token(uuid,text,text,uuid)','EXECUTE')
+  THEN RAISE EXCEPTION 'F23 customer can call a service-role function'; END IF;
+  BEGIN
+    INSERT INTO public.reports(id,brand_key,title,summary,html,size_bytes,sanitizer_version,created_by,created_by_user_id)
+    VALUES('26000000-0000-4000-8000-000000000003','10000000-0000-0000-0000-000000000001','UAT write','x','<html></html>',12,1,'app','00000000-0000-0000-0000-000000000001');
+    RAISE EXCEPTION 'F23 customer wrote a report';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $f23$;
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000003',true);
+DO $f23$ BEGIN
+  IF (SELECT count(*) FROM public.reports) <> 1
+   OR (SELECT id FROM public.reports) <> '26000000-0000-4000-8000-000000000001'
+  THEN RAISE EXCEPTION 'F23 second workspace member saw another workspace''s reports'; END IF;
+  IF (SELECT count(*) FROM public.report_templates) <> 1 THEN RAISE EXCEPTION 'F23 second workspace member saw another workspace''s templates'; END IF;
+  IF (SELECT count(*) FROM public.report_share_views) <> 1 THEN RAISE EXCEPTION 'F23 second workspace member saw another workspace''s views'; END IF;
+END $f23$;
+
+SELECT set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000002',true);
+DO $f23$ BEGIN
+  IF (SELECT count(*) FROM public.reports) <> 1
+   OR (SELECT id FROM public.reports) <> '26000000-0000-4000-8000-000000000002'
+  THEN RAISE EXCEPTION 'F23 workspace B can read workspace A reports'; END IF;
+  IF (SELECT count(*) FROM public.report_templates) <> 1
+   OR (SELECT id FROM public.report_templates) <> '27000000-0000-4000-8000-000000000002'
+  THEN RAISE EXCEPTION 'F23 workspace B can read workspace A templates'; END IF;
+  IF (SELECT count(*) FROM public.report_share_views) <> 1
+   OR (SELECT report_id FROM public.report_share_views) <> '26000000-0000-4000-8000-000000000002'
+  THEN RAISE EXCEPTION 'F23 workspace B can read workspace A views'; END IF;
+  IF EXISTS (SELECT 1 FROM public.reports WHERE id='26000000-0000-4000-8000-000000000001')
+   OR EXISTS (SELECT 1 FROM public.report_templates WHERE id='27000000-0000-4000-8000-000000000001')
+  THEN RAISE EXCEPTION 'F23 workspace B reads a workspace A row'; END IF;
+END $f23$;
+
+SET LOCAL ROLE anon;
+DO $f23$ BEGIN
+  BEGIN
+    PERFORM count(*) FROM public.reports;
+    RAISE EXCEPTION 'F23 anon read of reports was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.report_templates;
+    RAISE EXCEPTION 'F23 anon read of report_templates was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    PERFORM count(*) FROM public.report_share_views;
+    RAISE EXCEPTION 'F23 anon read of report_share_views was allowed';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+END $f23$;
+RESET ROLE;
+-- End F23 tenant check.
 ROLLBACK;
 
