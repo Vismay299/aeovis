@@ -656,6 +656,20 @@ const EXPECTED_OBJECTS = {
   "149_f22_assistant_milestone_fix.sql": [
     { kind: "column", name: "assistant_turns.created_at" },
   ],
+  "150_f23_reports.sql": [
+    { kind: "table", name: "reports" },
+    { kind: "table", name: "report_templates" },
+    { kind: "index", name: "reports_share_token_idx" },
+    { kind: "function", name: "set_report_share_token" },
+    { kind: "function", name: "clear_report_share_token" },
+    { kind: "function", name: "get_shared_report" },
+    { kind: "function", name: "report_workspace_usage" },
+  ],
+  "151_f23_report_share_views.sql": [
+    { kind: "table", name: "report_share_views" },
+    { kind: "function", name: "record_report_view" },
+    { kind: "function", name: "prune_report_share_views" },
+  ],
 };
 
 /**

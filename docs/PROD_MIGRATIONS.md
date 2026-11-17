@@ -1929,3 +1929,21 @@ Apply migration 045 before deploying F02 phase 4. It is additive: `posted` is ad
 - **Applied-check:** the same query returns 1; `select is_generated from information_schema.columns where table_schema = 'public' and table_name = 'assistant_turns' and column_name = 'created_at';` returns `ALWAYS`.
 - **Rollback:** `alter table public.assistant_turns drop column if exists created_at;` is safe unless F25's milestone job already ran (it only reads the value).
 - **Verify locally:** apply it twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f22-db.mjs` and `scripts/qa/check-f25-db.mjs`. Never run either harness against production.
+
+## `150_f23_reports.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply 150 and 151, in that order, before deploying F23 phase 1.
+- **Additive only.** Creates `reports` and `report_templates` with workspace RLS, the unique title/token/name indexes, the content-only `reports_touch_content` trigger, and the service-role-only share and usage functions (`set_report_share_token`, `clear_report_share_token`, `get_shared_report`, `report_workspace_usage`).
+- **Pre-check:** `select to_regclass('public.reports');` returns null.
+- **Applied-check:** `select to_regclass('public.reports');` returns `reports`; `select to_regclass('public.report_templates');` returns `report_templates`; `select count(*) from pg_proc where proname in ('set_report_share_token','clear_report_share_token','get_shared_report','report_workspace_usage');` returns 4.
+- **Rollback:** `drop table if exists public.report_templates; drop table if exists public.reports cascade;` drops every report, template and share view. Export anything worth keeping first; there is no other copy.
+- **Verify locally:** apply 150 and 151 twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f23-db.mjs`. Never run that harness against production.
+
+## `151_f23_report_share_views.sql`
+
+- **Status:** in repo; **NOT YET APPLIED to production**. Apply after 150 and before deploying F23 phase 1.
+- **Additive only.** Creates `report_share_views` (one row per report, UTC day and link pseudonym; browser and other counts only — no IP, user agent or cookie) with workspace RLS, plus the service-role-only `record_report_view` and `prune_report_share_views` functions.
+- **Pre-check:** `select to_regclass('public.report_share_views');` returns null.
+- **Applied-check:** `select to_regclass('public.report_share_views');` returns `report_share_views`; `select count(*) from pg_proc where proname in ('record_report_view','prune_report_share_views');` returns 2.
+- **Rollback:** `drop table if exists public.report_share_views;` loses view history only; reports and templates are untouched. The `reports.retention` job then prunes nothing.
+- **Verify locally:** apply 150 and 151 twice to a disposable loopback `*_qa` database, then run `scripts/qa/check-f23-db.mjs --group retention` and the full harness. Never run it against production.
