@@ -46,6 +46,9 @@ export const CLIENT_FEATURES: readonly FeatureName[] = [
   "prompt_research",
   "onboarding_wizard",
   "prompt_explorer",
+  "reports",
+  "report_sharing",
+  "report_generate",
 ];
 
 export type ClientFeatureName = FeatureName;

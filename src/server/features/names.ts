@@ -68,6 +68,13 @@ export const FEATURES = {
   assistant: { spend: ["assistant.turn", "assistant.compaction"] as const },
   // F22: lets the assistant start Content Studio drafts. The content pipeline caps its own cost.
   assistant_content_drafts: { spend: ["content.draft"] as const },
+  // F23: reports pages, routes, report tools and /r. Writing is assistant work,
+  // metered under F22's assistant.turn.
+  reports: { spend: [] as const },
+  // F23: the share toggle and every /s route. A public link spends nothing.
+  report_sharing: { spend: [] as const },
+  // F23: "Generate report" buttons and their kickoff.
+  report_generate: { spend: ["assistant.turn"] as const },
 } as const;
 
 export type FeatureName = keyof typeof FEATURES;
