@@ -442,7 +442,7 @@ test("a view-record failure is logged, never thrown into the reader", async () =
       ...admin,
       rpc: async (fn: string, args: unknown) => {
         if (fn === "record_report_view") return { data: null, error: { message: "db down" } };
-        return (admin.rpc as (fn: string, args: unknown) => Promise<unknown>)(fn, args);
+        return (admin.rpc as unknown as (fn: string, args: unknown) => Promise<unknown>)(fn, args);
       },
     } as unknown as SupabaseClient;
     const kept: unknown[] = [];
