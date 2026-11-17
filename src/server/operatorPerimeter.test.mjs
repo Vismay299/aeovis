@@ -398,6 +398,16 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/onboarding/website",
       "/api/customer/setup",
       "/api/customer/setup/dismiss",
+      // F22 P4 — assistant runtime routes. Self-gated via requireWorkspace and the assistant flag.
+      "/api/customer/assistant/config",
+      "/api/customer/assistant/sessions",
+      "/api/customer/assistant/sessions/[sessionId]",
+      "/api/customer/assistant/sessions/[sessionId]/chat",
+      "/api/customer/assistant/sessions/[sessionId]/stream",
+      "/api/customer/assistant/sessions/[sessionId]/stop",
+      "/api/customer/assistant/sessions/[sessionId]/rewind",
+      "/api/customer/assistant/approvals/[approvalId]",
+      "/api/customer/assistant/approvals/[approvalId]/decide",
     ].sort(),
     "only cron workers and customer-authenticated routes may bypass the operator token gate"
   );
