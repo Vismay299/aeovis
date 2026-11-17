@@ -1,0 +1,22 @@
+{
+  "name": "stream-text-no-cost",
+  "note": "Hand-written synthetic model chunks whose step reports no usage cost and no token counts. The turn must settle `null` (unknown), never zero. 'Acme Tees' and acme.example are invented.",
+  "steps": [
+    {
+      "chunks": [
+        { "type": "stream-start", "warnings": [] },
+        { "type": "text-start", "id": "t1" },
+        { "type": "text-delta", "id": "t1", "delta": "The cost of this reply was not reported for Acme Tees." },
+        { "type": "text-end", "id": "t1" },
+        {
+          "type": "finish",
+          "usage": {
+            "inputTokens": {},
+            "outputTokens": {}
+          },
+          "finishReason": { "unified": "stop", "raw": "stop" }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "name": "stream-text-steps",
+  "note": "Hand-written synthetic model chunks for a two-step turn: text plus a tool call, then final text. No provider call and no customer data. 'Acme Tees' and acme.example are invented.",
+  "steps": [
+    {
+      "chunks": [
+        { "type": "stream-start", "warnings": [] },
+        { "type": "text-start", "id": "t1" },
+        { "type": "text-delta", "id": "t1", "delta": "Your latest scan answered " },
+        { "type": "text-delta", "id": "t1", "delta": "9 of 12 questions for Acme Tees." },
+        { "type": "text-end", "id": "t1" },
+        { "type": "tool-input-start", "id": "call-1", "toolName": "qa_echo" },
+        { "type": "tool-input-delta", "id": "call-1", "delta": "{}" },
+        { "type": "tool-input-end", "id": "call-1" },
+        { "type": "tool-call", "toolCallId": "call-1", "toolName": "qa_echo", "input": "{}" },
+        {
+          "type": "finish",
+          "usage": {
+            "inputTokens": { "total": 320, "noCache": 320, "cacheRead": 0, "cacheWrite": 0 },
+            "outputTokens": { "total": 42, "text": 42, "reasoning": 0 }
+          },
+          "finishReason": { "unified": "tool-calls", "raw": "tool_calls" },
+          "providerMetadata": { "openrouter": { "usage": { "cost": 0.0021 } } }
+        }
+      ]
+    },
+    {
+      "chunks": [
+        { "type": "stream-start", "warnings": [] },
+        { "type": "text-start", "id": "t2" },
+        { "type": "text-delta", "id": "t2", "delta": "Next, add the three missed questions to your panel." },
+        { "type": "text-end", "id": "t2" },
+        {
+          "type": "finish",
+          "usage": {
+            "inputTokens": { "total": 420, "noCache": 420, "cacheRead": 0, "cacheWrite": 0 },
+            "outputTokens": { "total": 24, "text": 24, "reasoning": 0 }
+          },
+          "finishReason": { "unified": "stop", "raw": "stop" },
+          "providerMetadata": { "openrouter": { "usage": { "cost": 0.0007 } } }
+        }
+      ]
+    }
+  ]
+}
