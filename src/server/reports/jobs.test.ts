@@ -119,6 +119,32 @@ test("never runs more than 20 prune steps", async () => {
   assert.equal(calls, REPORTS_MAX_PRUNE_STEPS);
 });
 
+test("a database without migrations 150-151 yet completes with nothing pruned", async () => {
+  for (const code of ["PGRST202", "42883"]) {
+    let calls = 0;
+    const admin = {
+      rpc: async () => {
+        calls += 1;
+        return { data: null, error: { code, message: "function prune_report_share_views does not exist" } };
+      },
+    };
+    const store = createMemoryJobStore();
+    const { outcome, jobId } = await runRetention(store, admin);
+    assert.equal(outcome, "completed", code);
+    assert.equal(calls, 1, "no second batch after a missing function");
+    const job = await store.getJob(jobId);
+    assert.deepEqual((job as { result?: unknown } | null)?.result, { views: 0 });
+  }
+});
+
+test("any other database error still fails the job", async () => {
+  const admin = {
+    rpc: async () => ({ data: null, error: { code: "57014", message: "canceling statement due to statement timeout" } }),
+  };
+  const { outcome } = await runRetention(createMemoryJobStore(), admin);
+  assert.notEqual(outcome, "completed");
+});
+
 test("a numeric string from the driver is counted", async () => {
   const admin = {
     rpc: async () => ({ data: "12", error: null }),

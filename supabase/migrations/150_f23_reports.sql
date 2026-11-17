@@ -30,13 +30,26 @@ CREATE UNIQUE INDEX IF NOT EXISTS reports_share_token_idx ON public.reports (sha
 CREATE INDEX IF NOT EXISTS reports_list_idx ON public.reports (brand_key, updated_at DESC, id DESC) INCLUDE (size_bytes);
 
 -- updated_at changes only with content, never with sharing (OpenSEO ReportRepository.ts:221-223).
-CREATE OR REPLACE FUNCTION public.reports_touch_content() RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
+-- Attribution is never re-stamped by a save. The one change allowed through is the
+-- created_by_user_id FK's ON DELETE SET NULL clearing the author once the auth user
+-- is gone: that UPDATE runs this trigger too, and restoring the old value there would
+-- leave the row pointing at a deleted user and make every user who wrote a report
+-- impossible to delete. SECURITY DEFINER so the existence check can read auth.users
+-- whichever role issued the UPDATE.
+CREATE OR REPLACE FUNCTION public.reports_touch_content() RETURNS trigger LANGUAGE plpgsql
+  SECURITY DEFINER SET search_path = public, auth, pg_temp AS $$
 BEGIN
   IF NEW.html IS DISTINCT FROM OLD.html OR NEW.title IS DISTINCT FROM OLD.title OR NEW.summary IS DISTINCT FROM OLD.summary
-     OR NEW.skill IS DISTINCT FROM OLD.skill OR NEW.template_id IS DISTINCT FROM OLD.template_id THEN
+     OR NEW.skill IS DISTINCT FROM OLD.skill OR NEW.skill_version IS DISTINCT FROM OLD.skill_version
+     OR NEW.template_id IS DISTINCT FROM OLD.template_id THEN
     NEW.updated_at := now();
   END IF;
-  NEW.created_by := OLD.created_by; NEW.created_by_user_id := OLD.created_by_user_id; NEW.created_at := OLD.created_at;
+  NEW.created_by := OLD.created_by;
+  IF NEW.created_by_user_id IS NOT NULL
+     OR EXISTS (SELECT 1 FROM auth.users u WHERE u.id = OLD.created_by_user_id) THEN
+    NEW.created_by_user_id := OLD.created_by_user_id;
+  END IF;
+  NEW.created_at := OLD.created_at;
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS reports_touch ON public.reports;

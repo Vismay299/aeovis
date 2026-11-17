@@ -407,6 +407,43 @@ async function reports(client) {
   ]);
   assert.deepEqual(after.rows[0], before.rows[0], "attribution is immutable");
 
+  // A skill_version change is a content change.
+  await client.query("UPDATE public.reports SET skill='audit-skill', skill_version='1.0.0', updated_at='2020-01-01T00:00:00Z' WHERE id=$1", [
+    reportId,
+  ]);
+  await client.query("UPDATE public.reports SET skill_version='1.1.0' WHERE id=$1", [reportId]);
+  const versionBump = await client.query(
+    "SELECT updated_at > '2020-01-01T00:00:00Z'::timestamptz AS ok FROM public.reports WHERE id=$1",
+    [reportId]
+  );
+  assert.equal(versionBump.rows[0].ok, true, "a skill_version change bumps updated_at");
+
+  // Deleting the author must succeed: the FK's ON DELETE SET NULL clears
+  // created_by_user_id (and shared_by, and a template's author) even though the
+  // trigger otherwise restores attribution on every update.
+  const departing = await makeActor(client, "reports-departing");
+  const authored = await makeReport(client, { ...departing, title: `Authored ${id()}`, shared: true });
+  const authoredTemplate = await makeTemplate(client, departing);
+  await client.query("UPDATE public.reports SET shared_by=$2 WHERE id=$1", [authored.reportId, departing.userId]);
+  await client.query("DELETE FROM auth.users WHERE id=$1", [departing.userId]);
+  const orphaned = await client.query(
+    "SELECT created_by, created_by_user_id, shared_by, share_token FROM public.reports WHERE id=$1",
+    [authored.reportId]
+  );
+  assert.equal(orphaned.rows[0].created_by, "assistant", "the report survives its author");
+  assert.equal(orphaned.rows[0].created_by_user_id, null, "deleting the author clears created_by_user_id");
+  assert.equal(orphaned.rows[0].shared_by, null, "deleting the sharer clears shared_by");
+  assert.equal(orphaned.rows[0].share_token, authored.shareToken, "the public link is not revoked by it");
+  const orphanedTemplate = await client.query(
+    "SELECT created_by_user_id FROM public.report_templates WHERE id=$1",
+    [authoredTemplate]
+  );
+  assert.equal(orphanedTemplate.rows[0].created_by_user_id, null);
+  // With the author gone nothing re-stamps a value back, and a live author is still restored.
+  await client.query("UPDATE public.reports SET summary='Edited after the author left.' WHERE id=$1", [authored.reportId]);
+  const stillNull = await client.query("SELECT created_by_user_id FROM public.reports WHERE id=$1", [authored.reportId]);
+  assert.equal(stillNull.rows[0].created_by_user_id, null);
+
   // The share pair is one fact, not two.
   await raises(
     client,

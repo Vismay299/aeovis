@@ -21,6 +21,18 @@ export const REPORTS_MAX_PRUNE_STEPS = 20;
 
 const DAY_MS = 86_400_000;
 
+/**
+ * Migrations 150–151 are applied by the owner after this code merges, and the
+ * jobs tick is already live, so for a while the daily job runs against a
+ * database with no `prune_report_share_views`. PostgREST answers PGRST202
+ * (function not in the schema cache) and Postgres 42883/42P01. That is "no
+ * views to prune", not a failed job to retry for a day.
+ */
+function isMigrationPending(error: { code?: unknown } | null): boolean {
+  const code = String(error?.code ?? "");
+  return code === "PGRST202" || code === "PGRST205" || code === "42883" || code === "42P01";
+}
+
 export type ReportJobDeps = {
   admin?: any;
   now?: () => number;
@@ -77,7 +89,10 @@ export function registerReportJobs(deps: ReportJobDeps = {}): void {
               p_before: before,
               p_limit: REPORTS_PRUNE_BATCH_LIMIT,
             });
-            if (error) throw error;
+            if (error) {
+              if (isMigrationPending(error)) return 0;
+              throw error;
+            }
             const count = Number(data);
             return Number.isFinite(count) ? count : 0;
           });
