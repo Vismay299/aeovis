@@ -29,6 +29,8 @@ const chatRoute = await import("../../app/api/customer/assistant/sessions/[sessi
 const streamRoute = await import("../../app/api/customer/assistant/sessions/[sessionId]/stream/route.ts");
 const stopRoute = await import("../../app/api/customer/assistant/sessions/[sessionId]/stop/route.ts");
 const rewindRoute = await import("../../app/api/customer/assistant/sessions/[sessionId]/rewind/route.ts");
+const approvalGetRoute = await import("../../app/api/customer/assistant/approvals/[approvalId]/route.ts");
+const approvalDecideRoute = await import("../../app/api/customer/assistant/approvals/[approvalId]/decide/route.ts");
 
 const BRAND = {
   brandKey: "acme-tees",
@@ -137,6 +139,37 @@ test("assistant routes: the flag off is 404 feature_unavailable with no-store JS
   const sessionsRes = await sessionsRoute.GET(request("/api/customer/assistant/sessions?brand_key=acme-tees"), null, flagOff);
   assert.equal(sessionsRes.status, 404);
   assert.equal((await sessionsRes.json()).code, "feature_unavailable");
+});
+
+test("AC-26: all nine JSON routes and both SSE routes are 404 feature_unavailable when the flag is off", async () => {
+  const admin = adminWith();
+  install(admin);
+  const json = (body) => ({
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json" },
+  });
+  const cases = [
+    ["GET config", () => configRoute.GET(request("/api/customer/assistant/config?brand_key=acme-tees"), null, flagOff)],
+    ["GET sessions", () => sessionsRoute.GET(request("/api/customer/assistant/sessions?brand_key=acme-tees"), null, flagOff)],
+    ["POST sessions", () => sessionsRoute.POST(request("/api/customer/assistant/sessions", json({ brand_key: "acme-tees" })), null, flagOff)],
+    ["GET session", () => sessionRoute.GET(request("/api/customer/assistant/sessions/s1?brand_key=acme-tees"), ctx({ sessionId: "s1" }), flagOff)],
+    ["PATCH session", () => sessionRoute.PATCH(request("/api/customer/assistant/sessions/s1", { ...json({ brand_key: "acme-tees", title: "x" }), method: "PATCH" }), ctx({ sessionId: "s1" }), flagOff)],
+    ["POST chat", () => chatRoute.POST(request("/api/customer/assistant/sessions/s1/chat", json(chatBody())), ctx({ sessionId: "s1" }), flagOff)],
+    ["GET stream", () => streamRoute.GET(request("/api/customer/assistant/sessions/s1/stream?brand_key=acme-tees"), ctx({ sessionId: "s1" }), flagOff)],
+    ["POST stop", () => stopRoute.POST(request("/api/customer/assistant/sessions/s1/stop", json({ brand_key: "acme-tees" })), ctx({ sessionId: "s1" }), flagOff)],
+    ["POST rewind", () => rewindRoute.POST(request("/api/customer/assistant/sessions/s1/rewind", json({ brand_key: "acme-tees", messageId: "u_1" })), ctx({ sessionId: "s1" }), flagOff)],
+    ["GET approval", () => approvalGetRoute.GET(request("/api/customer/assistant/approvals/ap-1?brand_key=acme-tees"), ctx({ approvalId: "ap-1" }), flagOff)],
+    ["POST decide", () => approvalDecideRoute.POST(request("/api/customer/assistant/approvals/ap-1/decide", json({ brand_key: "acme-tees", decision: "decline" })), ctx({ approvalId: "ap-1" }), flagOff)],
+  ];
+  for (const [name, call] of cases) {
+    const res = await call();
+    assert.equal(res.status, 404, name + " must be hidden when the flag is off");
+    assert.equal(res.headers.get("cache-control"), "no-store");
+    const body = await res.json();
+    assert.equal(body.code, "feature_unavailable", name);
+    assert.equal(body.error, "This page is not available for your workspace yet.", name);
+  }
 });
 
 test("assistant config: 200 with configured, the turn cap, skills and the four suggestions", async () => {

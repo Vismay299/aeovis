@@ -151,8 +151,10 @@ export function buildAiToolSet(i: BuildAiToolSet): ToolSet {
             rawInput !== null && typeof rawInput === "object" && !Array.isArray(rawInput)
               ? (rawInput as Record<string, unknown>)
               : {};
+          const toolCallId = options?.toolCallId ?? reg.def.name;
           const callCtx: ToolHandlerContext = {
             ...ctx,
+            requestId: i.turnId + ":" + toolCallId,
             ...(options?.abortSignal ? { signal: options.abortSignal } : {}),
           };
           const decision = await reg.approval(callCtx, input);
@@ -167,7 +169,7 @@ export function buildAiToolSet(i: BuildAiToolSet): ToolSet {
                 decision,
                 sessionId: i.sessionId,
                 turnId: i.turnId,
-                toolCallId: options?.toolCallId ?? reg.def.name,
+                toolCallId,
               },
               i.approvalDeps,
             );

@@ -164,6 +164,10 @@ test("decideApproval: approve re-quotes, claims atomically, records F09 and runs
   const admin = mkAdmin({ assistant_sessions: [{ id: "s1", brand_key: "acme-tees", user_id: "user-1" }], assistant_approvals: [approvalRow()] });
   const recorded: Array<Record<string, unknown>> = [];
   let runs = 0;
+  let captured: {
+    context?: Record<string, unknown>;
+    options?: Record<string, unknown>;
+  } = {};
   const view = await decideApproval(
     { ws: workspace(admin), approvalId: "ap-1", decision: "approve", maxUsd: 0.09 },
     {
@@ -175,13 +179,22 @@ test("decideApproval: approve re-quotes, claims atomically, records F09 and runs
         recorded.push(input as unknown as Record<string, unknown>);
         return "pa-1";
       },
-      runTool: async () => {
+      runTool: async (_reg, context, _input, options) => {
         runs += 1;
+        captured = {
+          context: context as unknown as Record<string, unknown>,
+          options: options as unknown as Record<string, unknown>,
+        };
         return successOutcome();
       },
     },
   );
   assert.equal(runs, 1);
+  assert.equal(captured.options?.maxUsd, 0.09);
+  assert.equal(captured.options?.timeoutMs, 120_000);
+  assert.equal(captured.context?.source, "approval");
+  assert.equal(captured.context?.requestId, "approval:ap-1");
+  assert.equal(captured.context?.sessionId, "s1");
   assert.equal(view.status, "executed");
   assert.equal(view.approvedMaxUsd, 0.09);
   assert.deepEqual(recorded, [

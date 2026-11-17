@@ -10,8 +10,7 @@ import { defineJob, getJobDefinition } from "../jobs/registry.ts";
 import { jobStore } from "../jobs/store.ts";
 import type { JobStore } from "../jobs/store.ts";
 import { DB_STEP } from "../jobs/stepConfigs.ts";
-import { rebuildAssistantMessage } from "./streamStore.ts";
-import { finishTurn } from "./turns.ts";
+import { interruptStaleTurn } from "./interrupted.ts";
 
 export const MAINTENANCE_INTERVAL_SECONDS = 300;
 export const RETENTION_INTERVAL_SECONDS = 86_400;
@@ -22,8 +21,7 @@ export const CHUNK_PRUNE_LIMIT = 5_000;
 export const SESSION_RETENTION_DAYS = 395;
 export const SESSION_PRUNE_LIMIT = 500;
 export const SESSION_PRUNE_STEPS = 20;
-export const INTERRUPTED_NOTICE =
-  "That reply was cut off before it finished. Everything above is saved. Ask again for a narrower piece (fewer keywords, competitors or pages), or tell me where to pick up.";
+export { INTERRUPTED_NOTICE } from "./interrupted.ts";
 
 type MaintenanceDeps = {
   admin?: SupabaseClient | null;
@@ -46,72 +44,8 @@ type StaleTurn = {
   brand_key: string;
 };
 
-function isNotice(part: unknown): boolean {
-  return (
-    part !== null &&
-    typeof part === "object" &&
-    (part as { type?: unknown }).type === "data-notice" &&
-    (part as { data?: { code?: unknown } }).data?.code === "interrupted"
-  );
-}
-
 async function interruptTurn(admin: SupabaseClient, turn: StaleTurn): Promise<boolean> {
-  const { data, error } = await admin
-    .from("assistant_stream_chunks")
-    .select("seq,data")
-    .eq("turn_id", turn.id)
-    .order("seq", { ascending: true });
-  if (error) throw error;
-  const chunks = (Array.isArray(data) ? data : []).map((row) => String((row as { data: string }).data));
-  const rebuilt = await rebuildAssistantMessage(chunks);
-
-  const existing = await admin
-    .from("assistant_messages")
-    .select("*")
-    .eq("session_id", turn.session_id)
-    .eq("turn_id", turn.id)
-    .eq("role", "assistant")
-    .maybeSingle();
-  if (existing.error) throw existing.error;
-
-  const notice = {
-    type: "data-notice",
-    data: { code: "interrupted", text: INTERRUPTED_NOTICE },
-  };
-
-  if (existing.data) {
-    const row = existing.data as { id: string; parts: unknown[]; metadata: Record<string, unknown> };
-    const parts = Array.isArray(row.parts) ? row.parts : [];
-    if (!parts.some(isNotice)) {
-      const { error: updateError } = await admin
-        .from("assistant_messages")
-        .update({ parts: [...parts, notice] })
-        .eq("session_id", turn.session_id)
-        .eq("id", row.id);
-      if (updateError) throw updateError;
-    }
-  } else {
-    const parts = [...(rebuilt?.parts ?? []), notice];
-    const { error: insertError } = await admin.from("assistant_messages").insert({
-      session_id: turn.session_id,
-      id: "a_" + turn.id.replaceAll("-", ""),
-      brand_key: turn.brand_key,
-      role: "assistant",
-      parts,
-      metadata: {},
-      turn_id: turn.id,
-    });
-    if (insertError) throw insertError;
-  }
-
-  await finishTurn(admin, turn.id, {
-    status: "interrupted",
-    stopReason: "interrupted",
-    assistantMessageId: existing.data
-      ? String((existing.data as { id: string }).id)
-      : "a_" + turn.id.replaceAll("-", ""),
-  });
-  return true;
+  return await interruptStaleTurn(admin, turn);
 }
 
 /**

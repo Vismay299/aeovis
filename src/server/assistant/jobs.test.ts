@@ -10,7 +10,6 @@ import { getJobDefinition } from "../jobs/registry.ts";
 import { runJob } from "../jobs/runner.ts";
 import { createFakeAdmin } from "../../../tests/fixtures/f22/fakeAdmin.ts";
 import {
-  INTERRUPTED_NOTICE,
   MAINTENANCE_INTERVAL_SECONDS,
   RETENTION_INTERVAL_SECONDS,
   registerAssistantJobs,
@@ -189,7 +188,10 @@ test("jobs: maintenance expires approvals, rebuilds the interrupted reply, notic
   const last = (reply?.parts as Array<Record<string, unknown>>).at(-1);
   assert.deepEqual(last, {
     type: "data-notice",
-    data: { code: "interrupted", text: INTERRUPTED_NOTICE },
+    data: {
+      code: "interrupted",
+      text: "That reply was cut off before it finished. Everything above is saved. Ask again for a narrower piece (fewer keywords, competitors or pages), or tell me where to pick up.",
+    },
   });
 
   // A second run must not add a second notice or a second reply.
@@ -227,4 +229,65 @@ test("jobs: retention prunes in 500s until a short batch and reports the total",
     .map((step) => step.name);
   assert.deepEqual(steps, ["prune-1", "prune-2", "prune-3"]);
   assert.equal(admin.rows("assistant_sessions").length, 0, "every expired session is gone");
+});
+
+test("jobs: the interrupted-reply append also fits a >1 MB stored message", async () => {
+  const bigParts = Array.from({ length: 200 }, (_, index) => ({
+    type: "tool-get_scan_report",
+    toolCallId: "call-" + index,
+    state: "output-available",
+    output: {
+      status: "success",
+      summary: "Rows " + index + ".",
+      data: { rows: Array.from({ length: 40 }, () => "x".repeat(160)) },
+      link: null,
+      untrusted: [],
+      truncated: null,
+    },
+  }));
+  assert.ok(JSON.stringify(bigParts).length > 1_000_000);
+  const admin = seedAdmin({
+    assistant_turns: [
+      {
+        id: "t-fit",
+        session_id: "s1",
+        brand_key: "acme-tees",
+        user_id: "user-1",
+        status: "streaming",
+        stop_reason: null,
+        assistant_message_id: null,
+        started_at: "2020-01-01T00:00:00.000Z",
+        heartbeat_at: "2020-01-01T00:00:00.000Z",
+        finished_at: null,
+      },
+    ],
+    assistant_messages: [
+      {
+        session_id: "s1",
+        id: "a_tfit",
+        brand_key: "acme-tees",
+        seq: 1,
+        role: "assistant",
+        parts: bigParts,
+        metadata: {},
+        turn_id: "t-fit",
+        created_at: "2020-01-01T00:00:00.000Z",
+      },
+    ],
+  });
+  const store = createMemoryJobStore({ now: () => AT });
+  const { outcome } = await runDefined(admin, "assistant.maintenance", store);
+  assert.equal(outcome, "completed");
+  const message = admin.rows("assistant_messages").find((row: any) => row.turn_id === "t-fit");
+  assert.ok(JSON.stringify(message.parts).length <= 1_000_000);
+  assert.deepEqual(message.parts[0].output.data, { omitted: true, reason: "size" });
+  assert.deepEqual(message.parts.at(-1), {
+    type: "data-notice",
+    data: {
+      code: "interrupted",
+      text: "That reply was cut off before it finished. Everything above is saved. Ask again for a narrower piece (fewer keywords, competitors or pages), or tell me where to pick up.",
+    },
+  });
+  const turn = admin.rows("assistant_turns").find((row: any) => row.id === "t-fit");
+  assert.equal(turn.assistant_message_id, "a_tfit");
 });

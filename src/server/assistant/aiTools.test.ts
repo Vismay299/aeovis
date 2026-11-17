@@ -5,7 +5,13 @@ import { AppError } from "../../shared/http/appError.ts";
 import { createFakeAdmin } from "../../../tests/fixtures/f22/fakeAdmin.ts";
 import { TOOL_REGISTRY, availableTools, getTool } from "../tools/registry.ts";
 import type { ToolRegistration } from "../tools/types.ts";
-import { PAID_TOOL_SENTENCE, buildAiToolSet, modelSchema, toolDescription } from "./aiTools.ts";
+import {
+  PAID_TOOL_SENTENCE,
+  buildAiToolSet,
+  modelSchema,
+  toolDescription,
+} from "./aiTools.ts";
+import { decideApproval } from "./approvals.ts";
 
 const BRAND = {
   brandKey: "acme-tees",
@@ -286,6 +292,105 @@ test("execute: an exception never escapes the tool boundary", async () => {
   assert.equal(result.status, "error");
   assert.equal(result.code, "bad_thing");
   assert.equal(result.message, "Something was wrong.");
+});
+
+test("confirm tool: one row with no quote, no price wording and an approval that runs without maxUsd", async () => {
+  const admin = createFakeAdmin({
+    assistant_sessions: [{ id: "s1", brand_key: "acme-tees", user_id: "user-1" }],
+  });
+  admin.setNow(() => Date.parse("2026-11-17T10:00:00.000Z"));
+  const confirmReg = getTool("submit_indexnow_urls") as ToolRegistration;
+  const set = buildAiToolSet({
+    regs: [confirmReg],
+    ctx: testCtx(admin),
+    skills: [],
+    skillLoad: () => null,
+    sessionId: "s1",
+    turnId: "t1",
+    onApproval: () => {},
+    turnMemory: {},
+  }) as Record<string, any>;
+  const result = await set.submit_indexnow_urls.execute(
+    { urls: ["https://acme.example/a"] },
+    { toolCallId: "call-confirm" },
+  );
+  assert.equal(result.status, "awaiting_approval");
+  assert.equal(result.kind, "confirm");
+  assert.equal(result.quote, null);
+  assert.equal(result.summary.includes("(up to"), false);
+  const row = admin.rows("assistant_approvals")[0];
+  assert.equal(row.kind, "confirm");
+  assert.equal(row.quote, null);
+  assert.equal(row.quoted_usd, null);
+
+  let runs = 0;
+  let options: Record<string, unknown> | undefined;
+  const view = await decideApproval(
+    {
+      ws: {
+        user: { id: "user-1", email: "owner@acme.example" },
+        brandKey: "acme-tees",
+        brand: BRAND,
+        role: "owner",
+        admin: admin as never,
+      },
+      approvalId: result.approvalId,
+      decision: "approve",
+    },
+    {
+      now: () => new Date("2026-11-17T10:00:00.000Z"),
+      env: {},
+      availableTools: async () => [confirmReg],
+      runTool: async (_reg, _ctx, _input, toolOptions) => {
+        runs += 1;
+        options = toolOptions as unknown as Record<string, unknown>;
+        return {
+          ok: true,
+          output: { ok: true },
+          summary: "Submitted 3 URLs.",
+          link: null,
+          untrusted: [],
+          truncated: null,
+        };
+      },
+    },
+  );
+  assert.equal(runs, 1);
+  assert.equal(options?.maxUsd, undefined);
+  assert.equal(view.status, "executed");
+});
+
+test("execute: each tool call carries its own <turnId>:<toolCallId> requestId", async () => {
+  const admin = createFakeAdmin();
+  const seen: string[] = [];
+  const reg = {
+    ...paidRegistration(async () => ({ ok: true })),
+    effect: "read",
+    approval: () => ({ kind: "none" }),
+    def: {
+      name: "qa_echo",
+      description: "Echo.",
+      input: z.strictObject({}),
+      output: z.looseObject({ ok: z.boolean() }),
+      handler: async (ctx: { requestId: string }) => {
+        seen.push(ctx.requestId);
+        return { ok: true };
+      },
+    },
+  } as unknown as ToolRegistration;
+  const set = buildAiToolSet({
+    regs: [reg],
+    ctx: testCtx(admin),
+    skills: [],
+    skillLoad: () => null,
+    sessionId: "s1",
+    turnId: "turn-9",
+    onApproval: () => {},
+    turnMemory: {},
+  }) as Record<string, any>;
+  await set.qa_echo.execute({}, { toolCallId: "call-a" });
+  await set.qa_echo.execute({}, { toolCallId: "call-b" });
+  assert.deepEqual(seen, ["turn-9:call-a", "turn-9:call-b"]);
 });
 
 test("requestApproval: duplicate toolCallId returns the same approval", async () => {

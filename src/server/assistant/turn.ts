@@ -33,8 +33,9 @@ import { buildKickoff } from "./kickoff.ts";
 import "./kickoffKinds.ts";
 import { getSession, setTitleIfNew } from "./sessions.ts";
 import { consumeKickoff } from "./sessions.ts";
-import { insertMessage, loadMessages, toUIMessage } from "./messages.ts";
-import type { StoredMessage } from "./messages.ts";
+import { insertMessage, fitParts, loadMessages, toUIMessage } from "./messages.ts";
+import type { InsertMessage, StoredMessage } from "./messages.ts";
+import { rebuildInterruptedTurns } from "./interrupted.ts";
 import { assertTurnRate } from "./rateLimit.ts";
 import { trackAssistantEvent } from "./telemetry.ts";
 import { beginTurn, cancelRequested, finishTurn, heartbeat } from "./turns.ts";
@@ -53,6 +54,17 @@ export const COMPACTED_NOTICE =
   "Earlier messages were summarised so the assistant stays fast. They are still shown here.";
 export const GATEWAY_ERROR_TEXT =
   "The assistant could not reach its language model. Try again in a moment.";
+
+/**
+ * AC-17: every assistant reply is fitted before insert, so a reply over the
+ * 1 MB `assistant_messages.parts` CHECK cannot be silently lost.
+ */
+export async function storeAssistantReply(
+  admin: SupabaseClient,
+  message: InsertMessage,
+): Promise<StoredMessage> {
+  return await insertMessage(admin, { ...message, parts: fitParts(message.parts) });
+}
 
 export type TurnMessageMetadata =
   | { kind: "chat"; source: "composer" | "suggestion" | "edit" | "retry" }
@@ -234,6 +246,10 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
     brandKey: i.ws.brandKey,
     userId: i.ws.user.id,
   });
+  // AC-15: beginTurn marks a stale streaming turn interrupted; that reply is
+  // rebuilt and noticed here, before the new turn's own reply is stored. A
+  // rebuild failure must not take the new turn down.
+  await rebuildInterruptedTurns(admin, { sessionId: i.sessionId, limit: 1 }).catch(() => 0);
 
   let userMessageId: string | null = i.message.id;
   try {
@@ -587,7 +603,7 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
         try {
           if (responseMessage && responseMessage.parts.length > 0) {
             assistantMessageId = responseMessage.id;
-            await insertMessage(admin, {
+            await storeAssistantReply(admin, {
               sessionId: i.sessionId,
               id: responseMessage.id,
               brandKey: i.ws.brandKey,

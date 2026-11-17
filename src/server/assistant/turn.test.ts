@@ -12,12 +12,9 @@ import { createFakeAdmin } from "../../../tests/fixtures/f22/fakeAdmin.ts";
 import type { ToolRegistration } from "../tools/types.ts";
 import { setAssistantEventTracker } from "./telemetry.ts";
 import {
-  COMPACTED_NOTICE,
-  DEADLINE_NOTICE,
   GATEWAY_ERROR_TEXT,
-  STEP_LIMIT_NOTICE,
-  TURN_CAP_NOTICE,
   runAssistantTurn,
+  storeAssistantReply,
   type TurnDeps,
   type TurnInput,
 } from "./turn.ts";
@@ -306,7 +303,9 @@ test("turn: step limit stops with the exact notice and no extra model call", asy
   );
   const body = await response.text();
   await waitForSettle(store);
-  assert.ok(body.includes(STEP_LIMIT_NOTICE(1).slice(0, 40)));
+  assert.ok(
+    body.includes("I stopped after 1 steps. Ask me to continue if you want me to go on."),
+  );
   assert.equal((model as unknown as { doStreamCalls: unknown[] }).doStreamCalls.length, 1);
   const turn = admin.rows("assistant_turns")[0];
   assert.equal(turn.stop_reason, "step_limit");
@@ -316,7 +315,6 @@ test("turn: step limit stops with the exact notice and no extra model call", asy
 test("turn: 90% of the turn cap stops with the turn_cap notice", async () => {
   const admin = seed();
   const store = spendStore();
-  const cap = 0.002;
   const response = await run(
     admin,
     baseDeps(admin, modelFromSteps(fixture("stream-text-steps.json").steps), store, {
@@ -325,7 +323,11 @@ test("turn: 90% of the turn cap stops with the turn_cap notice", async () => {
   );
   const body = await response.text();
   await waitForSettle(store);
-  assert.ok(body.includes(TURN_CAP_NOTICE(cap).slice(0, 30)));
+  assert.ok(
+    body.includes(
+      "I stopped because this reply reached its spending limit of $0.002. Ask me to continue if you want me to go on.",
+    ),
+  );
   const turn = admin.rows("assistant_turns")[0];
   assert.equal(turn.stop_reason, "turn_cap");
 });
@@ -337,7 +339,11 @@ test("turn: the deadline aborts with the deadline notice", async () => {
   const response = await run(admin, baseDeps(admin, model, store, { deadlineMs: 80 }));
   const body = await response.text();
   await waitForSettle(store);
-  assert.ok(body.includes(DEADLINE_NOTICE.slice(0, 40)));
+  assert.ok(
+    body.includes(
+      "I stopped because this reply was taking too long. Ask me to continue, or ask for a narrower piece.",
+    ),
+  );
   const turn = admin.rows("assistant_turns")[0];
   assert.equal(turn.stop_reason, "deadline");
   assert.equal(turn.status, "completed");
@@ -416,12 +422,14 @@ test("turn: streamText gets maxRetries 0, the output cap and four stop condition
   const admin = seed();
   const store = spendStore();
   const captured: { value: Record<string, unknown> | null } = { value: null };
+  let holdsAtCall = 0;
   const response = await run(
     admin,
     baseDeps(admin, modelFromSteps(fixture("stream-text-steps.json").steps), store, {
       env: { ...ENV, ASSISTANT_MAX_OUTPUT_TOKENS: "1234" },
       streamText: ((args: Record<string, unknown>) => {
         captured.value = args;
+        holdsAtCall = store.holds.size;
         return streamText(args as never);
       }) as never,
       availableTools: async () => [echo],
@@ -429,6 +437,8 @@ test("turn: streamText gets maxRetries 0, the output cap and four stop condition
   );
   await response.text();
   await waitForSettle(store);
+  // AC-13 success path: the assistant.turn hold is already open before the model.
+  assert.equal(holdsAtCall, 1);
   assert.equal(captured.value?.maxRetries, 0);
   assert.equal(captured.value?.maxOutputTokens, 1234);
   assert.equal((captured.value?.stopWhen as unknown[]).length, 4);
@@ -488,7 +498,9 @@ test("turn: compaction summarises, stores the summary and writes the compacted n
   const body = await response.text();
   await waitForSettle(store);
   assert.equal(compactionInput.value?.feature, "assistant.compaction");
-  assert.ok(body.includes(COMPACTED_NOTICE.slice(0, 30)));
+  assert.ok(
+    body.includes("Earlier messages were summarised so the assistant stays fast. They are still shown here."),
+  );
   const session = admin.rows("assistant_sessions")[0];
   assert.equal(session.summary, "The user is checking scan results.");
   assert.equal(session.compacted_through_seq, 5);
@@ -578,4 +590,101 @@ test("turn: a 30th turn in the hour is 429 before any turn row", async () => {
   );
   assert.equal(admin.rows("assistant_turns").length, 30);
   assert.equal(store.holds.size, 0);
+});
+
+test("AC-17: storeAssistantReply fits a >1 MB reply before insert", async () => {
+  const admin = seed();
+  const parts = Array.from({ length: 200 }, (_, index) => ({
+    type: "tool-get_scan_report",
+    toolCallId: "call-" + index,
+    state: "output-available",
+    output: {
+      status: "success",
+      summary: "Rows " + index + ".",
+      data: { rows: Array.from({ length: 40 }, () => "x".repeat(160)) },
+      link: null,
+      untrusted: [],
+      truncated: null,
+    },
+  }));
+  assert.ok(JSON.stringify(parts).length > 1_000_000);
+  await storeAssistantReply(admin as never, {
+    sessionId: "s1",
+    id: "a_big_reply",
+    brandKey: "acme-tees",
+    role: "assistant",
+    parts,
+    metadata: {},
+    turnId: "t-big",
+  });
+  const rows = admin.rows("assistant_messages");
+  assert.equal(rows.length, 1);
+  const stored = rows[0].parts;
+  assert.ok(JSON.stringify(stored).length <= 1_000_000);
+  assert.deepEqual(stored[0].output.data, { omitted: true, reason: "size" });
+  assert.deepEqual(stored[stored.length - 1].output.data, parts[parts.length - 1].output.data);
+});
+
+test("AC-15: the next turn rebuilds and notices the turn it interrupted, exactly once", async () => {
+  const sse = readFileSync(path.join(FIXTURES, "sse-turn.txt"), "utf8");
+  const admin = seed({
+    assistant_turns: [
+      {
+        id: "t-stale",
+        session_id: "s1",
+        brand_key: "acme-tees",
+        user_id: "user-1",
+        status: "streaming",
+        stop_reason: null,
+        assistant_message_id: null,
+        started_at: "2020-01-01T00:00:00.000Z",
+        heartbeat_at: "2020-01-01T00:00:00.000Z",
+        finished_at: null,
+      },
+    ],
+    assistant_stream_chunks: [
+      { turn_id: "t-stale", seq: 0, brand_key: "acme-tees", data: sse },
+    ],
+  });
+  const store = spendStore();
+  const model = modelFromSteps([
+    ...fixture("stream-text-steps.json").steps,
+    fixture("stream-text-steps.json").steps[1],
+  ]);
+  const first = await run(admin, baseDeps(admin, model, store));
+  await first.text();
+  await waitForSettle(store);
+
+  const old = admin.rows("assistant_turns").find((row: any) => row.id === "t-stale");
+  assert.equal(old?.status, "interrupted");
+  assert.equal(old?.stop_reason, "interrupted");
+  assert.ok(old?.assistant_message_id);
+  const replies = admin.rows("assistant_messages").filter((row: any) => row.turn_id === "t-stale");
+  assert.equal(replies.length, 1);
+  assert.equal(replies[0].id, old.assistant_message_id);
+  assert.ok(JSON.stringify(replies[0].parts).includes("9 of 12 questions"));
+  assert.deepEqual(replies[0].parts.at(-1), {
+    type: "data-notice",
+    data: {
+      code: "interrupted",
+      text: "That reply was cut off before it finished. Everything above is saved. Ask again for a narrower piece (fewer keywords, competitors or pages), or tell me where to pick up.",
+    },
+  });
+  assert.equal(
+    (model as unknown as { doStreamCalls: unknown[] }).doStreamCalls.length,
+    2,
+    "the interrupted turn is never re-run",
+  );
+
+  const store2 = spendStore();
+  const second = await run(admin, baseDeps(admin, model, store2), { id: "u_3" });
+  await second.text();
+  await waitForSettle(store2);
+  const after = admin.rows("assistant_messages").filter((row: any) => row.turn_id === "t-stale");
+  assert.equal(after.length, 1, "a repeat adds no second reply");
+  assert.equal(
+    after[0].parts.filter((part: any) => part.type === "data-notice").length,
+    1,
+    "a repeat adds no second notice",
+  );
 });
