@@ -1,4 +1,4 @@
-// F23 §6.6 — start the assistant on a template. New component (no OpenSEO
+// F23 §6.6 — start the assistant on a template. New component (no upstream
 // source): the Generate button and the template row menu open it, and a
 // successful start navigates to the new assistant session.
 

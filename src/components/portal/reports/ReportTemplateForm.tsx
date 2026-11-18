@@ -7,10 +7,10 @@
 // One form for create and edit. Shape only, as at every other boundary: the
 // caps come back from the service with their copy and show in a toast.
 //
-// NOTE (F23 Phase 4, GAP-3): OpenSEO builds this form with TanStack Form
-// (`useAppForm`). The Perceev repo has no TanStack Form dependency and no
+// NOTE (F23 Phase 4, GAP-3): the upstream builds this form with its form
+// library (`useAppForm`). The Perceev repo has no such dependency and no
 // `useAppForm` primitive, so this port uses controlled inputs with the same
-// trimmed client validation and OpenSEO's messages instead of adding a new
+// trimmed client validation and the upstream messages instead of adding a new
 // form library for one dialog.
 
 import { useState } from "react";
