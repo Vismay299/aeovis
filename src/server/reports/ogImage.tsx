@@ -3,14 +3,21 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import { ImageResponse } from "next/og";
+import { socialImageText } from "./ogText.ts";
 
 /**
  * The link preview image: one template for all reports, rendered locally with
  * the default bundled font — titles never go to an image service and no
  * remote asset is fetched. The handler in documentRoutes.ts re-checks the
  * token on every request, so a revoked title never lives in a cache.
+ *
+ * `next/og` fetches emoji and any glyph the bundled font lacks from a CDN or
+ * Google Fonts, so both strings are first reduced to what the bundled font
+ * draws (ogText.ts).
  */
-export async function renderReportSocialImage(title: string, host: string | null): Promise<Response> {
+export async function renderReportSocialImage(rawTitle: string, rawHost: string | null): Promise<Response> {
+  const title = socialImageText(rawTitle, "Shared report");
+  const host = rawHost ? socialImageText(rawHost, "") || null : null;
   return new ImageResponse(
     (
       <div

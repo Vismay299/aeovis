@@ -276,6 +276,17 @@ test("re-sanitises a document written by an older sanitiser before serving", asy
   const patch = (updates[0]?.detail as { patch: Record<string, unknown> }).patch;
   assert.equal(patch.sanitizer_version, 1);
   assert.equal(patch.html, body);
+  // The write-back is conditional on the version that was read, so a save that
+  // landed in between is not overwritten by a re-sanitised older copy.
+  const filters = (updates[0]?.detail as { filters: Array<[string, unknown]> }).filters;
+  assert.deepEqual(
+    filters,
+    [
+      ["id", REPORT_ID],
+      ["brand_key", BRAND],
+      ["sanitizer_version", 0],
+    ],
+  );
 });
 
 // ---------------------------------------------------------------------------

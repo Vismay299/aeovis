@@ -130,7 +130,11 @@ async function serveStoredHtml(
             sanitizer_version: SANITIZER_VERSION,
           })
           .eq("id", input.reportId)
-          .eq("brand_key", input.brandKey);
+          .eq("brand_key", input.brandKey)
+          // Compare-and-set on the version that was read: a save that landed
+          // between that read and this write carries the current version and
+          // must not be overwritten by a re-sanitised copy of its predecessor.
+          .eq("sanitizer_version", input.version);
         if (error) throw error;
       } catch {
         console.error(`[reports] resanitize failed ${input.reportId}`);
