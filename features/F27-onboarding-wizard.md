@@ -493,7 +493,7 @@ Branches `feat/f27-onboarding-wizard-p1` … `-p5`. `NT` = `node --import ./src/
 
 ### Phase 5 — Retire `GettingStarted` (only after the owner turns the flag on in production and confirms for one week)
 
-- [ ] **P5.T1** *Files:* `src/components/portal/overview/GettingStarted.jsx` (deleted), `src/app/portal/page.jsx` (render `SetupChecklist` unconditionally when the flag is on; nothing when off), `src/components/portal/portalRegressions.test.mjs` (remove the `GettingStarted`/`buildChecklist` assertions; reason: component retired by the owner's decision), `src/components/portal/onboarding/LegacyOnboardingForm.jsx` (kept: it is the flag-off fallback). *Verify:* `NT src/components/portal/*.test.mjs` → pass; `git grep -n "GettingStarted" src` → no matches.
+- [x] **P5.T1** *Files:* `src/components/portal/overview/GettingStarted.jsx` (deleted), `src/app/portal/page.jsx` (render `SetupChecklist` unconditionally when the flag is on; nothing when off), `src/components/portal/portalRegressions.test.mjs` (remove the `GettingStarted`/`buildChecklist` assertions; reason: component retired by the owner's decision), `src/components/portal/onboarding/LegacyOnboardingForm.jsx` (kept: it is the flag-off fallback). *Verify:* `NT src/components/portal/*.test.mjs` → pass; `git grep -n "GettingStarted" src` → no matches.
 
 ## 9. Test plan
 
