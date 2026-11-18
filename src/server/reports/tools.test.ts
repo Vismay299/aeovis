@@ -146,7 +146,7 @@ test("catalog: areas, gates, effects, approvals, annotations, links and untruste
   assert.deepEqual(decision, { kind: "confirm", label: "Replace the report \u201COld report\u201D" });
   assert.deepEqual(byName.get("list_reports")!.untrustedPaths, ["reports[*].summaryPreview"]);
   assert.deepEqual(byName.get("get_report")!.untrustedPaths, ["report.summary", "report.html"]);
-  // Summaries use the OpenSEO size copy.
+  // Summaries use the ported upstream size copy.
   assert.equal(byName.get("list_reports")!.summarize({ rowCount: 2, totalCount: 5 }, {}), "2 of 5 reports.");
   assert.equal(
     byName.get("get_report")!.summarize({ report: { title: "T", htmlBytes: 500 } }, {}),
