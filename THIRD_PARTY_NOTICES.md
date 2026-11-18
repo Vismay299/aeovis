@@ -854,3 +854,15 @@ SOFTWARE.
 - `src/server/reports/sharePage.test.ts` (ported cases from `src/server/features/reports/sharePage.test.ts:36-124`)
 - `src/server/reports/ogImage.tsx` (from `src/server/features/reports/reportSocialImage.tsx:6-89`)
 - `src/server/reports/ogRoute.test.ts` (ported cases from `src/server/features/reports/shareImageRoute.test.ts:33-99`)
+
+### F22 Phase 5 ports
+- `src/components/portal/assistant/AssistantPage.tsx` (from `src/client/features/sam/SamChat.tsx`)
+- `src/components/portal/assistant/SessionList.tsx` (from `src/client/features/sam/SamSidebarPanel.tsx`)
+- `src/components/portal/assistant/Conversation.tsx` (from `src/client/features/sam/SamConversation.tsx`)
+- `src/components/portal/assistant/ChatMessage.tsx` (from `src/client/components/chat/ChatMessage.tsx`)
+- `src/components/portal/assistant/assistantMarkdown.tsx` (from `src/client/components/Markdown.tsx`)
+- `src/components/portal/assistant/hooks/useAssistantSessions.ts` (from `src/client/features/sam/useSamSessions.ts`)
+- `src/components/portal/assistant/hooks/useAssistantChat.ts` (from `src/client/features/sam/useSamSessions.ts`, `src/client/features/sam/SamConversation.tsx`)
+- `src/components/portal/assistant/ChatComposer.tsx` (copied from `src/client/features/sam/ChatComposer.tsx`)
+- `src/components/portal/assistant/useStickToBottom.ts` (copied from `src/client/components/chat/useStickToBottom.ts`)
+- `src/shared/assistant-tools.ts` (copied from `src/client/components/chat/ChatMessage.tsx:25-28`, `humanizeToolName`)

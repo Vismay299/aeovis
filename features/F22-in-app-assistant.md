@@ -1119,11 +1119,11 @@ Branches `feat/f22-in-app-assistant-p<n>`. Every phase ends green on the full su
 **Goal:** `/portal/assistant` with session list, streaming conversation, tool result cards and approval cards.
 
 - [ ] **P5.T1 Pure presentation**
-  - [ ] **P5.T1.S1** *Files:* `src/shared/assistant-tools.ts`, `src/shared/assistant-tools.test.ts`. *Do:* §6.6.1; tests: keys equal `TOOL_NAMES ∪ {"activate_skill"}` (plus `PLANNED_TOOL_NAMES` allowed absent); every `title` ≤ 40 chars; `autoTable` cases (one array → table ≤ 8 cols/20 rows; scalars → keyValue; else JSON). *Verify:* `node --test src/shared/assistant-tools.test.ts` → pass.
+  - [x] **P5.T1.S1** *Files:* `src/shared/assistant-tools.ts`, `src/shared/assistant-tools.test.ts`. *Do:* §6.6.1; tests: keys equal `TOOL_NAMES ∪ {"activate_skill"}` (plus `PLANNED_TOOL_NAMES` allowed absent); every `title` ≤ 40 chars; `autoTable` cases (one array → table ≤ 8 cols/20 rows; scalars → keyValue; else JSON). *Verify:* `node --test src/shared/assistant-tools.test.ts` → pass.
 - [ ] **P5.T2 Components and page**
-  - [ ] **P5.T2.S1** *Files:* `src/components/portal/assistant/{useStickToBottom.ts,ChatComposer.tsx}` (COPY headers), `{ChatMessage,ToolResultCard,NoticePart,assistantMarkdown}.tsx`, `renderers/*.tsx`. *Do:* §6.6.3–6.6.7. *Verify:* `npm run typecheck` → exit 0.
-  - [ ] **P5.T2.S2** *Files:* `ApprovalCard.tsx`, `hooks/useAssistantSessions.ts`, `hooks/useAssistantChat.ts`, `SessionList.tsx`, `Conversation.tsx`, `AssistantPage.tsx`, `src/app/portal/assistant/page.tsx`, `package.json` (`@ai-sdk/react`). *Do:* §6.6.2–6.6.4; URL state `?s=<sessionId>` (replace on auto-select); kickoff: when `session.hasKickoff`, send once `{ text: "(kickoff)", metadata: { kind: "kickoff" } }`. *Verify:* `npm run build` → exit 0.
-  - [ ] **P5.T2.S3** *Files:* `src/components/app/navigation/items.ts`, `src/server/features/clientFeatures.ts`, `src/shared/query/keys.ts` (§6.2.7). *Verify:* `node --test src/components/app/navigation/navModel.test.ts src/shared/query/keys.test.ts src/server/features/` → pass.
+  - [x] **P5.T2.S1** *Files:* `src/components/portal/assistant/{useStickToBottom.ts,ChatComposer.tsx}` (COPY headers), `{ChatMessage,ToolResultCard,NoticePart,assistantMarkdown}.tsx`, `renderers/*.tsx`. *Do:* §6.6.3–6.6.7. *Verify:* `npm run typecheck` → exit 0.
+  - [x] **P5.T2.S2** *Files:* `ApprovalCard.tsx`, `hooks/useAssistantSessions.ts`, `hooks/useAssistantChat.ts`, `SessionList.tsx`, `Conversation.tsx`, `AssistantPage.tsx`, `src/app/portal/assistant/page.tsx`, `package.json` (`@ai-sdk/react`). *Do:* §6.6.2–6.6.4; URL state `?s=<sessionId>` (replace on auto-select); kickoff: when `session.hasKickoff`, send once `{ text: "(kickoff)", metadata: { kind: "kickoff" } }`. *Verify:* `npm run build` → exit 0.
+  - [x] **P5.T2.S3** *Files:* `src/components/app/navigation/items.ts`, `src/server/features/clientFeatures.ts`, `src/shared/query/keys.ts` (§6.2.7). *Verify:* `node --test src/components/app/navigation/navModel.test.ts src/shared/query/keys.test.ts src/server/features/` → pass.
 
 **Checkpoint:** `npm run build` → exit 0; full suite → pass.
 
