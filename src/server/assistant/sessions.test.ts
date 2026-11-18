@@ -154,6 +154,20 @@ test("createSession inserts the default title and returns a kickoff when given",
   assert.equal(tables.assistant_sessions.length, 2);
 });
 
+test("createSession can create the session already titled, in a single insert", async () => {
+  const { admin, tables } = makeAdmin({ assistant_sessions: [] });
+  const titled = await createSession(admin, {
+    brandKey: "brand-a",
+    userId: "user-1",
+    kickoff: { kind: "generate_report", templateId: "tpl-1" },
+    title: "Report: Monthly check-in",
+  });
+  assert.equal(titled.title, "Report: Monthly check-in");
+  assert.deepEqual(titled.kickoff, { kind: "generate_report", templateId: "tpl-1" });
+  assert.equal(tables.assistant_sessions.length, 1);
+  assert.equal(tables.assistant_sessions[0]!.title, "Report: Monthly check-in");
+});
+
 test("listSessions is newest first and excludes archived rows", async () => {
   const { admin } = makeAdmin({
     assistant_sessions: [

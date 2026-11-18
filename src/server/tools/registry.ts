@@ -12,6 +12,7 @@ import { registrations as memory } from "./catalog/memory.ts";
 import { registrations as pricing } from "./catalog/pricing.ts";
 import { registrations as questions } from "./catalog/questions.ts";
 import { registrations as rankTracking } from "./catalog/rankTracking.ts";
+import { registrations as reports } from "./catalog/reports.ts";
 import { registrations as searchConsole } from "./catalog/searchConsole.ts";
 import { registrations as site } from "./catalog/site.ts";
 import { registrations as visibility } from "./catalog/visibility.ts";
@@ -33,6 +34,7 @@ export const TOOL_REGISTRY: readonly ToolRegistration[] = [
   ...searchConsole,
   ...site,
   ...content,
+  ...reports,
 ].sort((left, right) => left.def.name.localeCompare(right.def.name));
 
 const byName = new Map(TOOL_REGISTRY.map((registration) => [registration.def.name, registration]));
