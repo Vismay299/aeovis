@@ -1,10 +1,14 @@
-import { PRIVATE_ROUTE_PREFIXES, getRouteIndexingPolicy } from "./src/server/publicSite.js";
+import { NOINDEX_ROUTE_PREFIXES, PRIVATE_ROUTE_PREFIXES, getRouteIndexingPolicy } from "./src/server/publicSite.js";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     async headers() {
         const preview = !getRouteIndexingPolicy("/", process.env).index;
-        const rules = (preview ? ["/:path*"] : PRIVATE_ROUTE_PREFIXES.map((prefix) => `${prefix}/:path*`)).map((source) => ({
+        // Private prefixes are disallowed in robots.txt; the noindex-only
+        // prefixes (F23 /s) are not, but both map to the same header so every
+        // document response carries X-Robots-Tag even on its 404 bodies.
+        const noindexPrefixes = [...PRIVATE_ROUTE_PREFIXES, ...NOINDEX_ROUTE_PREFIXES];
+        const rules = (preview ? ["/:path*"] : noindexPrefixes.map((prefix) => `${prefix}/:path*`)).map((source) => ({
             source,
             headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
         }));

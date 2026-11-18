@@ -15,6 +15,7 @@ export const APP_SURFACES = [
   { prefix: "/signup", theme: "user" },
   { prefix: "/auth", theme: "user" },
   { prefix: "/ops", theme: "light" },
+  { prefix: "/r", theme: "light" },
 ] as const;
 
 export function surfaceForPath(pathname: string): { surface: "app" | "site"; themeMode: "user" | "light" } {

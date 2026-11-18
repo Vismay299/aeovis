@@ -23,6 +23,7 @@ test("surfaceForPath resolves correct surface and theme mode", () => {
     { path: "/login", expected: { surface: "app", themeMode: "user" } },
     { path: "/auth/reset", expected: { surface: "app", themeMode: "user" } },
     { path: "/ops/measurement", expected: { surface: "app", themeMode: "light" } },
+    { path: "/r/11111111-1111-1111-8111-111111111111", expected: { surface: "app", themeMode: "light" } },
   ];
 
   for (const { path: p, expected } of cases) {
