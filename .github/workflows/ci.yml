@@ -235,6 +235,16 @@ jobs:
           kill "$f27_pid"
           npm run qa:public-browser -- http://127.0.0.1:3328 test_reports/public-browser
 
+      # F23's /r and /s routes serve their fixture documents only outside production
+      # (NODE_ENV !== "production"), so this check starts its own `next dev` instead of
+      # using the production servers above. It runs after them because `next dev` writes
+      # into `.next`, which `next start` reads from.
+      - name: reports browser contract (fixture documents)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder-anon-key
+        run: node scripts/qa/check-f23-browser.mjs
+
       - name: retain browser acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4

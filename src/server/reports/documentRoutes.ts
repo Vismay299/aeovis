@@ -17,6 +17,14 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getSupabaseAdmin } from "../../shared/supabase/admin.js";
 import { findCustomerBrand } from "../../shared/supabase/customerContext.js";
 import { SHARE_TOKEN_PATTERN, sharePseudonym } from "../../shared/report-share.ts";
+import {
+  FIXTURE_REPORT_HOST,
+  FIXTURE_REPORT_TITLE,
+  fixtureDocumentPathForReport,
+  fixtureDocumentPathForToken,
+  isFixtureMode,
+  readFixtureDocument,
+} from "./fixtureMode.ts";
 import { reportDocumentResponse, textResponse } from "../../shared/report-sandbox.ts";
 import { isFeatureEnabled as isFeatureEnabledDefault } from "../features/flags.ts";
 import type { FeatureName } from "../features/names.ts";
@@ -155,6 +163,14 @@ export async function handleReportRequest(
   deps: DocDeps = {}
 ): Promise<Response> {
   const notFound = () => textResponse(NOT_FOUND_BODY, 404);
+  if (isFixtureMode()) {
+    const fixturePath = fixtureDocumentPathForReport(reportId);
+    if (!fixturePath) return notFound();
+    const html = await readFixtureDocument(fixturePath);
+    if (html === null) return notFound();
+    const print = new URL(request.url).searchParams.get("print") === "1";
+    return reportDocumentResponse(html, { print, cacheControl: "private, no-store", noindex: true });
+  }
   if (!UUID_PATTERN.test(reportId)) return notFound();
 
   const loadContext = deps.getCustomerContext ?? defaultGetCustomerContext;
@@ -218,6 +234,22 @@ export async function handleSharedReportRequest(
     });
   }
 
+  if (isFixtureMode()) {
+    const dest = request.headers.get("sec-fetch-dest");
+    if (dest !== null && dest !== "iframe") {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `/s/${token}`, "Cache-Control": "no-store" },
+      });
+    }
+    const fixturePath = fixtureDocumentPathForToken(token);
+    if (!fixturePath) return notShared();
+    const html = await readFixtureDocument(fixturePath);
+    if (html === null) return notShared();
+    // No view recording or telemetry in fixture mode: there is no database.
+    return reportDocumentResponse(html, { cacheControl: "public, max-age=0, s-maxage=60", noindex: true });
+  }
+
   const admin = resolveAdmin(deps);
   const row = await selectSharedReport(admin, token);
   const flag = deps.isFeatureEnabled ?? isFeatureEnabledDefault;
@@ -275,11 +307,34 @@ export async function handleSharedReportRequest(
  * document, then the injected renderer. A lookup failure propagates — it must
  * not hide behind the image fallback — while a render failure answers 500.
  */
+/** Fixture-only 500: mirrors the production fallback without touching its code path. */
+function fixtureSocialImageUnavailable(): Response {
+  console.error("[reports] social image failed");
+  return new Response("Preview image unavailable.", {
+    status: 500,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
+}
+
 export async function handleReportSocialImage(
   token: string,
   deps: DocDeps & { render?: SocialImageRenderer } = {}
 ): Promise<Response> {
   if (!SHARE_TOKEN_PATTERN.test(token)) return textResponse(NOT_SHARED_BODY, 404);
+
+  if (isFixtureMode()) {
+    if (!fixtureDocumentPathForToken(token)) return textResponse(NOT_SHARED_BODY, 404);
+    try {
+      if (!deps.render) throw new Error("[reports] no social image renderer");
+      return await deps.render(FIXTURE_REPORT_TITLE, FIXTURE_REPORT_HOST);
+    } catch {
+      return fixtureSocialImageUnavailable();
+    }
+  }
 
   const admin = resolveAdmin(deps);
   const row = await selectSharedReport(admin, token);

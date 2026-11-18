@@ -16,6 +16,7 @@ import { SHARE_TOKEN_PATTERN } from "../../shared/report-share.ts";
 import { REPORT_IFRAME_SANDBOX } from "../../shared/report-sandbox.ts";
 import { isFeatureEnabled as isFeatureEnabledDefault } from "../features/flags.ts";
 import type { FeatureName } from "../features/names.ts";
+import { fixtureDocumentPathForToken, isFixtureMode } from "./fixtureMode.ts";
 
 /** The row the wrapper and the raw document both read (migration 150's `get_shared_report`). */
 export type SharedReportRow = {
@@ -261,6 +262,22 @@ export async function handleSharePage(
     );
 
   if (!SHARE_TOKEN_PATTERN.test(token)) return missing();
+
+  // Browser-check fixture (F23 §8 P5.T1.S1): the two fixed tokens serve a synthetic
+  // wrapper page with no database read; unknown tokens 404 as usual.
+  if (isFixtureMode()) {
+    if (fixtureDocumentPathForToken(token) === null) return missing();
+    const canonical = `${new URL(request.url).origin}/s/${token}`;
+    const html = renderSharePageHtml({
+      title: "Synthetic fixture report",
+      description: "Synthetic fixture summary for browser checks.",
+      canonical,
+      imageUrl: `${canonical}/og.png?v=fixture`,
+      token,
+      updatedAgo: formatUpdatedAgo(new Date().toISOString(), deps.now?.() ?? new Date()),
+    });
+    return new Response(html, { status: 200, headers: SHARE_HEADERS });
+  }
 
   const loadAdmin = deps.getSupabaseAdmin ?? getSupabaseAdmin;
   const admin = loadAdmin();
