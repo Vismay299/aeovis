@@ -61,6 +61,7 @@ Waves are the build order. A feature may start when everything in its **Depends 
 | [F25](./F25-lifecycle-email.md) | Lifecycle email | Lifecycle email | 5 | F01, F10, F24 | 160–164 | In progress |
 | [F26](./F26-product-analytics.md) | Product analytics and error tracking | Product analytics | 5 | F01 | 165–169 | In progress |
 | [F27](./F27-onboarding-wizard.md) | Onboarding wizard | Onboarding | 5 | F07, F08, F09, F18, F20, F24, F25, F26 | 170–174 | In progress |
+| [F28](./F28-operator-console.md) | Operator console: workspaces, feature access, plans, client onboarding | None (Perceev-specific) | 6 | F01, F03, F04, F24, F26, F27 | 175–179 | Spec |
 
 Status values: **Spec** (written), **In progress** (first PR open), **Merged** (all phases merged), **Accepted** (acceptance criteria verified on a deployment).
 
