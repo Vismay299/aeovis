@@ -408,6 +408,13 @@ test("GUARD — every /api route on disk gets a decision, and only the intended 
       "/api/customer/assistant/sessions/[sessionId]/rewind",
       "/api/customer/assistant/approvals/[approvalId]",
       "/api/customer/assistant/approvals/[approvalId]/decide",
+      // F23 — reports routes. Self-gated via requireWorkspace and the reports flag.
+      "/api/customer/reports",
+      "/api/customer/reports/[reportId]",
+      "/api/customer/reports/[reportId]/share",
+      "/api/customer/reports/generate",
+      "/api/customer/reports/templates",
+      "/api/customer/reports/templates/[templateId]",
     ].sort(),
     "only cron workers and customer-authenticated routes may bypass the operator token gate"
   );
