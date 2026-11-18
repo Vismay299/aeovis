@@ -645,12 +645,12 @@ Branches `feat/f23-reports-and-sharing-p<n>`.
 
 **Goal:** the assistant can save and read reports; customers can manage templates and start a generation.
 
-- [ ] **P3.T1 Routes**
+- [x] **P3.T1 Routes**
   - [x] **P3.T1.S1** *Files:* `src/app/api/customer/reports/route.ts`, `reports/[reportId]/route.ts` (GET, DELETE), `reports/[reportId]/share/route.ts`, `reports/templates/route.ts` (GET, POST), `reports/templates/[templateId]/route.ts` (PUT, DELETE), `reports/generate/route.ts`, `src/server/reports/reports.contract.ts`. *Do:* §6.5. *Verify:* `node --test src/shared/http/routeContract.test.ts` → pass.
   - [x] **P3.T1.S2** *Files:* `src/server/reports/reports.route.test.mjs` (customer hook pattern). *Do:* AC-21 and AC-19 route cases; another workspace's ids → 404; sharing off → 404 `feature_unavailable`. *Verify:* `node --import ./src/server/liveWriteGuardAuto.mjs --test src/server/reports/reports.route.test.mjs` → pass.
-- [ ] **P3.T2 Tools and registry**
+- [x] **P3.T2 Tools and registry**
   - [x] **P3.T2.S1** *Files:* `src/server/reports/tools.ts`, `tools.test.ts`, `src/server/tools/catalog/reports.ts`, `src/server/tools/names.ts` (move names; `PLANNED_TOOL_NAMES = [] as const`), `src/shared/assistant-tools.ts` (presentation entries). *Do:* §6.2.4. *Verify:* `node --test src/server/reports/tools.test.ts src/server/tools/ src/shared/assistant-tools.test.ts` → pass (F23-AC-16, AC-17 registry part).
-- [ ] **P3.T3 Skill, kickoff, prompt block**
+- [x] **P3.T3 Skill, kickoff, prompt block**
   - [x] **P3.T3.S1** *Files:* `src/assistant/skills/seo-report/SKILL.md` (§6.2.9), `src/assistant/skills/skills.test.ts` (expected list gains `"seo-report"`: 15 names), `src/assistant/skills/skillLint.test.ts` (heading list for `seo-report`), `THIRD_PARTY_NOTICES.md` (append `.agents/skills/seo-report/SKILL.md`). *Verify:* `npm run skills:build && node --test src/assistant/skills/` → pass (F23-AC-17).
   - [x] **P3.T3.S2** *Files:* `src/server/reports/generate.ts`, `generate.test.ts`, `src/server/reports/kickoff.ts`, `src/server/assistant/kickoffKinds.ts` (add `import "../reports/kickoff.ts";`), `src/server/reports/promptBlock.ts`, `promptBlock.test.ts`, `src/server/assistant/turn.ts` (pass `templatesBlock`). *Do:* §6.2.8; kickoff text exact; deleted template → 409; block null when off or empty. *Verify:* `node --test src/server/reports/generate.test.ts src/server/reports/promptBlock.test.ts src/server/assistant/turn.test.ts` → pass (F23-AC-19, 20).
 
@@ -660,8 +660,8 @@ Branches `feat/f23-reports-and-sharing-p<n>`.
 
 **Goal:** Reports, report detail and Templates pages with share, delete and generate flows.
 
-- [ ] **P4.T1.S1** *Files:* `src/components/portal/reports/{formatWrittenBy.ts,formatWrittenBy.test.ts}`. *Verify:* `node --test src/components/portal/reports/formatWrittenBy.test.ts` → pass.
-- [ ] **P4.T1.S2** *Files:* `src/components/portal/reports/{ReportsList,ReportViewer,ShareReportDialog,DeleteReportDialog,FullScreenReport,ReportTemplatesList,ReportTemplateForm,GenerateReportDialog}.tsx`, `hooks/useReports.ts` (PORT headers where §7 says PORT), `src/app/portal/reports/page.tsx`, `[reportId]/page.tsx`, `templates/page.tsx`, `src/shared/query/keys.ts`, `src/components/app/navigation/items.ts`. *Do:* §6.6. *Verify:* `npm run build` → exit 0; `node --test src/shared/query/keys.test.ts src/components/app/navigation/navModel.test.ts` → pass.
+- [x] **P4.T1.S1** *Files:* `src/components/portal/reports/{formatWrittenBy.ts,formatWrittenBy.test.ts}`. *Verify:* `node --test src/components/portal/reports/formatWrittenBy.test.ts` → pass.
+- [x] **P4.T1.S2** *Files:* `src/components/portal/reports/{ReportsList,ReportViewer,ShareReportDialog,DeleteReportDialog,FullScreenReport,ReportTemplatesList,ReportTemplateForm,GenerateReportDialog}.tsx`, `hooks/useReports.ts` (PORT headers where §7 says PORT), `src/app/portal/reports/page.tsx`, `[reportId]/page.tsx`, `templates/page.tsx`, `src/shared/query/keys.ts`, `src/components/app/navigation/items.ts`. *Do:* §6.6. *Verify:* `npm run build` → exit 0; `node --test src/shared/query/keys.test.ts src/components/app/navigation/navModel.test.ts` → pass.
 
 **Checkpoint:** build green.
 
