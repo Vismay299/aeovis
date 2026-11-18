@@ -131,6 +131,7 @@ SOFTWARE.
 - `src/assistant/skills/seo-audit/SKILL.md` (`.agents/skills/seo-audit/SKILL.md`)
 - `src/assistant/skills/seo-coach/SKILL.md` (`.agents/skills/seo-coach/SKILL.md`)
 - `src/assistant/skills/seo-project-setup/SKILL.md` (`.agents/skills/seo-project-setup/SKILL.md`)
+- `src/assistant/skills/seo-report/SKILL.md` (`.agents/skills/seo-report/SKILL.md`)
 - `src/assistant/skills/frontmatter.ts` (`src/server/features/sam/samSkills.ts` frontmatter schema, parse and internal filter)
 - `src/assistant/skills/index.ts` (`src/server/features/sam/samSkills.ts` fingerprint, catalog cache and load)
 - `src/assistant/skills/skills.test.ts` (`src/server/features/sam/samSkills.test.ts` served-skill guard)

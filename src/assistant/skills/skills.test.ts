@@ -64,9 +64,9 @@ test("listed skills are sorted by name", () => {
   );
 });
 
-// F21-AC-07: with every declared tool available the served catalog is exactly the 14 names of
-// §6.2.5, in the order the loader's plain string sort produces.
-test("with every declared tool available the served list is exactly the 14 names of §6.2.5", () => {
+// F21-AC-07 + F23-AC-17: with every declared tool available the served catalog is exactly the 15 names of
+// §6.2.5 plus seo-report, in the order the loader's plain string sort produces.
+test("with every declared tool available the served list is exactly the 15 names of §6.2.5", () => {
   const names = listSkills({ availableTools: new Set<string>(TOOL_NAMES), enabled: true }).map((s) => s.name);
   assert.deepEqual(names, [
     "ai-crawler-fix",
@@ -83,8 +83,8 @@ test("with every declared tool available the served list is exactly the 14 names
     "seo-audit",
     "seo-coach",
     "seo-project-setup",
+    "seo-report",
   ]);
-  assert.ok(!names.includes("seo-report"), "seo-report is absent until F23 adds it");
 });
 
 test("loadSkill prepends the surface note to the body and keeps the version", () => {
