@@ -7,6 +7,15 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { openPortal, SUPABASE_URL } from "./portalFixtureHarness.mjs";
+// The fixture server must answer to the same request contract as the real one, so
+// every body the page POSTs is checked against the schemas the routes use. A page
+// that sends something the real route would refuse then fails here, not in prod.
+const { assistantChatBodySchema } = await import(
+  "../../src/app/api/customer/assistant/sessions/[sessionId]/chat/route.ts"
+);
+const { assistantDecideRequestSchema, assistantRewindRequestSchema, assistantStopRequestSchema } = await import(
+  "../../src/server/assistant/assistant.contract.ts"
+);
 
 let chromium;
 try {
@@ -185,6 +194,7 @@ function replyFromStream(text) {
 
 const browser = await chromium.launch({ headless: true });
 const allRequests = [];
+const contractViolations = [];
 let failures = 0;
 let passed = 0;
 
@@ -198,6 +208,19 @@ async function record(id, expected, run) {
     console.error(`${id}: FAIL — ${error?.stack || error}`);
   }
 }
+
+/** Validates a POSTed body like the real route; false means the route would have answered 400. */
+function matchesRealRoute(label, schema, body) {
+  const parsed = schema.safeParse(body);
+  if (parsed.success) return true;
+  contractViolations.push(`${label}: ${JSON.stringify(parsed.error.issues.slice(0, 3))}`);
+  return false;
+}
+const REFUSED = {
+  status: 400,
+  contentType: "application/json",
+  body: JSON.stringify({ error: "The request was not valid.", code: "invalid_request" }),
+};
 
 /**
  * One isolated assistant page: Supabase login + memberships from the harness,
@@ -241,6 +264,7 @@ async function makePage(hooks = {}, options = {}) {
         if (pathname.endsWith("/decide") && request.method() === "POST") {
           const body = request.postDataJSON();
           log.decide.push(body);
+          if (!matchesRealRoute("decide", assistantDecideRequestSchema, body)) return route.fulfill(REFUSED);
           state.decided = true;
           if (hooks.decide) {
             const decided = hooks.decide(body);
@@ -268,6 +292,7 @@ async function makePage(hooks = {}, options = {}) {
         if (action === "chat" && request.method() === "POST") {
           const body = request.postDataJSON();
           log.chat.push(body);
+          if (!matchesRealRoute("chat", assistantChatBodySchema, body)) return route.fulfill(REFUSED);
           const meta = body.message?.metadata ?? {};
           if (meta.kind === "approval") {
             const text = `data: {"type":"start","messageId":"a_cont_000000000000000000000001","messageMetadata":{"turnId":"turn_cont_1","model":"synthetic-fixture"}}\n\ndata: {"type":"text-start","id":"text-1"}\n\ndata: {"type":"text-delta","id":"text-1","delta":"Ran the approved lookup and folded it into your reply."}\n\ndata: {"type":"text-end","id":"text-1"}\n\ndata: {"type":"finish","messageMetadata":{"turnId":"turn_cont_1","costUsd":0.0009,"costKnown":true}}\n\ndata: [DONE]\n`;
@@ -299,12 +324,15 @@ async function makePage(hooks = {}, options = {}) {
           return route.fulfill(sseBody(text));
         }
         if (action === "stop" && request.method() === "POST") {
-          log.stop.push(request.postDataJSON());
+          const body = request.postDataJSON();
+          log.stop.push(body);
+          if (!matchesRealRoute("stop", assistantStopRequestSchema, body)) return route.fulfill(REFUSED);
           return route.fulfill(jsonBody({ stopped: true }));
         }
         if (action === "rewind" && request.method() === "POST") {
           const body = request.postDataJSON();
           log.rewind.push(body);
+          if (!matchesRealRoute("rewind", assistantRewindRequestSchema, body)) return route.fulfill(REFUSED);
           extra.length = 0;
           if (hooks.rewindResult) return route.fulfill(jsonBody(hooks.rewindResult(body)));
           return route.fulfill(jsonBody({ removed: 2, messages: [] }));
@@ -630,6 +658,11 @@ try {
       }
     }).length;
     return `${allRequests.length} requests logged, ${placeholder} to the route-mocked Supabase placeholder, none elsewhere`;
+  });
+
+  await record("C15", "every body the page POSTed satisfies the real routes' schemas", async () => {
+    assert.deepEqual(contractViolations, [], `the real routes would have refused: ${contractViolations.join("; ")}`);
+    return "chat, decide, rewind and stop bodies all valid";
   });
 } finally {
   await browser.close();
