@@ -715,3 +715,111 @@ test("AC-15: the next turn rebuilds and notices the turn it interrupted, exactly
     "a repeat adds no second notice",
   );
 });
+
+function templateRow(over: Record<string, unknown> = {}) {
+  return {
+    id: "11111111-1111-4111-8111-111111111111",
+    brand_key: "acme-tees",
+    name: "Monthly check-in",
+    description: "The monthly update.",
+    instructions: "Audience: the lead.",
+    created_by: "app",
+    created_by_user_id: "user-1",
+    created_at: "2026-11-17T09:00:00.000Z",
+    updated_at: "2026-11-17T09:00:00.000Z",
+    ...over,
+  };
+}
+
+test("turn: the workspace's report templates reach the system prompt when reports is on", async () => {
+  const admin = seed({ report_templates: [templateRow()] });
+  const store = spendStore();
+  let system = "";
+  const response = await run(
+    admin,
+    baseDeps(admin, modelFromSteps(fixture("stream-text-steps.json").steps), store, {
+      isFeatureEnabled: async (name) => name === "reports",
+      streamText: ((args: Record<string, unknown>) => {
+        system = String(args.system);
+        return streamText(args as never);
+      }) as never,
+    }),
+  );
+  await response.text();
+  await waitForSettle(store);
+  assert.ok(system.includes("<report_templates>"));
+  assert.ok(system.includes("- Monthly check-in (id 11111111-1111-4111-8111-111111111111): The monthly update."));
+});
+
+test("turn: with reports off the prompt has no templates block and the templates are never read", async () => {
+  const admin = seed({ report_templates: [templateRow()] });
+  const store = spendStore();
+  let system = "";
+  const response = await run(
+    admin,
+    baseDeps(admin, modelFromSteps(fixture("stream-text-steps.json").steps), store, {
+      isFeatureEnabled: async () => false,
+      streamText: ((args: Record<string, unknown>) => {
+        system = String(args.system);
+        return streamText(args as never);
+      }) as never,
+    }),
+  );
+  await response.text();
+  await waitForSettle(store);
+  assert.equal(system.includes("report_templates"), false);
+  assert.equal(admin.queryCalls.some((call: { table: string }) => call.table === "report_templates"), false);
+});
+
+test("turn: the templates read overlaps the tool lookup instead of waiting behind it", async () => {
+  const admin = seed({ report_templates: [templateRow()] });
+  const store = spendStore();
+  let templatesReadWhileToolsPending = false;
+  const response = await run(
+    admin,
+    baseDeps(admin, modelFromSteps(fixture("stream-text-steps.json").steps), store, {
+      isFeatureEnabled: async (name) => name === "reports",
+      availableTools: async () => {
+        // Give the other pre-model reads time to start, then look at what they did.
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        templatesReadWhileToolsPending = admin.queryCalls.some(
+          (call: { table: string }) => call.table === "report_templates",
+        );
+        return [echo];
+      },
+    }),
+  );
+  await response.text();
+  await waitForSettle(store);
+  assert.equal(
+    templatesReadWhileToolsPending,
+    true,
+    "the template query was already issued while the tool lookup was still pending",
+  );
+});
+
+test("turn: a failing templates read is no block, not a failed turn", async () => {
+  const store = spendStore();
+  let system = "";
+  const failing = seed();
+  const realFrom = failing.from;
+  failing.from = ((table: string) => {
+    if (table === "report_templates") throw new Error("storage down");
+    return realFrom(table);
+  }) as never;
+  const response = await run(
+    failing,
+    baseDeps(failing, modelFromSteps(fixture("stream-text-steps.json").steps), store, {
+      isFeatureEnabled: async (name) => name === "reports",
+      streamText: ((args: Record<string, unknown>) => {
+        system = String(args.system);
+        return streamText(args as never);
+      }) as never,
+    }),
+  );
+  assert.equal(response.status, 200);
+  await response.text();
+  await waitForSettle(store);
+  assert.equal(system.includes("report_templates"), false);
+  assert.equal(failing.rows("assistant_turns")[0].status, "completed");
+});

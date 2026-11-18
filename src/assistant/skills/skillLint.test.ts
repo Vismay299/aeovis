@@ -70,6 +70,20 @@ const PORTED_SKILL_HEADINGS: Record<string, string[]> = {
     "Guardrails",
   ],
   "seo-project-setup": ["Goal", "Tone", "Where the answers go", "Checklist", "Output format", "Guardrails"],
+  "seo-report": [
+    "Goal",
+    "Before you write",
+    "Following a template",
+    "Writing rules",
+    "Title and summary",
+    "The closing section",
+    "HTML constraints",
+    "Sharing",
+    "After you save",
+    "Starter template",
+    "The primitives",
+    "Guardrails",
+  ],
 };
 
 function headings(body: string): string[] {

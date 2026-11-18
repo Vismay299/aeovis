@@ -19,7 +19,7 @@ import type { NewReportTemplateRow, ReportTemplateStore } from "./templateReposi
 //   - deleting a template leaves reports (there is no FK), deleting a report
 //     deletes its view rows (ON DELETE CASCADE).
 
-type StoredReport = ReportMetadata & { html: string; sessionId: string | null };
+type StoredReport = ReportMetadata & { html: string };
 
 type StoredView = {
   report_id: string;
@@ -78,7 +78,7 @@ export function createMemoryReportStore(opts: { now?: () => Date } = {}): Memory
   const allDocuments = () => [...reports.values()];
 
   const copy = (report: StoredReport): ReportMetadata => {
-    const { html: _html, sessionId: _sessionId, ...metadata } = report;
+    const { html: _html, ...metadata } = report;
     return { ...metadata };
   };
 

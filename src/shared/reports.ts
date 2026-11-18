@@ -81,6 +81,12 @@ export type ReportMetadata = {
   createdBy: ReportCreatedBy;
   /** From the authenticated context, and nowhere else. Null once the user is deleted. */
   createdByUserId: string | null;
+  /**
+   * The assistant session that wrote the report, or null. No foreign key: the
+   * session may have been archived or pruned, so a reader resolves it (and its
+   * archived state) through the session repository before linking to it.
+   */
+  sessionId: string | null;
   /** UTF-8 byte length of the stored document. */
   sizeBytes: number;
   /** The sanitiser version that produced the stored document. */

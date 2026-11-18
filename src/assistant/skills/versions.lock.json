@@ -54,5 +54,9 @@
   "seo-project-setup": {
     "version": "1.0.0",
     "sha256": "213ab9d03e8ea00b3f9ca1da0187dc6cde759310b4ac5475ac3f34be91ed520d"
+  },
+  "seo-report": {
+    "version": "1.0.0",
+    "sha256": "898886b7569ae2e2d366ecaf797c5e86a33aa69fe7ca5540da3c6309e103b2ea"
   }
 }

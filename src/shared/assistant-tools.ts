@@ -605,6 +605,67 @@ export const TOOL_PRESENTATION: Record<string, ToolPresentation> = {
     area: "content",
     render: { kind: "auto" },
   },
+  // F23 — reports
+  list_reports: {
+    title: "Reports",
+    running: "Loading reports…",
+    done: "Loaded reports",
+    area: "reports",
+    render: {
+      kind: "table",
+      rowsPath: "reports",
+      columns: [
+        { key: "title", label: "Title" },
+        { key: "skill", label: "Skill" },
+        { key: "updatedAt", label: "Updated", format: "date" },
+      ],
+      totalPath: "totalCount",
+    },
+  },
+  get_report: {
+    title: "Report",
+    running: "Loading report…",
+    done: "Loaded report",
+    area: "reports",
+    render: {
+      kind: "keyValue",
+      fields: [
+        { key: "report.title", label: "Title" },
+        { key: "report.skill", label: "Skill" },
+        { key: "report.htmlBytes", label: "Size" },
+        { key: "report.updatedAt", label: "Updated", format: "date" },
+      ],
+    },
+  },
+  save_report: {
+    title: "Report",
+    running: "Saving report…",
+    done: "Saved report",
+    area: "reports",
+    render: {
+      kind: "keyValue",
+      fields: [
+        { key: "title", label: "Title" },
+        { key: "created", label: "Created" },
+        { key: "htmlBytes", label: "Size" },
+        { key: "sanitized.changed", label: "Changes on save" },
+      ],
+    },
+  },
+  list_report_templates: {
+    title: "Report templates",
+    running: "Loading report templates…",
+    done: "Loaded report templates",
+    area: "reports",
+    render: {
+      kind: "table",
+      rowsPath: "templates",
+      columns: [
+        { key: "name", label: "Name" },
+        { key: "description", label: "Description" },
+      ],
+    },
+  },
   // F21 — skill activation (not in TOOL_NAMES; always presented)
   activate_skill: {
     title: "Skill",
