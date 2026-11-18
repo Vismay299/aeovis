@@ -43,6 +43,9 @@ test("every builder returns its documented shape", () => {
   assert.deepEqual(keys.questions("a"), ["questions", "a"]);
   assert.deepEqual(keys.questionResearchKeywords("a"), ["questionResearchKeywords", "a"]);
   assert.deepEqual(keys.schedule("a"), ["schedule", "a"]);
+  assert.deepEqual(keys.reports("a"), ["reports", "a"]);
+  assert.deepEqual(keys.report("r1"), ["report", "r1"]);
+  assert.deepEqual(keys.reportTemplates("a"), ["reportTemplates", "a"]);
 });
 
 test("every workspace-scoped builder puts brandKey second and is a workspace domain", () => {
@@ -100,6 +103,8 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     keys.rankSuggestions("acme", "example.com", 2356),
     keys.setup("acme"),
     keys.explore("acme"),
+    keys.reports("acme"),
+    keys.reportTemplates("acme"),
   ];
   assert.equal(scoped.length, WORKSPACE_DOMAINS.size);
   for (const key of scoped) {
@@ -109,6 +114,7 @@ test("every workspace-scoped builder puts brandKey second and is a workspace dom
     assert.equal(isWorkspaceKey(key, "other"), false, key[0]);
   }
   assert.equal(WORKSPACE_DOMAINS.has("scanReport"), false);
+  assert.equal(WORKSPACE_DOMAINS.has("report"), false);
 });
 
 test("F16 workspace key builders are invalidated only for their workspace", async () => {

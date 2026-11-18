@@ -18,6 +18,7 @@ import {
   BookOpen,
   Bookmark,
   ChartColumn,
+  FileText,
   Gauge,
   Globe,
   LayoutDashboard,
@@ -186,6 +187,13 @@ export const NAV_GROUPS: readonly NavGroup[] = [
         href: "/portal/assistant",
         icon: MessageSquareText,
         flag: "assistant",
+      },
+      {
+        id: "reports",
+        label: "Reports",
+        href: "/portal/reports",
+        icon: FileText,
+        flag: "reports",
       },
       {
         id: "context",
