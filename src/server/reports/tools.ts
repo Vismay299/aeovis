@@ -1,6 +1,6 @@
 /**
- * F23 §6.2.4 — the four report tools. Own code (PATTERN of OpenSEO's
- * report-tools.ts, report-template-tools.ts: no delete, no sharing, no
+ * F23 §6.2.4 — the four report tools. Own code (PATTERN of the upstream
+ * report-tools, report-template-tools: no delete, no sharing, no
  * template writes for the assistant; never returns tokens).
  */
 
@@ -228,7 +228,7 @@ export const saveReportTool = {
         skill: input.skill,
         skillVersion,
         templateId: input.templateId,
-        sessionId: ctx.sessionId ?? null,
+        sessionId: ctx.sessionId ?? undefined,
         createdBy: "assistant",
         createdByUserId: ctx.userId,
       },
