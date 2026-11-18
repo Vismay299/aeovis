@@ -32,9 +32,11 @@ export const TOOL_NAMES = [
   "get_question_answer", "research_questions", "generate_questions", "estimate_price",
   "get_serp_results", "find_serp_competitors", "get_search_console_performance",
   "map_site_pages", "read_pages", "check_ai_crawler_access", "start_content_draft", "list_content_items",
+  // F23
+  "list_reports", "get_report", "save_report", "list_report_templates",
 ] as const;
 
-export const PLANNED_TOOL_NAMES = ["list_reports", "get_report", "save_report", "list_report_templates"] as const; // F23
+export const PLANNED_TOOL_NAMES = [] as const;
 
 export const PAID_TOOL_NAMES = [
   "research_keywords", "get_domain_overview", "get_ranked_keywords", "add_rank_tracking_keywords", "run_rank_check",
