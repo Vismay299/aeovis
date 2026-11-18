@@ -1,14 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { Play, PenLine } from "lucide-react";
 import { usePortal } from "@/components/portal/PortalShell";
 import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
 import { Button, PageHeader } from "@/components/portal/ui";
 import { QueryError } from "@/components/app/QueryState";
 import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
-import { panelQueryOptions } from "@/shared/query/portalQueries";
-import GettingStarted, { buildChecklist } from "@/components/portal/overview/GettingStarted";
 import { SetupChecklist } from "@/components/portal/overview/SetupChecklist";
 import KpiRow from "@/components/portal/overview/KpiRow";
 import VisibilityTrend from "@/components/portal/overview/VisibilityTrend";
@@ -17,24 +14,9 @@ import ContentStudioCard from "@/components/portal/overview/ContentStudioCard";
 import { websiteHost } from "@/components/portal/overview/overviewModel";
 import { NextRunBadge } from "@/components/portal/schedule/NextRunBadge";
 
-/** true/false once the workspace's question panel is known; null while loading or unreadable. */
-function useApprovedPanel(brandKey) {
-  const query = useQuery({
-    ...panelQueryOptions(brandKey),
-    select: (body) =>
-      Array.isArray(body?.items)
-        ? body.items.some(
-            (p) => p.artifact_key === "default" && p.state === "approved"
-          )
-        : null,
-  });
-  return query.isError ? null : query.data ?? null;
-}
-
 export default function OverviewPage() {
   const {
     brand,
-    brandKey,
     overview,
     overviewError,
     overviewQueryError,
@@ -44,11 +26,9 @@ export default function OverviewPage() {
   } = usePortal();
   const workspace = useWorkspace();
   const onboardingWizard = workspace?.features?.onboarding_wizard === true;
-  const panelApproved = useApprovedPanel(brandKey);
 
   const name = brand?.display_name || overview?.brand?.display_name || "Your brand";
   const host = websiteHost(brand?.website || overview?.brand?.website);
-  const checklist = buildChecklist({ overview, gsc, scan, panelApproved });
 
   return (
     <div className="space-y-6">
@@ -82,11 +62,7 @@ export default function OverviewPage() {
 
         <ScanProgressCard showIdle={!overview?.scans?.length} />
 
-        {onboardingWizard ? (
-          <SetupChecklist />
-        ) : overview ? (
-          <GettingStarted steps={checklist} />
-        ) : null}
+        {onboardingWizard ? <SetupChecklist /> : null}
 
         <KpiRow overview={overview} gsc={gsc} />
 

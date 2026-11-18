@@ -695,23 +695,6 @@ test("multi-engine reports count questions named by any engine, once per questio
   assert.equal(questionsNamingBrand(rows), 1);
 });
 
-test("Getting started asks for an approved question panel between the workspace and the first scan", async () => {
-  const { buildChecklist } = await compileJsx(path.join(here, "overview/GettingStarted.jsx"), {
-    modules: new Map([["react", React], ["../ui", {}], ["./overview.css", {}]]),
-    autoNull: ["lucide-react"],
-  });
-  const scan = { start: noop, starting: false, active: false };
-  const steps = (panelApproved, scans = []) => buildChecklist({ overview: { scans }, gsc: null, scan, panelApproved });
-  assert.deepEqual(steps(false).map((step) => step.id), ["workspace", "panel", "scan", "gsc", "draft"]);
-  const panel = steps(false).find((step) => step.id === "panel");
-  assert.equal(panel.done, false);
-  assert.equal(panel.action.href, "/portal/measurement");
-  assert.equal(steps(true).find((step) => step.id === "panel").done, true);
-  assert.equal(steps(null).find((step) => step.id === "panel").done, false, "unknown with no scans is not done");
-  assert.equal(steps(null, [{ id: "s" }]).find((step) => step.id === "panel").done, true, "a scan only starts from an approved panel");
-  assert.equal(steps(false, [{ id: "s" }]).find((step) => step.id === "panel").done, false, "a known unapproved panel wins over history");
-});
-
 test("measurement page displays approved question panel, counts questions, runs scan, and preserves exact approve payload", async (t) => {
   const lifecycle = createLifecycle();
   t.after(() => lifecycle.close());
@@ -908,7 +891,8 @@ test("measurement page swaps legacy question panel for QuestionsWorkspace when q
   assert.ok(stub, "QuestionsWorkspace must render when question_curation is on");
 });
 
-test("Overview swaps GettingStarted for SetupChecklist only when onboarding_wizard is on", async () => {
+test("Overview renders SetupChecklist only when onboarding_wizard is on, else nothing", async () => {
+  // The old checklist was retired by the owner's decision; flag off renders nothing.
   const ui = {
     PageHeader: ({ title, description, actions, children }) =>
       React.createElement(
@@ -936,18 +920,6 @@ test("Overview swaps GettingStarted for SetupChecklist only when onboarding_wiza
       ),
     ProgressBar: () => null,
   };
-
-  const GettingStarted = await compileJsx(
-    path.join(here, "overview/GettingStarted.jsx"),
-    {
-      modules: new Map([
-        ["react", React],
-        ["../ui", ui],
-        ["./overview.css", {}],
-      ]),
-      autoNull: ["lucide-react"],
-    },
-  );
 
   const SetupChecklistStub = () =>
     React.createElement(
@@ -993,7 +965,6 @@ test("Overview swaps GettingStarted for SetupChecklist only when onboarding_wiza
             }),
           },
         ],
-        ["@/components/portal/overview/GettingStarted", GettingStarted],
         ["@/components/portal/overview/KpiRow", { __esModule: true, default: () => null }],
         ["@/components/portal/overview/VisibilityTrend", { __esModule: true, default: () => null }],
         ["@/components/portal/overview/RecentScans", { __esModule: true, default: () => null }],
@@ -1023,8 +994,11 @@ test("Overview swaps GettingStarted for SetupChecklist only when onboarding_wiza
   );
 
   const flagOff = renderToHtml(OverviewPage.default);
-  assert.match(textOf(flagOff), /Getting started/);
+  // The page has loaded (header renders), so the missing checklist is a retirement, not a skeleton.
+  assert.match(textOf(flagOff), /Acme/);
   assert.doesNotMatch(flagOff, /setup-checklist/);
+  assert.doesNotMatch(textOf(flagOff), /Getting started/);
+  assert.doesNotMatch(textOf(flagOff), /Get started/);
 
   workspaceFeatures = { onboarding_wizard: true };
   const flagOn = renderToHtml(OverviewPage.default);
