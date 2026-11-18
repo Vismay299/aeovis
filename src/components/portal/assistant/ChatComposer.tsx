@@ -61,6 +61,7 @@ export function ChatComposer({
           onChange={(event) => setValue(event.target.value)}
           onKeyDown={handleKey}
           rows={1}
+          maxLength={8000}
           placeholder="Ask about your AI visibility, keywords or site…"
           className="max-h-40 min-h-0 px-3 leading-relaxed"
           aria-label="Message the assistant"

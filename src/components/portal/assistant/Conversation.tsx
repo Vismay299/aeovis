@@ -72,6 +72,7 @@ export function Conversation({
       const detail = await queryClient.fetchQuery({
         queryKey: options.queryKey,
         queryFn: options.queryFn,
+        staleTime: options.staleTime,
       });
       chatRef.current.setMessages(detail.messages);
     } catch {

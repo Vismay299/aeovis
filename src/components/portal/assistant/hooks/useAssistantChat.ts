@@ -8,13 +8,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import type { UIMessage } from "ai";
 import { ApiError, fetchJson } from "@/shared/query/fetchJson";
 import type { SpendRefusalCode } from "@/shared/query/errors";
+import { createAssistantTransport, userMessage, type SendSource } from "./chatTransport.ts";
 
 export type AssistantChatMessage = UIMessage;
 
-export type SendSource = "composer" | "suggestion" | "edit" | "retry";
+export type { SendSource } from "./chatTransport.ts";
 
 export type AssistantSendError = {
   code: string;
@@ -43,10 +44,6 @@ const REJECTED_BEFORE_STREAM = new Set([
   "invalid_request",
   ...Object.keys(SPEND_STATUS),
 ]);
-
-function newMessageId(): string {
-  return `u-${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-}
 
 /** The transport throws the raw JSON error body as the message; recover the fields. */
 export function parseSendError(error: unknown): AssistantSendError {
@@ -107,16 +104,7 @@ export function useAssistantChat({
   rejectedRef.current = onRejectedDraft;
 
   const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: `/api/customer/assistant/sessions/${encodeURIComponent(sessionId)}/chat`,
-        prepareSendMessagesRequest: ({ messages }) => ({
-          body: { brand_key: brandKey, message: messages[messages.length - 1] },
-        }),
-        prepareReconnectToStreamRequest: () => ({
-          api: `/api/customer/assistant/sessions/${encodeURIComponent(sessionId)}/stream?brand_key=${encodeURIComponent(brandKey)}`,
-        }),
-      }),
+    () => createAssistantTransport({ sessionId, brandKey }),
     [sessionId, brandKey],
   );
 
@@ -147,11 +135,7 @@ export function useAssistantChat({
     (text: string, source: SendSource = "composer") => {
       setSendError(null);
       lastSubmittedText.current = text;
-      void sendMessage({
-        text,
-        metadata: { kind: "chat", source },
-        messageId: newMessageId(),
-      });
+      void sendMessage(userMessage(text, { kind: "chat", source }));
     },
     [sendMessage],
   );
@@ -162,11 +146,7 @@ export function useAssistantChat({
     (approvalId: string) => {
       setSendError(null);
       lastSubmittedText.current = "";
-      void sendMessage({
-        text: "(approval)",
-        metadata: { kind: "approval", approvalId },
-        messageId: newMessageId(),
-      });
+      void sendMessage(userMessage("(approval)", { kind: "approval", approvalId }));
     },
     [sendMessage],
   );
@@ -174,11 +154,7 @@ export function useAssistantChat({
   const sendKickoff = useCallback(() => {
     setSendError(null);
     lastSubmittedText.current = "";
-    void sendMessage({
-      text: "(kickoff)",
-      metadata: { kind: "kickoff" },
-      messageId: newMessageId(),
-    });
+    void sendMessage(userMessage("(kickoff)", { kind: "kickoff" }));
   }, [sendMessage]);
 
   // Rewind the server-side conversation to before `messageId`: the route

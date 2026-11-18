@@ -10,6 +10,7 @@ import { useCallback } from "react";
 import type { UIMessage } from "ai";
 import { keys } from "@/shared/query/keys";
 import { fetchJson, withBrand } from "@/shared/query/fetchJson";
+import { SESSION_DETAIL_CACHE } from "./sessionDetailCache.ts";
 
 export type AssistantSessionSummary = {
   id: string;
@@ -69,6 +70,7 @@ export function assistantSessionQueryOptions(brandKey: string, sessionId: string
         { signal },
       ),
     enabled: Boolean(brandKey && sessionId),
+    ...SESSION_DETAIL_CACHE,
   };
 }
 
