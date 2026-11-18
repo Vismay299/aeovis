@@ -887,3 +887,15 @@ SOFTWARE.
 - `src/app/portal/reports/page.tsx` (from `src/routes/_app/p/$projectId/reports/index.tsx:20-82`)
 - `src/app/portal/reports/[reportId]/page.tsx` (from `src/routes/_app/p/$projectId/reports/$reportId.tsx:44-346`)
 - `src/app/portal/reports/templates/page.tsx` (from `src/routes/_app/p/$projectId/reports/templates.tsx:27-125`)
+
+### F23 Phase 2-3 route ports
+- `src/app/r/[reportId]/route.ts` (from `openseo:src/routes/r/$reportId.ts:10-105`)
+- `src/app/s/[token]/route.ts` (from `openseo:src/server/features/reports/sharePage.tsx:12-260`)
+- `src/app/s/[token]/raw/route.ts` (from `openseo:src/routes/s/$token/raw.ts:12-132`)
+- `src/app/s/[token]/og.png/route.tsx` (from `openseo:src/routes/s/$token/og[.]png.ts:9-46`)
+- `src/app/api/customer/reports/route.ts` (from `openseo:src/serverFunctions/reports.ts:20-136`)
+- `src/app/api/customer/reports/[reportId]/route.ts` (from `openseo:src/serverFunctions/reports.ts:20-136`)
+- `src/app/api/customer/reports/[reportId]/share/route.ts` (from `openseo:src/serverFunctions/reports.ts:20-136`)
+- `src/app/api/customer/reports/templates/route.ts` (from `openseo:src/serverFunctions/reportTemplates.ts:7-69`)
+- `src/app/api/customer/reports/templates/[templateId]/route.ts` (from `openseo:src/serverFunctions/reportTemplates.ts:7-69`)
+- `src/app/api/customer/reports/generate/route.ts` (new endpoint; route shape follows `openseo:src/serverFunctions/reports.ts:20-136`)
