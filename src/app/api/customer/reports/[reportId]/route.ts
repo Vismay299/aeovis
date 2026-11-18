@@ -69,13 +69,13 @@ async function defaultChatPath(
   reportId: string,
 ): Promise<string | null> {
   try {
+    type Chain = {
+      eq: (column: string, value: string) => Chain;
+      maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
+    };
     const client = admin as {
       from: (table: string) => {
-        select: (columns: string) => {
-          eq: (column: string, value: string) => {
-            eq: (column: string, value: string) => { maybeSingle: () => Promise<{ data: unknown; error: unknown }> };
-          };
-        };
+        select: (columns: string) => Chain;
       };
     };
     const { data, error } = await client
