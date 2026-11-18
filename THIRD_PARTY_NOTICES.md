@@ -846,3 +846,11 @@ SOFTWARE.
 - `src/server/reports/templateService.test.ts` (ported cases from `src/server/features/reports/services/ReportTemplateService.test.ts:53-115`)
 - `supabase/migrations/150_f23_reports.sql` (from `src/db/reports.schema.ts:11-85`, `src/db/report-templates.schema.ts:5-43`)
 - `supabase/migrations/151_f23_report_share_views.sql` (from `src/routes/s/$token/raw.ts:44-53`, `src/db/reports.schema.ts`)
+
+### F23 Phase 2 ports
+- `src/server/reports/documentRoutes.ts` (from `src/routes/r/$reportId.ts`, `src/routes/s/$token/raw.ts`, `src/routes/s/$token/og[.]png.ts`, `src/server/features/reports/shareAccess.ts`)
+- `src/server/reports/documentRoutes.test.ts` (ported cases from `src/server/features/reports/reportRoute.test.ts`, `src/server/features/reports/shareRawRoute.test.ts`)
+- `src/server/reports/sharePage.ts` (from `src/server/features/reports/sharePage.tsx:12-260`)
+- `src/server/reports/sharePage.test.ts` (ported cases from `src/server/features/reports/sharePage.test.ts:36-124`)
+- `src/server/reports/ogImage.tsx` (from `src/server/features/reports/reportSocialImage.tsx:6-89`)
+- `src/server/reports/ogRoute.test.ts` (ported cases from `src/server/features/reports/shareImageRoute.test.ts:33-99`)

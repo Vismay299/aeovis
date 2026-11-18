@@ -65,7 +65,16 @@ export const PRIVATE_ROUTE_PREFIXES = Object.freeze([
   "/auth",
   "/onboarding",
   "/email",
+  "/r",
 ]);
+
+/**
+ * F23 — route prefixes that must not be indexed but must NOT be disallowed in
+ * robots.txt. `/s` carries link previews: crawlers and preview bots have to
+ * read the `noindex` and OG tags, and a disallowed URL can still be indexed
+ * from links without its noindex ever being read (T7).
+ */
+export const NOINDEX_ROUTE_PREFIXES = Object.freeze(["/s"]);
 
 /**
  * Normalize and clean a pathname:
@@ -175,6 +184,22 @@ export function getRouteIndexingPolicy(rawPath = "/", env = process.env) {
       disallowRobots: true,
       isAuthentication: false, // Robots directives do not provide authentication (R20-03)
       reason: "private_route",
+    };
+  }
+
+  // F23 share links: noindexed through headers and meta, but deliberately not
+  // disallowed in robots.txt so crawlers and preview bots read the tags (T7).
+  const isNoindexOnly = NOINDEX_ROUTE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+
+  if (isNoindexOnly) {
+    return {
+      index: false,
+      follow: false,
+      disallowRobots: false,
+      isAuthentication: false,
+      reason: "share_link",
     };
   }
 
