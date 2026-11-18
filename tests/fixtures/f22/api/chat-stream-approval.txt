@@ -1,0 +1,23 @@
+data: {"type":"start","messageId":"a_approval_00000000000000000000001","messageMetadata":{"turnId":"turn_approval_1","model":"synthetic-fixture"}}
+
+data: {"type":"start-step"}
+
+data: {"type":"text-start","id":"text-1"}
+
+data: {"type":"text-delta","id":"text-1","delta":"Checking the price for that lookup. "}
+
+data: {"type":"text-end","id":"text-1"}
+
+data: {"type":"tool-input-start","toolCallId":"call_approval_kw","toolName":"research_keywords"}
+
+data: {"type":"tool-input-delta","toolCallId":"call_approval_kw","inputTextDelta":"{\"keyword\":\"oversized t shirt\"}"}
+
+data: {"type":"tool-input-available","toolCallId":"call_approval_kw","toolName":"research_keywords","input":{"keyword":"oversized t shirt"}}
+
+data: {"type":"tool-output-available","toolCallId":"call_approval_kw","output":{"status":"awaiting_approval","approvalId":"9a1e0000-0000-4000-8000-000000000009","kind":"price","label":"Research keywords for “oversized t shirt”","quote":{"action":"keywords.research.run","currency":"USD","totalUsd":0.09,"expectedUsd":null,"units":[],"lines":[{"label":"Phrase-match ideas","quantity":1,"unitUsd":0.09,"totalUsd":0.09}],"monthly":null,"warnings":[],"blocked":null,"priceVersion":"fixture-1","quotedAt":"2026-11-17T10:00:00.000Z","inputsHash":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"},"expiresAt":"2027-05-01T00:00:00.000Z","summary":"Waiting for the user to approve Research keywords for “oversized t shirt” (up to $0.09). Do not call this tool again for it. The reply pauses here; you will get a message with the outcome."}}
+
+data: {"type":"finish-step"}
+
+data: {"type":"finish","messageMetadata":{"turnId":"turn_approval_1","costUsd":0.0009,"costKnown":true}}
+
+data: [DONE]

@@ -222,6 +222,7 @@ jobs:
           node scripts/qa/check-f20-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f12-browser.mjs http://127.0.0.1:3328
           node scripts/qa/check-f11-browser.mjs http://127.0.0.1:3328
+          node scripts/qa/check-f22-browser.mjs http://127.0.0.1:3328
           # F27's /onboarding picks the wizard on the server from FEATURE_ONBOARDING_WIZARD,
           # while F04-B07 needs the flag off, so the wizard runs on its own server.
           FEATURE_ONBOARDING_WIZARD=on node node_modules/next/dist/bin/next start -p 3329 > /tmp/perceev-next-f27.log 2>&1 &

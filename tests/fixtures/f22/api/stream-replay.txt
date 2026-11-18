@@ -1,0 +1,31 @@
+data: {"type":"start","messageId":"a_stream_000000000000000000000001","messageMetadata":{"turnId":"turn_stream_1","model":"synthetic-fixture"}}
+
+data: {"type":"start-step"}
+
+data: {"type":"text-start","id":"text-1"}
+
+data: {"type":"text-delta","id":"text-1","delta":"Your latest scan answered 9 of 12 questions for Acme Tees. "}
+
+data: {"type":"text-delta","id":"text-1","delta":"Three of the gaps name Brand X or Brand Y. "}
+
+data: {"type":"text-end","id":"text-1"}
+
+data: {"type":"tool-input-start","toolCallId":"call_stream_scan","toolName":"get_scan_report"}
+
+data: {"type":"tool-input-delta","toolCallId":"call_stream_scan","inputTextDelta":"{\"scanId\":\"11111111-1111-4111-8111-111111111111\"}"}
+
+data: {"type":"tool-input-available","toolCallId":"call_stream_scan","toolName":"get_scan_report","input":{"scanId":"11111111-1111-4111-8111-111111111111"}}
+
+data: {"type":"tool-output-available","toolCallId":"call_stream_scan","output":{"status":"success","summary":"Scan answered 9 of 12 questions; 3 gaps name competitors.","data":{"scan":{"scanId":"11111111-1111-4111-8111-111111111111","scannedAt":"2026-11-01T00:00:00.000Z","visibilityPct":42,"engines":["ChatGPT","Gemini"],"competitors":["Brand X","Brand Y"]},"rows":[{"question":"Do AI answers name Acme Tees for winter tees?","engine":"ChatGPT","answered":true,"mentioned":true,"cited":true,"competitorsNamed":["Brand X"]},{"question":"Do AI answers name Acme Tees for organic cotton tees?","engine":"Gemini","answered":true,"mentioned":true,"cited":false,"competitorsNamed":[]},{"question":"Do AI answers name Acme Tees for heavyweight shirts?","engine":"Perplexity","answered":true,"mentioned":false,"cited":true,"competitorsNamed":["Brand Y","Brand Z"]},{"question":"Do AI answers name Acme Tees for graphic tees?","engine":"ChatGPT","answered":true,"mentioned":true,"cited":true,"competitorsNamed":["Brand X"]},{"question":"Do AI answers name Acme Tees for plain white tees?","engine":"Gemini","answered":false,"mentioned":false,"cited":false,"competitorsNamed":["Brand Y"]},{"question":"Do AI answers name Acme Tees for oversized t shirts?","engine":"ChatGPT","answered":true,"mentioned":false,"cited":true,"competitorsNamed":["Brand Z"]},{"question":"Do AI answers name Acme Tees for gym shirts?","engine":"Perplexity","answered":true,"mentioned":true,"cited":false,"competitorsNamed":[]},{"question":"Do AI answers name Acme Tees for pocket tees?","engine":"Gemini","answered":true,"mentioned":true,"cited":true,"competitorsNamed":["Brand X","Brand Y"]},{"question":"Do AI answers name Acme Tees for linen shirts?","engine":"ChatGPT","answered":false,"mentioned":false,"cited":false,"competitorsNamed":["Brand Z"]},{"question":"Do AI answers name Acme Tees for striped tees?","engine":"Perplexity","answered":true,"mentioned":false,"cited":false,"competitorsNamed":[]},{"question":"Do AI answers name Acme Tees for black tees?","engine":"Gemini","answered":true,"mentioned":true,"cited":true,"competitorsNamed":["Brand X"]},{"question":"Do AI answers name Acme Tees for v-neck shirts?","engine":"ChatGPT","answered":true,"mentioned":false,"cited":true,"competitorsNamed":["Brand Y"]},{"question":"Do AI answers name Acme Tees for long sleeve tees?","engine":"Perplexity","answered":false,"mentioned":true,"cited":false,"competitorsNamed":["Brand Z"]},{"question":"Do AI answers name Acme Tees for henley shirts?","engine":"Gemini","answered":true,"mentioned":true,"cited":false,"competitorsNamed":[]},{"question":"Do AI answers name Acme Tees for crew neck tees?","engine":"ChatGPT","answered":true,"mentioned":true,"cited":true,"competitorsNamed":["Brand X","Brand Z"]},{"question":"Do AI answers name Acme Tees for tour merch tees?","engine":"Perplexity","answered":true,"mentioned":false,"cited":true,"competitorsNamed":["Brand Y"]},{"question":"Do AI answers name Acme Tees for band tees?","engine":"Gemini","answered":false,"mentioned":false,"cited":false,"competitorsNamed":[]},{"question":"Do AI answers name Acme Tees for minimalist shirts?","engine":"ChatGPT","answered":true,"mentioned":true,"cited":false,"competitorsNamed":["Brand Z"]},{"question":"Do AI answers name Acme Tees for vintage wash tees?","engine":"Perplexity","answered":true,"mentioned":false,"cited":true,"competitorsNamed":["Brand X"]},{"question":"Do AI answers name Acme Tees for athletic fit shirts?","engine":"Gemini","answered":true,"mentioned":true,"cited":true,"competitorsNamed":["Brand Y"]},{"question":"Do AI answers name Acme Tees for tall tees?","engine":"ChatGPT","answered":true,"mentioned":false,"cited":false,"competitorsNamed":[]},{"question":"Do AI answers name Acme Tees for kids graphic tees?","engine":"Perplexity","answered":false,"mentioned":false,"cited":true,"competitorsNamed":["Brand X","Brand Y"]},{"question":"Do AI answers name Acme Tees for workwear shirts?","engine":"Gemini","answered":true,"mentioned":true,"cited":false,"competitorsNamed":["Brand Z"]},{"question":"Do AI answers name Acme Tees for festival tees?","engine":"ChatGPT","answered":true,"mentioned":false,"cited":true,"competitorsNamed":[]},{"question":"Do AI answers name Acme Tees for blank tees wholesale?","engine":"Perplexity","answered":true,"mentioned":true,"cited":true,"competitorsNamed":["Brand X"]}],"totalCount":25,"coverage":{"planned":12,"answered":9,"notAnswered":3,"failed":0}},"link":{"path":"/portal/scans/11111111-1111-4111-8111-111111111111","label":"Scans"},"untrusted":["rows[*].competitorsNamed"],"truncated":null}}
+
+data: {"type":"text-start","id":"text-2"}
+
+data: {"type":"text-delta","id":"text-2","delta":"Ask me to continue for the full gap list."}
+
+data: {"type":"text-end","id":"text-2"}
+
+data: {"type":"finish-step"}
+
+data: {"type":"finish","messageMetadata":{"turnId":"turn_stream_1","costUsd":0.0021,"costKnown":true}}
+
+data: [DONE]

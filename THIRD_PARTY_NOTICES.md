@@ -867,3 +867,9 @@ SOFTWARE.
 - `src/components/portal/assistant/ChatComposer.tsx` (copied from `src/client/features/sam/ChatComposer.tsx`)
 - `src/components/portal/assistant/useStickToBottom.ts` (copied from `src/client/components/chat/useStickToBottom.ts`)
 - `src/shared/assistant-tools.ts` (copied from `src/client/components/chat/ChatMessage.tsx:25-28`, `humanizeToolName`)
+
+### F22 Phase 6 ports
+- `src/server/tools/contract.test.ts` (contract cases from `src/server/mcp/output-schema-contract.test.ts`)
+- `src/server/tools/waiting.test.ts` (waiting cases from `src/server/features/sam/samChatTools.test.ts`)
+- `src/components/portal/assistant/hooks/useAssistantSessions.ts` (query keys from `src/client/features/sam/samQueries.ts`)
+- `src/app/api/customer/assistant/{sessions,config}/route.ts` (from `src/serverFunctions/sam.ts`, `src/serverFunctions/samAccess.ts`)
