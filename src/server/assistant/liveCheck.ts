@@ -95,6 +95,52 @@ type OwnerRow = {
 };
 
 /**
+ * Refuses unless the `assistant.turn` spend control is on and admits the brand.
+ * Shared by every owner-run live check that runs an assistant turn (F22, F23), so
+ * the refusal wording and the allowlist rule cannot drift between them.
+ */
+export async function assertTurnControlAdmits(admin: SupabaseClient, brandKey: string): Promise<void> {
+  const { data: control, error: controlError } = await admin
+    .from("paid_feature_controls")
+    .select("feature,enabled,mode,brand_allowlist")
+    .eq("feature", "assistant.turn")
+    .maybeSingle();
+  if (controlError || !control?.enabled) {
+    throw new LiveCheckRefusal("refusing: the assistant.turn spend control is disabled");
+  }
+  if (control.mode === "allowlist" && !((control.brand_allowlist as string[] | null) ?? []).includes(brandKey)) {
+    throw new LiveCheckRefusal("refusing: the assistant.turn spend control does not admit the brand");
+  }
+}
+
+/** The brand's owner as a service-role Workspace, the identity a live check runs as. */
+export async function resolveOwnerWorkspace(admin: SupabaseClient, brandKey: string): Promise<Workspace> {
+  const { data: membership, error: membershipError } = await admin
+    .from("customer_brand_memberships")
+    .select("user_id,role,customer_brands!inner(brand_key,display_name,website,website_host,aliases,is_active)")
+    .eq("brand_key", brandKey)
+    .eq("role", "owner")
+    .eq("customer_brands.is_active", true)
+    .limit(1)
+    .maybeSingle();
+  const owner = membership as OwnerRow | null;
+  if (membershipError || !owner) {
+    throw Object.assign(new Error("QA workspace owner membership unavailable"), { code: "workspace_not_found" });
+  }
+  const brand = Array.isArray(owner.customer_brands) ? owner.customer_brands[0] : owner.customer_brands;
+  if (!brand?.website || !owner.user_id) {
+    throw Object.assign(new Error("QA workspace setup incomplete"), { code: "workspace_not_ready" });
+  }
+  return {
+    brandKey,
+    user: { id: owner.user_id, email: "qa-owner@localhost" },
+    role: "owner",
+    brand: { ...brand, brandKey, role: "owner" },
+    admin,
+  } as unknown as Workspace;
+}
+
+/**
  * Runs one real turn for the brand's owner and reports what it cost. Refuses
  * (LiveCheckRefusal) when the assistant is not enabled for the brand or its spend
  * control does not admit it.
@@ -122,44 +168,10 @@ export async function runLiveCheck(
     throw new LiveCheckRefusal("refusing: FEATURE_ASSISTANT does not cover the brand");
   }
 
-  const { data: control, error: controlError } = await admin
-    .from("paid_feature_controls")
-    .select("feature,enabled,mode,brand_allowlist")
-    .eq("feature", "assistant.turn")
-    .maybeSingle();
-  if (controlError || !control?.enabled) {
-    throw new LiveCheckRefusal("refusing: the assistant.turn spend control is disabled");
-  }
-  if (control.mode === "allowlist" && !((control.brand_allowlist as string[] | null) ?? []).includes(brandKey)) {
-    throw new LiveCheckRefusal("refusing: the assistant.turn spend control does not admit the brand");
-  }
+  await assertTurnControlAdmits(admin, brandKey);
+  const workspace = await resolveOwnerWorkspace(admin, brandKey);
 
-  const { data: membership, error: membershipError } = await admin
-    .from("customer_brand_memberships")
-    .select("user_id,role,customer_brands!inner(brand_key,display_name,website,website_host,aliases,is_active)")
-    .eq("brand_key", brandKey)
-    .eq("role", "owner")
-    .eq("customer_brands.is_active", true)
-    .limit(1)
-    .maybeSingle();
-  const owner = membership as OwnerRow | null;
-  if (membershipError || !owner) {
-    throw Object.assign(new Error("QA workspace owner membership unavailable"), { code: "workspace_not_found" });
-  }
-  const brand = Array.isArray(owner.customer_brands) ? owner.customer_brands[0] : owner.customer_brands;
-  if (!brand?.website || !owner.user_id) {
-    throw Object.assign(new Error("QA workspace setup incomplete"), { code: "workspace_not_ready" });
-  }
-
-  const workspace = {
-    brandKey,
-    user: { id: owner.user_id, email: "qa-owner@localhost" },
-    role: "owner",
-    brand: { ...brand, brandKey, role: "owner" },
-    admin,
-  } as unknown as Workspace;
-
-  const session = await (deps.createSession ?? createSession)(admin, { brandKey, userId: owner.user_id });
+  const session = await (deps.createSession ?? createSession)(admin, { brandKey, userId: workspace.user.id });
   try {
     const turnEnv = {
       ...(deps.turnDeps?.env ?? deps.env ?? process.env),
@@ -271,7 +283,7 @@ export async function runLiveCheck(
     await (deps.archiveSession ?? archiveSession)(admin, {
       id: session.id,
       brandKey,
-      userId: owner.user_id,
+      userId: workspace.user.id,
     }).catch(() => false);
   }
 }

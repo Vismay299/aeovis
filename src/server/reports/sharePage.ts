@@ -16,6 +16,7 @@ import { SHARE_TOKEN_PATTERN } from "../../shared/report-share.ts";
 import { REPORT_IFRAME_SANDBOX } from "../../shared/report-sandbox.ts";
 import { isFeatureEnabled as isFeatureEnabledDefault } from "../features/flags.ts";
 import type { FeatureName } from "../features/names.ts";
+import { fixtureDocumentPathForToken, isFixtureMode } from "./fixtureMode.ts";
 
 /** The row the wrapper and the raw document both read (migration 150's `get_shared_report`). */
 export type SharedReportRow = {
@@ -262,13 +263,10 @@ export async function handleSharePage(
 
   if (!SHARE_TOKEN_PATTERN.test(token)) return missing();
 
-  // P5 browser-check fixture (spec §8 P5.T1.S1). Env-only, never production:
-  // the fixed tokens (mirroring documentRoutes.ts) serve synthetic wrapper
-  // pages with no database read. Unknown tokens 404 as usual.
-  if (process.env.F23_FIXTURE_DOCUMENTS === "1" && process.env.NODE_ENV !== "production") {
-    if (token !== "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" && token !== "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") {
-      return missing();
-    }
+  // Browser-check fixture (F23 §8 P5.T1.S1): the two fixed tokens serve a synthetic
+  // wrapper page with no database read; unknown tokens 404 as usual.
+  if (isFixtureMode()) {
+    if (fixtureDocumentPathForToken(token) === null) return missing();
     const canonical = `${new URL(request.url).origin}/s/${token}`;
     const html = renderSharePageHtml({
       title: "Synthetic fixture report",

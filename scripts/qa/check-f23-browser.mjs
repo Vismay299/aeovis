@@ -380,6 +380,11 @@ try {
       const reportFrame = page.frame({ url: /\/r\// });
       assert.ok(reportFrame, "report frame attached");
       await reportFrame.waitForLoadState("load");
+      // An iframe sized with a percentage inside a min-height-only parent falls back
+      // to the 150px default and the report shows as a thin strip; the viewer must
+      // be at least 70dvh (630px of the 900px viewport).
+      const frameBox = await frame.boundingBox();
+      assert.ok(frameBox && frameBox.height >= 600, `the report frame fills the viewer (height ${frameBox?.height})`);
       const frameText = await reportFrame.evaluate(() => document.body.textContent);
       assert.match(frameText, /Acme Tees quarterly check-in/);
       await page.locator("#app-content").getByRole("link", { name: "Reports" }).waitFor();
@@ -609,7 +614,15 @@ try {
       await page.getByRole("heading", { name: "Reports" }).waitFor();
       const portalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
       assert.equal(portalOverflow, false, "390px portal list must not scroll horizontally");
-      return "wrapper + portal list, no horizontal overflow";
+      // The report viewer on a phone: 70dvh of 844px is about 590px, not the 150px default.
+      await page.goto(new URL(`/portal/reports/${BENIGN_ID}`, origin).href, { waitUntil: "networkidle" });
+      const viewer = page.locator(`iframe[title="${BENIGN_TITLE}"]`);
+      await viewer.waitFor({ state: "visible" });
+      const viewerBox = await viewer.boundingBox();
+      assert.ok(viewerBox && viewerBox.height >= 580, `390px report viewer fills its minimum height (height ${viewerBox?.height})`);
+      const detailOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+      assert.equal(detailOverflow, false, "390px report detail must not scroll horizontally");
+      return "wrapper, portal list and report viewer, no horizontal overflow";
     } finally { await context.close(); }
   });
 
