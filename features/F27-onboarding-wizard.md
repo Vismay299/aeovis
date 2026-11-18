@@ -11,7 +11,7 @@
 | Depends on | F07, F08, F18, F20, F24 (README). Also uses F09 (`CostReviewDialog`, `usePriceQuote`, scan route with `maxUsd`), F25 (`ProductUpdatesSwitch`, email preferences route), F26 (`AnalyticsConsentSwitch`, privacy route, telemetry identity), F14 (`buildDomainResearchHref`), F10 and F03 flags for checklist rows. **README should add F09, F25 and F26 to F27's "Depends on"** (requested in the report). |
 | Blocks | none |
 | Reserved migrations | 170–174 (170 `170_f27_onboarding.sql`; 171–174 deliberately unused) |
-| Feature flag | `FEATURE_ONBOARDING_WIZARD` (name `onboarding_wizard`; in `CLIENT_FEATURES` for the Overview checklist). Off → today's `/onboarding` form and `GettingStarted` stay in place. |
+| Feature flag | `FEATURE_ONBOARDING_WIZARD` (name `onboarding_wizard`; in `CLIENT_FEATURES` for the Overview checklist). Off → today's `/onboarding` form stays in place and Overview shows no checklist (Phase 5 retired `GettingStarted`). |
 | Spend features | none of its own. Question research (`questions.setup`) and the first scan (`ai_visibility.scan`) are priced and approved through F09; the 50-page audit is free (F18). |
 | OpenSEO reference | `openseo:src/client/features/onboarding/{onboardingModel,PostSignupOnboarding,OnboardingCard,WizardFooter,WebsiteOnboardingStep,SearchConsoleOnboardingStep,AnalyticsOnboardingStep,useOnboardingRedirect}.ts(x)`, `openseo:src/routes/_authenticated.onboarding.index.tsx`, `openseo:src/serverFunctions/onboarding.ts`, `openseo:src/serverFunctions/projects.ts:67-81`, `openseo:src/server/features/dashboard/services/{DashboardFirstAuditService,DashboardService}.ts`, `openseo:src/client/features/dashboard/{dashboardSteps,DashboardOnboarding}.ts(x)` (+ tests), `openseo:src/serverFunctions/dashboard.ts:55-66`, `openseo:src/types/schemas/dashboard.ts`, `openseo:src/db/pg/app.schema.ts:31-55,385-447`, `openseo:src/routes/_app/route.tsx`, `openseo:src/routes/_app/index.tsx`, `openseo:src/routes/_auth.sign-up.tsx:39-58` at `c5f8db1` |
 
@@ -73,7 +73,7 @@ A new customer goes from sign-up to a working workspace in five skippable steps:
 | F27-AC-14 | Finish destination: a safe `redirect` first; else, for a `domain` hand-off without a scan when `domain_overview` is on, `buildDomainResearchHref({ domain: workspace host, preset: "striking_distance" })` (cache-only, never spends); else `/portal`. | unit `src/shared/onboarding.test.ts` |
 | F27-AC-15 | `getSetupStepStatus` returns `done` whenever product state shows the step complete (even if dismissed), `skipped` when dismissed and not done, else `todo`; rows are filtered by flags and role (team: owners only). | unit `src/shared/setup-steps.test.ts` (port of `dashboardSteps.test.ts`) |
 | F27-AC-16 | `GET /api/customer/setup` computes each row from data (approved panel, scans, GSC, audits, customer schedule, GA4, drafts, members/invites); `POST /api/customer/setup/dismiss` adds or removes the caller's dismissal for that workspace only. | route `src/server/onboarding/setup.route.test.mjs`; DB group `dismissals` |
-| F27-AC-17 | With `onboarding_wizard` on, Overview shows "Get started" (`SetupChecklist`) instead of `GettingStarted`: remaining steps as an accordion with an action and "Skip for now", "{n} saved for later" with Restore, "{n} completed"; nothing renders when no step remains; with the flag off, `GettingStarted` renders exactly as before. | browser W10; render test `src/components/portal/overview/setupChecklist.test.mjs` (port of `DashboardOnboarding.test.ts`) |
+| F27-AC-17 | With `onboarding_wizard` on, Overview shows "Get started" (`SetupChecklist`) instead of `GettingStarted`: remaining steps as an accordion with an action and "Skip for now", "{n} saved for later" with Restore, "{n} completed"; nothing renders when no step remains; with the flag off, nothing renders (Phase 5 retired `GettingStarted`). | browser W10; render test `src/components/portal/overview/setupChecklist.test.mjs` (port of `DashboardOnboarding.test.ts`) |
 | F27-AC-18 | Existing workspaces are untouched: a user with memberships and no onboarding row is never redirected; `/api/customer/onboard`, `planCustomerOnboarding` and their tests are unchanged; the free scan's behaviour is unchanged except for the sign-up link on a real (non-sample) result. | browser W9; CI suite; `git diff --stat` on `src/app/api/customer/onboard/route.js`, `src/server/customerOnboarding.js` empty |
 | F27-AC-19 | Owner-run live checks O1–O5 (§10) pass on the deployment. | live, recorded in the phase-4 PR |
 
@@ -493,7 +493,7 @@ Branches `feat/f27-onboarding-wizard-p1` … `-p5`. `NT` = `node --import ./src/
 
 ### Phase 5 — Retire `GettingStarted` (only after the owner turns the flag on in production and confirms for one week)
 
-- [ ] **P5.T1** *Files:* `src/components/portal/overview/GettingStarted.jsx` (deleted), `src/app/portal/page.jsx` (render `SetupChecklist` unconditionally when the flag is on; nothing when off), `src/components/portal/portalRegressions.test.mjs` (remove the `GettingStarted`/`buildChecklist` assertions; reason: component retired by the owner's decision), `src/components/portal/onboarding/LegacyOnboardingForm.jsx` (kept: it is the flag-off fallback). *Verify:* `NT src/components/portal/*.test.mjs` → pass; `git grep -n "GettingStarted" src` → no matches.
+- [x] **P5.T1** *Files:* `src/components/portal/overview/GettingStarted.jsx` (deleted), `src/app/portal/page.jsx` (render `SetupChecklist` unconditionally when the flag is on; nothing when off), `src/components/portal/portalRegressions.test.mjs` (remove the `GettingStarted`/`buildChecklist` assertions; reason: component retired by the owner's decision), `src/components/portal/onboarding/LegacyOnboardingForm.jsx` (kept: it is the flag-off fallback). *Verify:* `NT src/components/portal/*.test.mjs` → pass; `git grep -n "GettingStarted" src` → no matches.
 
 ## 9. Test plan
 
@@ -516,13 +516,13 @@ Branches `feat/f27-onboarding-wizard-p1` … `-p5`. `NT` = `node --import ./src/
 
 ## 10. Rollout and rollback
 
-**Env names:** `FEATURE_ONBOARDING_WIZARD`. **Default:** off in production → legacy `/onboarding` form and `GettingStarted`.
+**Env names:** `FEATURE_ONBOARDING_WIZARD`. **Default:** off in production → legacy `/onboarding` form and no Overview checklist (`GettingStarted` was retired in Phase 5, so a workspace without the flag sees no onboarding card).
 
 **Owner steps:** apply migration 170; make sure F18 `site_audit` is on (else the audit row simply hides) and decide whether `questions_setup` paid control is enabled (else research is offered as unavailable and free-scan suggestions carry the questions); set `FEATURE_ONBOARDING_WIZARD=on` on a preview, run O1–O5, then production.
 
 **Live checklist (`scripts/qa/check-f27-live.md`):** O1 run the free scan for a site you control, click "Track these questions in a workspace", sign up → onboarding shows the domain, brand and "…questions from your free scan…"; O2 save → workspace created, the audit starts (Site Audit shows it running), research price shown; approve research only if the paid control is on for this workspace; O3 connect Search Console and return to step 2's picker; O4 preferences saved (Settings → Privacy and Emails show the choices); O5 approve questions (via "Review questions") and run the first scan from the price dialog; an existing customer account logging in is never shown onboarding.
 
-**Rollback:** `FEATURE_ONBOARDING_WIZARD=off` restores the legacy form, the old checklist and today's portal behaviour immediately; GSC attempts with `return_path '/onboarding'` still complete (the callback honours the stored path). Data: `user_onboarding` and `workspace_setup_dismissals` can stay; to remove, drop both tables and the `return_path` column after the flag is off.
+**Rollback:** `FEATURE_ONBOARDING_WIZARD=off` restores the legacy form and hides the Overview checklist immediately (the old `GettingStarted` card is gone, so there is no checklist to fall back to); GSC attempts with `return_path '/onboarding'` still complete (the callback honours the stored path). Data: `user_onboarding` and `workspace_setup_dismissals` can stay; to remove, drop both tables and the `return_path` column after the flag is off.
 
 ## 11. Risks and open questions
 

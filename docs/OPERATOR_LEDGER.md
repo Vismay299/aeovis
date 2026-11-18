@@ -599,13 +599,13 @@ abandoned is not.
 - Operator note: §10 says `questions_setup`; the repo flag is `question_setup` and the paid control is the `questions.setup` spend feature.
 - Deployment note: env changes take effect on the next deployment; redeploy after setting the flag on preview and again on production, and after setting it off for rollback.
 
-**Env names:** `FEATURE_ONBOARDING_WIZARD`. **Default:** off in production → legacy `/onboarding` form and `GettingStarted`.
+**Env names:** `FEATURE_ONBOARDING_WIZARD`. **Default:** off in production → legacy `/onboarding` form and no Overview checklist (`GettingStarted` was retired in F27 phase 5, so a workspace without the flag sees no onboarding card; turn the flag on for every workspace that should keep a setup checklist).
 
 **Owner steps:** apply migration 170; make sure F18 `site_audit` is on (else the audit row simply hides) and decide whether the `question_setup` flag and its `questions.setup` paid control are enabled (else research is offered as unavailable and free-scan suggestions carry the questions); set `FEATURE_ONBOARDING_WIZARD=on` on a preview, run O1–O5, then production.
 
 **Live checklist (`scripts/qa/check-f27-live.md`):** O1 run the free scan for a site you control, click "Track these questions in a workspace", sign up → onboarding shows the domain, brand and "…questions from your free scan…"; O2 save → workspace created, the audit starts (Site Audit shows it running), research price shown; approve research only if the paid control is on for this workspace; O3 connect Search Console and return to step 2's picker; O4 preferences saved (Settings → Privacy and Emails show the choices); O5 approve questions (via "Review questions") and run the first scan from the price dialog; an existing customer account logging in is never shown onboarding.
 
-**Rollback:** `FEATURE_ONBOARDING_WIZARD=off` restores the legacy form, the old checklist and today's portal behaviour immediately; GSC attempts with `return_path '/onboarding'` still complete (the callback honours the stored path). Data: `user_onboarding` and `workspace_setup_dismissals` can stay; to remove, drop both tables and the `return_path` column after the flag is off.
+**Rollback:** `FEATURE_ONBOARDING_WIZARD=off` restores the legacy form and hides the Overview checklist immediately (the old `GettingStarted` card is gone, so there is no checklist to fall back to); GSC attempts with `return_path '/onboarding'` still complete (the callback honours the stored path). Data: `user_onboarding` and `workspace_setup_dismissals` can stay; to remove, drop both tables and the `return_path` column after the flag is off.
 
 ### `165_f26_privacy_and_telemetry_ids` (F26 phase 1)
 - Status: implemented in repo; **not yet applied to production**.

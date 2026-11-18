@@ -455,12 +455,13 @@ try {
     });
     try {
       await flagOff.page.goto(new URL("/portal", origin).href, { waitUntil: "networkidle" });
-      await flagOff.page.getByRole("heading", { name: "Getting started", exact: true, level: 2 }).waitFor();
-      assert.equal(await flagOff.page.getByRole("heading", { name: "Get started", exact: true, level: 2 }).count(), 0);
+      await flagOff.page.getByRole("heading", { name: "Acme", exact: true, level: 1 }).waitFor();
+      assert.equal(await flagOff.page.getByRole("heading", { name: "Get started", exact: true, level: 2 }).count(), 0, "SetupChecklist renders only with the flag on; flag off renders nothing");
+      assert.equal(await flagOff.page.getByRole("heading", { name: "Getting started", exact: true, level: 2 }).count(), 0);
       assert.equal(flagOff.scenario.setupGets, 0, "the checklist route is not called when the flag is off");
       assert.deepEqual(flagOff.scenario.external, []);
       return {
-        details: "The checklist replaces Getting started only with the flag on, moves a skipped row into saved for later, and Restore brings it back; an all-done workspace renders no card.",
+        details: "SetupChecklist renders only with the flag on; flag off renders nothing; moves a skipped row into saved for later, and Restore brings it back; an all-done workspace renders no card.",
         writes: [
           ...enabled.scenario.writes,
           ...allDone.scenario.writes,
