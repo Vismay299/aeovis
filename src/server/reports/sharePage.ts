@@ -262,6 +262,25 @@ export async function handleSharePage(
 
   if (!SHARE_TOKEN_PATTERN.test(token)) return missing();
 
+  // P5 browser-check fixture (spec §8 P5.T1.S1). Env-only, never production:
+  // the fixed tokens (mirroring documentRoutes.ts) serve synthetic wrapper
+  // pages with no database read. Unknown tokens 404 as usual.
+  if (process.env.F23_FIXTURE_DOCUMENTS === "1" && process.env.NODE_ENV !== "production") {
+    if (token !== "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" && token !== "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb") {
+      return missing();
+    }
+    const canonical = `${new URL(request.url).origin}/s/${token}`;
+    const html = renderSharePageHtml({
+      title: "Synthetic fixture report",
+      description: "Synthetic fixture summary for browser checks.",
+      canonical,
+      imageUrl: `${canonical}/og.png?v=fixture`,
+      token,
+      updatedAgo: formatUpdatedAgo(new Date().toISOString(), deps.now?.() ?? new Date()),
+    });
+    return new Response(html, { status: 200, headers: SHARE_HEADERS });
+  }
+
   const loadAdmin = deps.getSupabaseAdmin ?? getSupabaseAdmin;
   const admin = loadAdmin();
   if (!admin) throw new Error("[reports] storage is not configured");

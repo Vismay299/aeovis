@@ -14,6 +14,8 @@
 // onto the worker's heap.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { getSupabaseAdmin } from "../../shared/supabase/admin.js";
 import { findCustomerBrand } from "../../shared/supabase/customerContext.js";
 import { SHARE_TOKEN_PATTERN, sharePseudonym } from "../../shared/report-share.ts";
@@ -34,6 +36,46 @@ export const NOT_FOUND_BODY = "This report does not exist or you do not have acc
 
 /** One body for every public dead end: unknown, revoked, inactive or flag off. */
 export const NOT_SHARED_BODY = "This report isn't shared.";
+
+/**
+ * P5 browser-check fixture (spec §8 P5.T1.S1). The fixed ids/tokens below serve
+ * hand-written synthetic documents from `tests/fixtures/f23/documents/` with no
+ * database, auth or flag reads, so the browser check runs against `npm run dev`
+ * with no seed data. Honoured only when `F23_FIXTURE_DOCUMENTS === "1"` and the
+ * runtime is not production; the flag is read from the environment only, never
+ * from query params. Nothing fixture-related is ever logged.
+ */
+const FIXTURE_BENIGN_REPORT_ID = "11111111-1111-1111-1111-111111111111";
+const FIXTURE_HOSTILE_REPORT_ID = "22222222-2222-2222-2222-222222222222";
+const FIXTURE_BENIGN_TOKEN = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const FIXTURE_HOSTILE_TOKEN = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+export const FIXTURE_REPORT_TITLE = "Synthetic fixture report";
+export const FIXTURE_REPORT_HOST = "acme.example";
+
+function fixtureMode(): boolean {
+  return process.env.F23_FIXTURE_DOCUMENTS === "1" && process.env.NODE_ENV !== "production";
+}
+
+function fixturePathForReport(reportId: string): string | null {
+  if (reportId === FIXTURE_BENIGN_REPORT_ID) return "tests/fixtures/f23/documents/benign.html";
+  if (reportId === FIXTURE_HOSTILE_REPORT_ID) return "tests/fixtures/f23/documents/hostile.html";
+  return null;
+}
+
+function fixturePathForToken(token: string): string | null {
+  if (token === FIXTURE_BENIGN_TOKEN) return "tests/fixtures/f23/documents/benign.html";
+  if (token === FIXTURE_HOSTILE_TOKEN) return "tests/fixtures/f23/documents/hostile.html";
+  return null;
+}
+
+/** Reads a fixture document; a missing file is a 404 at the call site, never a throw. */
+async function readFixtureDocument(relativePath: string): Promise<string | null> {
+  try {
+    return await readFile(resolve(process.cwd(), relativePath), "utf8");
+  } catch {
+    return null;
+  }
+}
 
 export type ReportCustomerContext = {
   user: { id: string; email?: string | null } | null;
@@ -155,6 +197,14 @@ export async function handleReportRequest(
   deps: DocDeps = {}
 ): Promise<Response> {
   const notFound = () => textResponse(NOT_FOUND_BODY, 404);
+  if (fixtureMode()) {
+    const fixturePath = fixturePathForReport(reportId);
+    if (!fixturePath) return notFound();
+    const html = await readFixtureDocument(fixturePath);
+    if (html === null) return notFound();
+    const print = new URL(request.url).searchParams.get("print") === "1";
+    return reportDocumentResponse(html, { print, cacheControl: "private, no-store", noindex: true });
+  }
   if (!UUID_PATTERN.test(reportId)) return notFound();
 
   const loadContext = deps.getCustomerContext ?? defaultGetCustomerContext;
@@ -218,6 +268,22 @@ export async function handleSharedReportRequest(
     });
   }
 
+  if (fixtureMode()) {
+    const dest = request.headers.get("sec-fetch-dest");
+    if (dest !== null && dest !== "iframe") {
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `/s/${token}`, "Cache-Control": "no-store" },
+      });
+    }
+    const fixturePath = fixturePathForToken(token);
+    if (!fixturePath) return notShared();
+    const html = await readFixtureDocument(fixturePath);
+    if (html === null) return notShared();
+    // No view recording or telemetry in fixture mode: there is no database.
+    return reportDocumentResponse(html, { cacheControl: "public, max-age=0, s-maxage=60", noindex: true });
+  }
+
   const admin = resolveAdmin(deps);
   const row = await selectSharedReport(admin, token);
   const flag = deps.isFeatureEnabled ?? isFeatureEnabledDefault;
@@ -275,11 +341,34 @@ export async function handleSharedReportRequest(
  * document, then the injected renderer. A lookup failure propagates — it must
  * not hide behind the image fallback — while a render failure answers 500.
  */
+/** Fixture-only 500: mirrors the production fallback without touching its code path. */
+function fixtureSocialImageUnavailable(): Response {
+  console.error("[reports] social image failed");
+  return new Response("Preview image unavailable.", {
+    status: 500,
+    headers: {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-store",
+      "X-Robots-Tag": "noindex, nofollow",
+    },
+  });
+}
+
 export async function handleReportSocialImage(
   token: string,
   deps: DocDeps & { render?: SocialImageRenderer } = {}
 ): Promise<Response> {
   if (!SHARE_TOKEN_PATTERN.test(token)) return textResponse(NOT_SHARED_BODY, 404);
+
+  if (fixtureMode()) {
+    if (!fixturePathForToken(token)) return textResponse(NOT_SHARED_BODY, 404);
+    try {
+      if (!deps.render) throw new Error("[reports] no social image renderer");
+      return await deps.render(FIXTURE_REPORT_TITLE, FIXTURE_REPORT_HOST);
+    } catch {
+      return fixtureSocialImageUnavailable();
+    }
+  }
 
   const admin = resolveAdmin(deps);
   const row = await selectSharedReport(admin, token);
