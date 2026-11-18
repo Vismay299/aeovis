@@ -64,10 +64,17 @@ export function deriveTitle(text: string): string {
 
 export async function createSession(
   admin: SupabaseClient,
-  input: { brandKey: string; userId: string; kickoff?: Record<string, unknown> | null },
+  input: {
+    brandKey: string;
+    userId: string;
+    kickoff?: Record<string, unknown> | null;
+    /** Born with this title (1 to 80 characters); omitted keeps "New chat" until the first message. */
+    title?: string;
+  },
 ): Promise<AssistantSession> {
   const row: Record<string, unknown> = { brand_key: input.brandKey, user_id: input.userId };
   if (input.kickoff) row.kickoff = input.kickoff;
+  if (input.title) row.title = input.title;
   const { data, error } = await admin.from("assistant_sessions").insert(row).select("*").single();
   if (error) throw error;
   return toSession(data as SessionRow);

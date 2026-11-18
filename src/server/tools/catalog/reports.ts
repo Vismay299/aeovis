@@ -1,10 +1,13 @@
+import { isAppError } from "../../../shared/http/appError.ts";
 import { defineRegistration, type ToolRegistration } from "../types.ts";
 import {
   getReportTool,
   listReportTemplatesTool,
   listReportsTool,
   saveReportTool,
+  type ReportToolContext,
 } from "../../reports/tools.ts";
+import { getReport } from "../../reports/service.ts";
 
 function formatSize(bytes: number): string {
   const count = new Intl.NumberFormat("en-US");
@@ -87,22 +90,23 @@ export const registrations: ToolRegistration[] = [
     area: "reports",
     feature: "reports",
     effect: "write",
-    approval: async (ctx: any, input: Record<string, unknown>) => {
+    // Replacing a report is destructive, so naming an existing one asks first.
+    // The lookup is the service's `getReport`: it applies the id check, scopes to
+    // the workspace and takes the same injected store as the handler. A report
+    // that does not exist needs no confirmation (the save itself refuses it); any
+    // other failure is raised rather than skipping the confirmation, so an
+    // overwrite never goes ahead unconfirmed because a read failed.
+    approval: async (ctx: ReportToolContext, input: Record<string, unknown>) => {
       const reportId = input.reportId;
       if (typeof reportId !== "string" || !reportId) return { kind: "none" };
       try {
-        const { data, error } = await ctx.admin
-          .from("reports")
-          .select("title")
-          .eq("id", reportId)
-          .eq("brand_key", ctx.brand?.brandKey ?? ctx.brand?.brand_key ?? "")
-          .maybeSingle();
-        if (error || !data) return { kind: "none" };
-        const title = (data as { title?: unknown }).title;
-        if (typeof title !== "string" || !title) return { kind: "none" };
-        return { kind: "confirm", label: `Replace the report \u201C${title}\u201D` };
-      } catch {
-        return { kind: "none" };
+        const report = await getReport(ctx.admin, ctx.brand.brandKey, reportId, {
+          ...(ctx.deps?.reportStore ? { store: ctx.deps.reportStore } : {}),
+        });
+        return { kind: "confirm", label: `Replace the report \u201C${report.title}\u201D` };
+      } catch (error) {
+        if (isAppError(error) && error.code === "report_not_found") return { kind: "none" };
+        throw error;
       }
     },
     annotations: {

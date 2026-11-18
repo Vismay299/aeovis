@@ -290,6 +290,10 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
     throw error;
   };
 
+  const templatesBlockRead = buildTemplatesBlock(admin, i.ws.brandKey, { isFeatureEnabled: flag }).catch(
+    () => null,
+  );
+
   const regs = await (deps.availableTools ?? availableTools)(
     { brandKey: i.ws.brandKey, role: i.ws.role },
     deps.isFeatureEnabled ? { isFeatureEnabled: deps.isFeatureEnabled as never } : {},
@@ -317,12 +321,10 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
     LOCATION_OPTIONS.find((option) => option.code === marketCodes.locationCode)?.label ?? "United States";
   const market = { country, language: marketCodes.languageCode };
   const today = new Date(now()).toISOString().slice(0, 10);
-  let templatesBlock: string | null = null;
-  try {
-    templatesBlock = await buildTemplatesBlock(admin, i.ws.brandKey, { isFeatureEnabled: flag });
-  } catch {
-    templatesBlock = null;
-  }
+  // Started before the tool, skill and memory reads above and awaited here, so its
+  // flag read and template query overlap them instead of adding to the wait
+  // before the model is called. A failed read is "no block", never a failed turn.
+  const templatesBlock = await templatesBlockRead;
 
   let summary = session.summary;
   let compactedThroughSeq = session.compactedThroughSeq ?? 0;

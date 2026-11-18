@@ -41,6 +41,11 @@ export async function buildKickoff(i: KickoffInput): Promise<{ text: string; lab
   return await build(i);
 }
 
+/** Test seam only: whether a kind is registered, without building one. */
+export function getKickoffBuilderForTesting(kind: string): KickoffBuilder | undefined {
+  return builders.get(kind);
+}
+
 /** Test seam only: the production registry is populated by side-effect imports. */
 export function clearKickoffsForTesting(): void {
   builders.clear();

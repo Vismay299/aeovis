@@ -126,24 +126,36 @@ test("catalog: areas, gates, effects, approvals, annotations, links and untruste
   const save = byName.get("save_report")!;
   assert.equal(save.effect, "write");
   assert.equal(save.annotations.destructiveHint, true);
-  assert.deepEqual(await save.approval({} as never, {}), { kind: "none" });
-  assert.deepEqual(await save.approval({} as never, { reportId: "1f0c9a2b-3d4e-4f5a-9a1b-2f0c4d5e6a7b" }), { kind: "none" });
-  const fakeAdmin = {
-    from: () => ({
-      select: () => ({
-        eq: () => ({
-          eq: () => ({
-            maybeSingle: async () => ({ data: { title: "Old report" }, error: null }),
-          }),
-        }),
-      }),
-    }),
-  };
-  const decision = await save.approval(
-    { admin: fakeAdmin, brand: { brandKey: BRAND } } as never,
-    { reportId: "1f0c9a2b-3d4e-4f5a-9a1b-2f0c4d5e6a7b" },
+  // The replace confirmation reads through the service, with the same injected
+  // store as the handler, so it can be shown against an in-memory store.
+  const { reports, templates } = stores();
+  const deps = { reportStore: reports, templateStore: templates };
+  assert.deepEqual(await save.approval(ctx({ deps }), {}), { kind: "none" }, "no reportId: a create, nothing to replace");
+  const OLD_ID = "1f0c9a2b-3d4e-4f5a-9a1b-2f0c4d5e6a7b";
+  assert.deepEqual(await save.approval(ctx({ deps }), { reportId: OLD_ID }), { kind: "none" }, "unknown id: the save itself refuses it");
+  assert.deepEqual(await save.approval(ctx({ deps }), { reportId: "not-a-uuid" }), { kind: "none" }, "malformed id fails the service id check");
+  const saved = await (await import("./service.ts")).saveReport(
+    admin,
+    { brandKey: BRAND, title: "Old report", summary: "S.", html: HTML, createdBy: "assistant", createdByUserId: "user-1" },
+    { store: reports, templates },
   );
-  assert.deepEqual(decision, { kind: "confirm", label: "Replace the report \u201COld report\u201D" });
+  assert.deepEqual(
+    await save.approval(ctx({ deps }), { reportId: saved.reportId }),
+    { kind: "confirm", label: "Replace the report \u201COld report\u201D" },
+  );
+  // Another workspace's report is not found, so it neither confirms nor leaks its title.
+  assert.deepEqual(
+    await save.approval(ctx({ deps, brand: { brandKey: "brand-b" } }), { reportId: saved.reportId }),
+    { kind: "none" },
+  );
+  // A failed read must not quietly skip the confirmation of an overwrite.
+  const broken = {
+    ...reports,
+    getReport: async () => {
+      throw new Error("storage down");
+    },
+  };
+  await assert.rejects(async () => save.approval(ctx({ deps: { reportStore: broken } }), { reportId: saved.reportId }), /storage down/);
   assert.deepEqual(byName.get("list_reports")!.untrustedPaths, ["reports[*].summaryPreview"]);
   assert.deepEqual(byName.get("get_report")!.untrustedPaths, ["report.summary", "report.html"]);
   // Summaries use the ported upstream size copy.

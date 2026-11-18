@@ -81,7 +81,7 @@ export type ReportStore = {
 };
 
 const METADATA_COLUMNS =
-  "id,brand_key,title,summary,skill,skill_version,template_id,created_by,created_by_user_id,size_bytes,sanitizer_version,share_token,shared_at,created_at,updated_at";
+  "id,brand_key,title,summary,skill,skill_version,template_id,session_id,created_by,created_by_user_id,size_bytes,sanitizer_version,share_token,shared_at,created_at,updated_at";
 
 type ReportRow = {
   id: string;
@@ -91,6 +91,7 @@ type ReportRow = {
   skill: string | null;
   skill_version: string | null;
   template_id: string | null;
+  session_id: string | null;
   created_by: ReportCreatedBy;
   created_by_user_id: string | null;
   size_bytes: number;
@@ -110,6 +111,7 @@ function toMetadata(row: ReportRow): ReportMetadata {
     skill: row.skill,
     skillVersion: row.skill_version,
     templateId: row.template_id,
+    sessionId: row.session_id,
     createdBy: row.created_by,
     createdByUserId: row.created_by_user_id,
     sizeBytes: row.size_bytes,

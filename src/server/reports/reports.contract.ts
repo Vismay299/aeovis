@@ -211,7 +211,7 @@ export const reportShareContract = defineRouteContract({
   query: reportsBrandQuery,
   request: reportShareBodySchema,
   response: reportShareResponseSchema,
-  errorCodes: [...COMMON_ERROR_CODES, "report_not_found"],
+  errorCodes: [...COMMON_ERROR_CODES, "report_not_found", "reports_unavailable"],
   examples: [{ response: { shareToken: null, sharedAt: null } }],
 });
 
@@ -246,6 +246,7 @@ export const templateCreateContract = defineRouteContract({
     "template_instructions_too_long",
     "template_name_taken",
     "template_limit",
+    "reports_unavailable",
   ],
   examples: [
     {
@@ -277,6 +278,7 @@ export const templateUpdateContract = defineRouteContract({
     "template_instructions_too_long",
     "template_name_taken",
     "template_limit",
+    "reports_unavailable",
   ],
   examples: [
     {

@@ -76,14 +76,11 @@ function detailDeps(stores, sessions, over = {}) {
     listReportTemplates: (admin, brandKey) => templateService.listReportTemplates(admin, brandKey, { store: stores.templates }),
     viewsLast30Days: (admin, input) => service.viewsLast30Days(admin, input, serviceDeps(stores)),
     getSkillTitle: (skill) => (skill === "ai-visibility-audit" ? "AI Visibility Audit" : null),
-    getChatPath: async (_admin, brandKey, userId, reportId) => {
-      const stored = stores.reports.reports.get(reportId);
-      if (!stored || stored.brandKey !== brandKey) return null;
-      const sessId = stored.sessionId;
-      if (!sessId) return null;
-      const sess = sessions.get(sessId);
-      if (!sess || sess.brandKey !== brandKey || sess.userId !== userId) return null;
-      return `/portal/assistant?s=${sessId}`;
+    getChatPath: async (_admin, { brandKey, userId, sessionId }) => {
+      if (!sessionId) return null;
+      const sess = sessions.get(sessionId);
+      if (!sess || sess.archivedAt || sess.brandKey !== brandKey || sess.userId !== userId) return null;
+      return `/portal/assistant?s=${sessionId}`;
     },
     ...over,
   });
@@ -362,14 +359,9 @@ test("AC-19: generate requires flags, creates a titled session with kickoff and 
         isFeatureEnabled: async () => true,
         getReportTemplate: (admin, brandKey, id) => templateService.getReportTemplate(admin, brandKey, id, { store: stores.templates }),
         createSession: async (_admin, input) => {
-          const session = { id: randomUUID(), brandKey: input.brandKey, userId: input.userId, title: "New chat", summary: null, compactedThroughSeq: null, kickoff: input.kickoff ?? null, archivedAt: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString() };
+          const session = { id: randomUUID(), brandKey: input.brandKey, userId: input.userId, title: input.title ?? "New chat", summary: null, compactedThroughSeq: null, kickoff: input.kickoff ?? null, archivedAt: null, createdAt: NOW.toISOString(), updatedAt: NOW.toISOString() };
           createdSessions.push(session);
           return session;
-        },
-        renameSession: async (_admin, input) => {
-          const found = createdSessions.find((s) => s.id === input.id);
-          if (found) found.title = input.title;
-          return found ?? null;
         },
       });
     },
@@ -402,4 +394,58 @@ test("AC-19: generate requires flags, creates a titled session with kickoff and 
     deps,
   );
   assert.equal(bad.status, 400);
+});
+
+test("detail: one report read, the chat link comes from the report's own session id, templates are read only when needed", async () => {
+  const stores = createMemoryStores({ now: () => NOW });
+  const sessions = new Map([["sess-9", { id: "sess-9", brandKey: "brand-a", userId: USER.id }]]);
+  const plain = await service.saveReport(
+    {},
+    { brandKey: "brand-a", title: "No template", summary: "S.", html: HTML, sessionId: "sess-9", createdBy: "assistant", createdByUserId: USER.id },
+    serviceDeps(stores),
+  );
+  const template = await templateService.saveReportTemplate(
+    {},
+    { brandKey: "brand-a", name: "Monthly", description: "d", instructions: "i", createdBy: "app", createdByUserId: USER.id },
+    { store: stores.templates },
+  );
+  const withTemplate = await service.saveReport(
+    {},
+    { brandKey: "brand-a", title: "With template", summary: "S.", html: HTML, templateId: template.templateId, createdBy: "assistant", createdByUserId: USER.id },
+    serviceDeps(stores),
+  );
+
+  const counts = { getReport: 0, templates: 0 };
+  const chatArgs = [];
+  const deps = () =>
+    detailDeps(stores, sessions, {
+      getReport: (admin, brandKey, id) => {
+        counts.getReport += 1;
+        return service.getReport(admin, brandKey, id, serviceDeps(stores));
+      },
+      listReportTemplates: (admin, brandKey) => {
+        counts.templates += 1;
+        return templateService.listReportTemplates(admin, brandKey, { store: stores.templates });
+      },
+      getChatPath: async (_admin, input) => {
+        chatArgs.push(input);
+        return input.sessionId && sessions.has(input.sessionId) ? `/portal/assistant?s=${input.sessionId}` : null;
+      },
+    });
+
+  const first = await read(
+    await detailRoute.GET(get(`/api/customer/reports/${plain.reportId}?brand_key=brand-a`), { params: { reportId: plain.reportId } }, deps()),
+  );
+  assert.equal(first.body.report.chatPath, "/portal/assistant?s=sess-9");
+  assert.equal(first.body.report.templateName, null);
+  assert.deepEqual(counts, { getReport: 1, templates: 0 }, "no template on the report: the template list is never read");
+  assert.deepEqual(chatArgs[0], { brandKey: "brand-a", userId: USER.id, sessionId: "sess-9" });
+
+  const second = await read(
+    await detailRoute.GET(get(`/api/customer/reports/${withTemplate.reportId}?brand_key=brand-a`), { params: { reportId: withTemplate.reportId } }, deps()),
+  );
+  assert.equal(second.body.report.templateName, "Monthly");
+  assert.equal(second.body.report.chatPath, null, "a report with no session has no chat link");
+  assert.deepEqual(counts, { getReport: 2, templates: 1 });
+  assert.equal(chatArgs[1].sessionId, null);
 });

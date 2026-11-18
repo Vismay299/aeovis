@@ -57,7 +57,7 @@ test("a missing template is 404 template_not_found", async () => {
   void reports;
 });
 
-test("creates a session with the generate_report kickoff, renames it and returns the path", async () => {
+test("creates one titled session with the generate_report kickoff and returns the path", async () => {
   const { templates } = createMemoryStores();
   const templateId = "11111111-1111-4111-8111-111111111111";
   await templates.insertTemplate({
@@ -79,28 +79,54 @@ test("creates a session with the generate_report kickoff, renames it and returns
         const { getReportTemplate } = await import("./templateService.ts");
         return getReportTemplate(a, b, id, deps ?? { store: templates });
       },
-      createSession: (async (_a: unknown, input: { brandKey: string; userId: string; kickoff?: Record<string, unknown> }) => {
+      createSession: (async (_a: unknown, input: { brandKey: string; userId: string; kickoff?: Record<string, unknown>; title?: string }) => {
         calls.push({ kind: "create", args: input });
-        return { id: "sess-1", brandKey: input.brandKey, userId: input.userId, title: "New chat", summary: null, compactedThroughSeq: null, kickoff: input.kickoff ?? null, archivedAt: null, createdAt: "2026-11-17T12:00:00.000Z", updatedAt: "2026-11-17T12:00:00.000Z" };
-      }) as never,
-      renameSession: (async (_a: unknown, input: { id: string; title: string }) => {
-        calls.push({ kind: "rename", args: input });
-        return null;
+        return { id: "sess-1", brandKey: input.brandKey, userId: input.userId, title: input.title ?? "New chat", summary: null, compactedThroughSeq: null, kickoff: input.kickoff ?? null, archivedAt: null, createdAt: "2026-11-17T12:00:00.000Z", updatedAt: "2026-11-17T12:00:00.000Z" };
       }) as never,
     });
     assert.deepEqual(result, { sessionId: "sess-1", path: "/portal/assistant?s=sess-1" });
-    assert.deepEqual(calls[0]?.args, { brandKey: BRAND, userId: "user-1", kickoff: { kind: "generate_report", templateId } });
-    assert.equal((calls[1]?.args as { title?: string })?.title, "Report: Monthly client check-in");
+    assert.equal(calls.length, 1, "one write: the session is born titled, there is no rename to fail");
+    assert.deepEqual(calls[0]?.args, {
+      brandKey: BRAND,
+      userId: "user-1",
+      kickoff: { kind: "generate_report", templateId },
+      title: "Report: Monthly client check-in",
+    });
     assert.deepEqual(events, ["report:generate_start"]);
   } finally {
     setReportEventTracker(null);
   }
 });
 
-test("a long template name is cut to 80 chars", async () => {
+test("a failed session create propagates and nothing else is written", async () => {
+  const { templates } = createMemoryStores();
+  const templateId = "33333333-3333-4333-8333-333333333333";
+  await templates.insertTemplate({
+    id: templateId, brandKey: BRAND, name: "Weekly", description: "d", instructions: "i", createdBy: "app", createdByUserId: "user-1",
+  });
+  let creates = 0;
+  await assert.rejects(
+    startReportGeneration(ws(), { templateId }, {
+      isFeatureEnabled: async () => true,
+      getReportTemplate: async (a, b, id, deps) => {
+        const { getReportTemplate } = await import("./templateService.ts");
+        return getReportTemplate(a, b, id, deps ?? { store: templates });
+      },
+      createSession: (async () => {
+        creates += 1;
+        throw new Error("insert failed");
+      }) as never,
+    }),
+    /insert failed/,
+  );
+  assert.equal(creates, 1);
+});
+
+test("a long template name is cut to 80 characters, never through a surrogate pair", async () => {
   const { templates } = createMemoryStores();
   const templateId = "22222222-2222-4222-8222-222222222222";
-  const name = "N".repeat(80);
+  // "Report: " is 8 characters, so the cut falls inside the 72nd and 73rd characters.
+  const name = "N".repeat(71) + "\uD83D\uDE80\uD83D\uDE80";
   await templates.insertTemplate({
     id: templateId, brandKey: BRAND, name, description: "d", instructions: "i", createdBy: "app", createdByUserId: "user-1",
   });
@@ -111,9 +137,12 @@ test("a long template name is cut to 80 chars", async () => {
       const { getReportTemplate } = await import("./templateService.ts");
       return getReportTemplate(a, b, id, deps ?? { store: templates });
     },
-    createSession: (async () => ({ id: "sess-2", brandKey: BRAND, userId: "user-1", title: "New chat", summary: null, compactedThroughSeq: null, kickoff: null, archivedAt: null, createdAt: "", updatedAt: "" })) as never,
-    renameSession: (async (_a: unknown, input: { title: string }) => { title = input.title; return null; }) as never,
+    createSession: (async (_a: unknown, input: { title?: string }) => {
+      title = input.title ?? "";
+      return { id: "sess-2", brandKey: BRAND, userId: "user-1", title, summary: null, compactedThroughSeq: null, kickoff: null, archivedAt: null, createdAt: "", updatedAt: "" };
+    }) as never,
   });
-  assert.equal(title.length <= 80, true);
   assert.ok(title.startsWith("Report: "));
+  assert.ok(Array.from(title).length <= 80, "the database allows 80 characters");
+  assert.equal(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(title), false, "no lone surrogate");
 });

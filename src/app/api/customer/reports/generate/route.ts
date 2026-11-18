@@ -6,42 +6,31 @@
  * adapts the wire shape.
  */
 
-import { toErrorResponse, readOptionalJsonBody } from "../../../../../shared/http/errors.ts";
+import { jsonOk, readOptionalJsonBody, toErrorResponse } from "../../../../../shared/http/errors.ts";
 import { requireWorkspace } from "../../../../../server/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
-import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
 import { startReportGeneration } from "../../../../../server/reports/generate.ts";
+import type { ReportsRouteDeps } from "../../../../../server/reports/routeKit.ts";
 import { generateBodySchema } from "../../../../../server/reports/reports.contract.ts";
 
 export const dynamic = "force-dynamic";
 
-export type ReportsGenerateRouteDeps = RequireWorkspaceDeps & {
-  isFeatureEnabled?: typeof isFeatureEnabled;
+export type ReportsGenerateRouteDeps = ReportsRouteDeps & {
   startReportGeneration?: typeof startReportGeneration;
 };
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
-}
 
 export async function POST(request: Request, _ctx?: unknown, deps?: ReportsGenerateRouteDeps): Promise<Response> {
   try {
     const body = await readOptionalJsonBody(request);
     const parsed = generateBodySchema.safeParse(body);
     if (!parsed.success) return toErrorResponse(parsed.error);
+    // The service owns the flag rules (`reports`, `report_generate`, `assistant`).
     const workspace = await requireWorkspace(request, { brandKey: parsed.data.brand_key }, deps);
     const result = await (deps?.startReportGeneration ?? startReportGeneration)(
       workspace,
       { templateId: parsed.data.templateId },
-      deps ? { isFeatureEnabled: deps.isFeatureEnabled } : undefined,
+      deps?.isFeatureEnabled ? { isFeatureEnabled: deps.isFeatureEnabled } : undefined,
     );
-    return json({ sessionId: result.sessionId, path: result.path }, 201);
+    return jsonOk({ sessionId: result.sessionId, path: result.path }, 201);
   } catch (err) {
     return toErrorResponse(err);
   }

@@ -4,7 +4,7 @@ import { AppError } from "../../shared/http/appError.ts";
 import { isFeatureEnabled as isFeatureEnabledDefault } from "../features/flags.ts";
 import type { FeatureName } from "../features/names.ts";
 import type { Workspace } from "../workspace/requireWorkspace.ts";
-import { createSession, renameSession } from "../assistant/sessions.ts";
+import { createSession } from "../assistant/sessions.ts";
 import { getReportTemplate } from "./templateService.ts";
 import { captureReportEvent } from "./telemetry.ts";
 
@@ -12,15 +12,17 @@ export type StartReportGenerationDeps = {
   isFeatureEnabled?: (name: FeatureName, brandKey: string) => Promise<boolean>;
   getReportTemplate?: typeof getReportTemplate;
   createSession?: typeof createSession;
-  renameSession?: typeof renameSession;
 };
 
 const FEATURE_OFF = "This page is not available for your workspace yet.";
 
 /**
  * Requires `reports`, `report_generate` and `assistant`, loads the template,
- * then opens an assistant session with a `generate_report` kickoff and renames
- * it to "Report: {name}". The path is the portal chat that will run the kickoff.
+ * then opens an assistant session already titled "Report: {name}" and carrying a
+ * `generate_report` kickoff. The path is the portal chat that will run the
+ * kickoff. The session is created with its title in one write: a separate rename
+ * could fail after the session existed, leaving a stray chat behind for every
+ * retry.
  */
 export async function startReportGeneration(
   ws: Workspace,
@@ -28,9 +30,11 @@ export async function startReportGeneration(
   deps?: StartReportGenerationDeps,
 ): Promise<{ sessionId: string; path: string }> {
   const flag = deps?.isFeatureEnabled ?? isFeatureEnabledDefault;
-  const reportsOn = await flag("reports", ws.brandKey);
-  const generateOn = await flag("report_generate", ws.brandKey);
-  const assistantOn = await flag("assistant", ws.brandKey);
+  const [reportsOn, generateOn, assistantOn] = await Promise.all([
+    flag("reports", ws.brandKey),
+    flag("report_generate", ws.brandKey),
+    flag("assistant", ws.brandKey),
+  ]);
   if (!reportsOn || !generateOn || !assistantOn) {
     throw new AppError(404, "feature_unavailable", FEATURE_OFF);
   }
@@ -43,12 +47,7 @@ export async function startReportGeneration(
     brandKey: ws.brandKey,
     userId: ws.user.id,
     kickoff: { kind: "generate_report", templateId: template.id },
-  });
-  await (deps?.renameSession ?? renameSession)(ws.admin, {
-    id: session.id,
-    brandKey: ws.brandKey,
-    userId: ws.user.id,
-    title: (`Report: ${template.name}`).slice(0, 80),
+    title: Array.from(`Report: ${template.name}`).slice(0, 80).join(""),
   });
   captureReportEvent("report:generate_start", {});
   return { sessionId: session.id, path: `/portal/assistant?s=${session.id}` };

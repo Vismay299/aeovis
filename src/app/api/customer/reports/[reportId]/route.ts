@@ -6,18 +6,20 @@
  * Delete removes the report; sharing state dies with it.
  */
 
-import { AppError } from "../../../../../shared/http/appError.ts";
-import { readOptionalJsonBody, toErrorResponse } from "../../../../../shared/http/errors.ts";
-import { requireWorkspace } from "../../../../../server/workspace/requireWorkspace.ts";
-import type { RequireWorkspaceDeps } from "../../../../../server/workspace/requireWorkspace.ts";
-import { isFeatureEnabled } from "../../../../../server/features/flags.ts";
+import { jsonOk, readOptionalJsonBody, toErrorResponse } from "../../../../../shared/http/errors.ts";
+import { brandKeyFrom } from "../../../../../server/assistant/routeDeps.ts";
 import {
   deleteReport,
   getReport,
   viewsLast30Days,
 } from "../../../../../server/reports/service.ts";
 import { listReportTemplates } from "../../../../../server/reports/templateService.ts";
-import { SKILL_MANIFEST } from "../../../../../assistant/skills/manifest.generated.ts";
+import { reportChatPath } from "../../../../../server/reports/chatPath.ts";
+import {
+  requireReportsWorkspace,
+  skillTitleFor,
+  type ReportsRouteDeps,
+} from "../../../../../server/reports/routeKit.ts";
 import {
   reportDeleteBodySchema,
   reportsBrandQuery,
@@ -25,116 +27,53 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const FEATURE_OFF = "This page is not available for your workspace yet.";
-
 type Context = { params: Promise<{ reportId: string }> | { reportId: string } };
 
-export type ReportItemRouteDeps = RequireWorkspaceDeps & {
-  isFeatureEnabled?: typeof isFeatureEnabled;
+export type ReportItemRouteDeps = ReportsRouteDeps & {
   getReport?: typeof getReport;
   deleteReport?: typeof deleteReport;
   listReportTemplates?: typeof listReportTemplates;
   viewsLast30Days?: typeof viewsLast30Days;
   getSkillTitle?: (skill: string | null) => string | null;
-  getChatPath?: (admin: unknown, brandKey: string, userId: string, reportId: string) => Promise<string | null>;
+  getChatPath?: typeof reportChatPath;
 };
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "content-type": "application/json; charset=utf-8",
-      "cache-control": "no-store",
-    },
-  });
-}
-
-function defaultSkillTitle(skill: string | null): string | null {
-  if (!skill) return null;
-  return SKILL_MANIFEST.find((entry) => entry.name === skill)?.title ?? null;
-}
-
-function queryBrandKey(request: Request): string | undefined {
-  const raw: Record<string, string> = {};
-  for (const [key, value] of new URL(request.url).searchParams) raw[key] = value;
-  const parsed = reportsBrandQuery.safeParse(raw);
-  if (!parsed.success) throw new AppError(400, "invalid_request", "Check the query and try again.");
-  return parsed.data.brand_key;
-}
-
-async function defaultChatPath(
-  admin: unknown,
-  brandKey: string,
-  userId: string,
-  reportId: string,
-): Promise<string | null> {
-  try {
-    type Chain = {
-      eq: (column: string, value: string) => Chain;
-      maybeSingle: () => Promise<{ data: unknown; error: unknown }>;
-    };
-    const client = admin as {
-      from: (table: string) => {
-        select: (columns: string) => Chain;
-      };
-    };
-    const { data, error } = await client
-      .from("reports")
-      .select("session_id")
-      .eq("id", reportId)
-      .eq("brand_key", brandKey)
-      .maybeSingle();
-    if (error) return null;
-    const sessionId = (data as { session_id?: unknown } | null)?.session_id;
-    if (typeof sessionId !== "string" || !sessionId) return null;
-    const { data: session, error: sessionError } = await client
-      .from("assistant_sessions")
-      .select("id")
-      .eq("id", sessionId)
-      .eq("brand_key", brandKey)
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (sessionError || !session) return null;
-    return `/portal/assistant?s=${sessionId}`;
-  } catch {
-    return null;
-  }
-}
-
-async function loadWorkspace(request: Request, brandKey: string | undefined, deps?: ReportItemRouteDeps) {
-  const workspace = await requireWorkspace(request, { brandKey }, deps);
-  if (!(await (deps?.isFeatureEnabled ?? isFeatureEnabled)("reports", workspace.brandKey))) {
-    throw new AppError(404, "feature_unavailable", FEATURE_OFF);
-  }
-  return workspace;
-}
 
 export async function GET(request: Request, context: Context, deps?: ReportItemRouteDeps): Promise<Response> {
   try {
-    const workspace = await loadWorkspace(request, queryBrandKey(request), deps);
+    const workspace = await requireReportsWorkspace(request, brandKeyFrom(request, reportsBrandQuery), deps);
     const { reportId } = await context.params;
     const report = await (deps?.getReport ?? getReport)(workspace.admin, workspace.brandKey, reportId);
-    const templatesFn = deps?.listReportTemplates ?? listReportTemplates;
-    const skillTitleFn = deps?.getSkillTitle ?? defaultSkillTitle;
-    const viewsFn = deps?.viewsLast30Days ?? viewsLast30Days;
-    const chatPathFn = deps?.getChatPath ?? defaultChatPath;
-    const { templates } = await templatesFn(workspace.admin, workspace.brandKey);
-    const templateNames = new Map(templates.map((template) => [template.id, template.name]));
-    const views30d = report.shareToken
-      ? await viewsFn(
-          workspace.admin,
-          { brandKey: workspace.brandKey, reportId: report.id, shareToken: report.shareToken },
-        )
-      : null;
-    const chatPath = await chatPathFn(workspace.admin, workspace.brandKey, workspace.user.id, report.id);
-    return json({
+
+    // The three reads below depend only on the report row, so they run together.
+    // The template list is only for the name a report's template now carries, so
+    // a report with no template skips it.
+    const [templates, views30d, chatPath] = await Promise.all([
+      report.templateId
+        ? (deps?.listReportTemplates ?? listReportTemplates)(workspace.admin, workspace.brandKey)
+        : Promise.resolve(null),
+      report.shareToken
+        ? (deps?.viewsLast30Days ?? viewsLast30Days)(workspace.admin, {
+            brandKey: workspace.brandKey,
+            reportId: report.id,
+            shareToken: report.shareToken,
+          })
+        : Promise.resolve(null),
+      (deps?.getChatPath ?? reportChatPath)(workspace.admin, {
+        brandKey: workspace.brandKey,
+        userId: workspace.user.id,
+        sessionId: report.sessionId,
+      }),
+    ]);
+    const templateName = templates?.templates.find((template) => template.id === report.templateId)?.name ?? null;
+
+    return jsonOk({
       report: {
         id: report.id,
         title: report.title,
         skill: report.skill,
-        skillTitle: skillTitleFn(report.skill),
+        skillTitle: (deps?.getSkillTitle ?? skillTitleFor)(report.skill),
         templateId: report.templateId,
-        templateName: report.templateId ? (templateNames.get(report.templateId) ?? null) : null,
+        templateName,
         createdBy: report.createdBy,
         createdByYou: report.createdByUserId !== null && report.createdByUserId === workspace.user.id,
         htmlBytes: report.sizeBytes,
@@ -157,10 +96,10 @@ export async function DELETE(request: Request, context: Context, deps?: ReportIt
     const body = await readOptionalJsonBody(request);
     const parsed = reportDeleteBodySchema.safeParse(body);
     if (!parsed.success) return toErrorResponse(parsed.error);
-    const workspace = await loadWorkspace(request, parsed.data.brand_key ?? queryBrandKey(request), deps);
+    const workspace = await requireReportsWorkspace(request, parsed.data.brand_key, deps);
     const { reportId } = await context.params;
     await (deps?.deleteReport ?? deleteReport)(workspace.admin, workspace.brandKey, reportId);
-    return json({ reportId, deleted: true });
+    return jsonOk({ reportId, deleted: true });
   } catch (err) {
     return toErrorResponse(err);
   }
