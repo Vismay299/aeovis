@@ -40,6 +40,7 @@ import { assertTurnRate } from "./rateLimit.ts";
 import { trackAssistantEvent } from "./telemetry.ts";
 import { beginTurn, cancelRequested, finishTurn, heartbeat } from "./turns.ts";
 import { buildSystemPrompt } from "./prompt.ts";
+import { buildTemplatesBlock } from "../reports/promptBlock.ts";
 import { toToolError } from "../tools/errors.ts";
 
 export const STEP_LIMIT_NOTICE = (n: number) =>
@@ -316,6 +317,12 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
     LOCATION_OPTIONS.find((option) => option.code === marketCodes.locationCode)?.label ?? "United States";
   const market = { country, language: marketCodes.languageCode };
   const today = new Date(now()).toISOString().slice(0, 10);
+  let templatesBlock: string | null = null;
+  try {
+    templatesBlock = await buildTemplatesBlock(admin, i.ws.brandKey, { isFeatureEnabled: flag });
+  } catch {
+    templatesBlock = null;
+  }
 
   let summary = session.summary;
   let compactedThroughSeq = session.compactedThroughSeq ?? 0;
@@ -349,6 +356,7 @@ export async function runAssistantTurn(i: TurnInput, deps: TurnDeps = {}): Promi
       skills,
       memoryMarkdown,
       summary,
+      templatesBlock,
     });
     modelInput = await buildModelInput({ system, uiMessages });
   };
