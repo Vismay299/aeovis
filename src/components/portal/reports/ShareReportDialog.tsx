@@ -27,6 +27,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { describeError } from "@/shared/query/errors";
 import { relativeTime } from "@/shared/format";
 import { useShareReport } from "./hooks/useReports.ts";
+import { describeViews } from "./shareState.ts";
 import type { ReportDetailItem } from "./hooks/useReports.ts";
 
 // The share toggle. The link is built from the browser's own origin, so the
@@ -160,7 +161,7 @@ export function ShareReportDialog({
                   ? ` Link created ${relativeTime(sharedAt)}.`
                   : ""}
                 {report.views30d !== null && report.views30d !== undefined
-                  ? ` Opened ${report.views30d} times in the last 30 days.`
+                  ? ` ${describeViews(report.views30d)}`
                   : ""}
               </p>
             </div>

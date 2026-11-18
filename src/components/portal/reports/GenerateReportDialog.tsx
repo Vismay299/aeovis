@@ -72,6 +72,10 @@ export function GenerateReportDialog({
 
   const turnMaxUsd = configQuery.data?.turnMaxUsd;
   const pending = generateMutation.isPending;
+  // The session exists once the request succeeds, and the dialog stays up
+  // while the assistant page loads. A second Start in that window would
+  // create a second session (and a second paid turn), so it stays locked.
+  const locked = pending || generateMutation.isSuccess;
 
   return (
     <Dialog
@@ -115,10 +119,16 @@ export function GenerateReportDialog({
               <FieldLabel htmlFor="generate-report-template">
                 Template
               </FieldLabel>
+              {/* `items` lets the trigger show the template's name; without
+                  it the closed trigger prints the raw id. */}
               <Select
                 value={selectedId ?? ""}
                 onValueChange={(value) => setTemplateId(value ?? undefined)}
-                disabled={pending}
+                items={templates.map((template) => ({
+                  value: template.id,
+                  label: template.name,
+                }))}
+                disabled={locked}
               >
                 <SelectTrigger
                   id="generate-report-template"
@@ -137,12 +147,10 @@ export function GenerateReportDialog({
             </Field>
             <DialogDescription>
               The assistant reads your workspace data and writes the report. It
-              may ask you to approve paid lookups. Each assistant reply uses up
-              to{" "}
+              may ask you to approve paid lookups.
               {turnMaxUsd !== undefined
-                ? formatUsd(turnMaxUsd)
-                : "an amount shown in the assistant"}
-              .
+                ? ` Each assistant reply uses up to ${formatUsd(turnMaxUsd)}.`
+                : ""}
             </DialogDescription>
             {generateMutation.isError ? (
               <p className="text-sm text-destructive">
@@ -164,12 +172,14 @@ export function GenerateReportDialog({
           {templates.length > 0 && !templatesQuery.isError ? (
             <Button
               pending={pending}
-              disabled={!selectedId}
+              disabled={!selectedId || locked}
               onClick={() => {
-                if (selectedId) void generateMutation.mutateAsync(selectedId);
+                if (selectedId && !locked) {
+                  generateMutation.mutate(selectedId);
+                }
               }}
             >
-              {pending ? "Starting…" : "Start"}
+              {locked ? "Starting…" : "Start"}
             </Button>
           ) : null}
         </DialogFooter>

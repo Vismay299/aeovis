@@ -15,6 +15,7 @@ import { keys } from "@/shared/query/keys";
 import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import { trackEvent } from "@/shared/telemetry/client";
 import { REPORT_APP_LIST_LIMIT } from "@/shared/reports";
+import { applyShareResult } from "../shareState.ts";
 
 // Wire shapes (§6.5): the list carries no `html`, no `summary` and no token;
 // the detail adds the current link, its 30-day views and the writing chat.
@@ -143,14 +144,7 @@ export function useShareReport(brandKey: string, reportId: string) {
         keys.report(reportId),
         (previous) =>
           previous
-            ? {
-                report: {
-                  ...previous.report,
-                  shareToken: result.shareToken,
-                  sharedAt: result.sharedAt,
-                  shared: result.shareToken !== null,
-                },
-              }
+            ? { report: applyShareResult(previous.report, result) }
             : previous,
       );
       void queryClient.invalidateQueries({

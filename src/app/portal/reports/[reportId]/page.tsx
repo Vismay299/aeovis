@@ -66,6 +66,8 @@ function ReportDetailPage() {
   const searchParams = useSearchParams();
   const [showShare, setShowShare] = useState(false);
   const [showDelete, setShowDelete] = useState(false);
+  // Set once the delete has succeeded and the redirect is on its way.
+  const [deleted, setDeleted] = useState(false);
   const openedRef = useRef<string | null>(null);
 
   // The flag decides: with `reports` off the page does not exist.
@@ -73,9 +75,17 @@ function ReportDetailPage() {
     notFound();
   }
 
-  const reportQuery = useQuery(reportQueryOptions(brandKey, reportId));
+  const reportQuery = useQuery({
+    ...reportQueryOptions(brandKey, reportId),
+    // The delete drops this report from the cache. A mounted query would
+    // answer that by fetching it again, and the 404 would flash "Report not
+    // found" until the redirect lands; switching it off shows the loading
+    // skeleton for that moment instead.
+    enabled: Boolean(brandKey && reportId) && !deleted,
+  });
   const deleteMutation = useDeleteReport(brandKey, {
     onDeleted: () => {
+      setDeleted(true);
       setShowDelete(false);
       // `replace`, so Back does not return to the deleted report's URL.
       router.replace("/portal/reports");

@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SkeletonTableRows } from "@/components/app/SkeletonPresets";
 import { REPORT_IFRAME_SANDBOX } from "@/shared/report-sandbox";
+import { cn } from "@/shared/utils";
 
 // The only place the app renders model-written HTML. Everything that keeps it
 // safe is the `sandbox` attribute plus the CSP the document response sets; the
@@ -21,6 +22,12 @@ import { REPORT_IFRAME_SANDBOX } from "@/shared/report-sandbox";
 // A skeleton covers the frame until the document loads. The sandbox hides the
 // response status from the app, so a failed load shows the error text the
 // render route writes into the frame.
+//
+// The frame is positioned over its wrapper (`absolute inset-0`) rather than
+// sized with `h-full`: a percentage height does not resolve against a parent
+// that only has a `min-height`, and an iframe with no resolvable height falls
+// back to 150px. The wrapper carries the phone-tall minimum itself, so the
+// frame fills it however the page around it is sized.
 export function ReportViewer({
   src,
   title,
@@ -32,16 +39,17 @@ export function ReportViewer({
 }) {
   const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full min-h-[70dvh] w-full">
       <iframe
         src={src}
         sandbox={REPORT_IFRAME_SANDBOX}
         referrerPolicy="no-referrer"
         title={title}
         onLoad={() => setLoadedSrc(src)}
-        className={
-          className ?? "h-full w-full rounded-lg border border-border bg-card"
-        }
+        className={cn(
+          "absolute inset-0 h-full w-full",
+          className ?? "rounded-lg border border-border bg-card",
+        )}
       />
       {loadedSrc !== src ? (
         // A document-shaped placeholder over the frame until the report loads.

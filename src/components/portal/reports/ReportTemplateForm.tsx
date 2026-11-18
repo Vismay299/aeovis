@@ -115,7 +115,7 @@ export function ReportTemplateForm({
     const nextErrors = validate({ name, description, instructions });
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
-    void saveMutation.mutateAsync({
+    saveMutation.mutate({
       name: name.trim(),
       description: description.trim(),
       instructions: instructions.trim(),
@@ -136,7 +136,9 @@ export function ReportTemplateForm({
         fullScreenOnMobile
         className="sm:max-w-2xl"
       >
-        <form onSubmit={submit} className="flex flex-col gap-4">
+        {/* `noValidate`: the fields are `required` for assistive tech, but the
+            browser's own bubble would pre-empt the messages below. */}
+        <form onSubmit={submit} noValidate className="flex flex-col gap-4">
           <DialogHeader>
             <DialogTitle>{template ? "Edit template" : "New template"}</DialogTitle>
           </DialogHeader>
