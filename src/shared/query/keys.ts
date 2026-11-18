@@ -158,6 +158,12 @@ export const keys = {
   assistantSessions: (brandKey: string) => ["assistantSessions", brandKey] as const,
   assistantSession: (sessionId: string) => ["assistantSession", sessionId] as const,
   assistantApproval: (approvalId: string) => ["assistantApproval", approvalId] as const,
+  // F23 — reports and public sharing. The list and the templates are
+  // workspace-scoped; a single report is an id-addressed record the route
+  // authorises (like scanReport), so it is not a workspace domain.
+  reports: (brandKey: string) => ["reports", brandKey] as const,
+  report: (reportId: string) => ["report", reportId] as const,
+  reportTemplates: (brandKey: string) => ["reportTemplates", brandKey] as const,
 } as const;
 
 // F12 §6.2 — question history reads. Workspace data follows
@@ -254,6 +260,8 @@ export const WORKSPACE_DOMAINS: ReadonlySet<string> = new Set([
   "rankSuggestions",
   "setup",
   "explore",
+  "reports",
+  "reportTemplates",
 ]);
 
 export function isWorkspaceKey(

@@ -1,0 +1,67 @@
+// Portions ported from every-app/open-seo@c5f8db1 (MIT, © 2026 Ben Senescu):
+//   src/client/features/reports/ReportViewer.tsx:21-56
+// Modified for Perceev. See THIRD_PARTY_NOTICES.md.
+
+"use client";
+
+import { useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonTableRows } from "@/components/app/SkeletonPresets";
+import { REPORT_IFRAME_SANDBOX } from "@/shared/report-sandbox";
+import { cn } from "@/shared/utils";
+
+// The only place the app renders model-written HTML. Everything that keeps it
+// safe is the `sandbox` attribute plus the CSP the document response sets; the
+// token list is shared with that header so a link behaves the same framed and
+// top-level, and `allow-same-origin` is never added.
+//
+// Framed, the document is served byte for byte — the app injects nothing here.
+// The only injection is the print script on `?print=1`, which this viewer
+// never requests.
+//
+// A skeleton covers the frame until the document loads. The sandbox hides the
+// response status from the app, so a failed load shows the error text the
+// render route writes into the frame.
+//
+// The frame is positioned over its wrapper (`absolute inset-0`) rather than
+// sized with `h-full`: a percentage height does not resolve against a parent
+// that only has a `min-height`, and an iframe with no resolvable height falls
+// back to 150px. The wrapper carries the phone-tall minimum itself, so the
+// frame fills it however the page around it is sized.
+export function ReportViewer({
+  src,
+  title,
+  className,
+}: {
+  src: string;
+  title: string;
+  className?: string;
+}) {
+  const [loadedSrc, setLoadedSrc] = useState<string | null>(null);
+  return (
+    <div className="relative h-full min-h-[70dvh] w-full">
+      <iframe
+        src={src}
+        sandbox={REPORT_IFRAME_SANDBOX}
+        referrerPolicy="no-referrer"
+        title={title}
+        onLoad={() => setLoadedSrc(src)}
+        className={cn(
+          "absolute inset-0 h-full w-full",
+          className ?? "rounded-lg border border-border bg-card",
+        )}
+      />
+      {loadedSrc !== src ? (
+        // A document-shaped placeholder over the frame until the report loads.
+        <div
+          className="absolute inset-0 space-y-3 overflow-hidden bg-card p-6"
+          aria-busy
+        >
+          <Skeleton className="h-7 w-2/5" />
+          <Skeleton className="h-4 w-3/5" />
+          <SkeletonTableRows rows={8} columns={4} className="pt-4" />
+        </div>
+      ) : null}
+    </div>
+  );
+}

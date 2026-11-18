@@ -873,3 +873,17 @@ SOFTWARE.
 - `src/server/tools/waiting.test.ts` (waiting cases from `src/server/features/sam/samChatTools.test.ts`)
 - `src/components/portal/assistant/hooks/useAssistantSessions.ts` (query keys from `src/client/features/sam/samQueries.ts`)
 - `src/app/api/customer/assistant/{sessions,config}/route.ts` (from `src/serverFunctions/sam.ts`, `src/serverFunctions/samAccess.ts`)
+
+### F23 Phase 4 ports
+- `src/components/portal/reports/ReportsList.tsx` (from `src/client/features/reports/ReportsList.tsx:20-99`)
+- `src/components/portal/reports/ReportViewer.tsx` (from `src/client/features/reports/ReportViewer.tsx:21-56`)
+- `src/components/portal/reports/ShareReportDialog.tsx` (from `src/client/features/reports/shared.tsx:110-253`)
+- `src/components/portal/reports/DeleteReportDialog.tsx` (from `src/client/features/reports/shared.tsx:84-108`)
+- `src/components/portal/reports/FullScreenReport.tsx` (from `src/routes/_app/p/$projectId/reports/$reportId.tsx:300-346`)
+- `src/components/portal/reports/ReportTemplatesList.tsx` (from `src/client/features/reports/ReportTemplatesList.tsx:17-86`)
+- `src/components/portal/reports/ReportTemplateForm.tsx` (from `src/client/features/reports/ReportTemplateForm.tsx:18-150`)
+- `src/components/portal/reports/hooks/useReports.ts` (from `src/client/features/reports/shared.tsx:36-53`)
+- `src/components/portal/reports/formatWrittenBy.ts` (pattern from `src/client/features/reports/shared.tsx:45-54`)
+- `src/app/portal/reports/page.tsx` (from `src/routes/_app/p/$projectId/reports/index.tsx:20-82`)
+- `src/app/portal/reports/[reportId]/page.tsx` (from `src/routes/_app/p/$projectId/reports/$reportId.tsx:44-346`)
+- `src/app/portal/reports/templates/page.tsx` (from `src/routes/_app/p/$projectId/reports/templates.tsx:27-125`)
