@@ -21,6 +21,62 @@ Read these files before writing any code, in this order:
 
 To see the reference live: `npm run dev`, open `http://localhost:3000/ui-lab`. Every card has a Replay button.
 
+## 0.1 The team (run the job as these six roles)
+
+Work as a team of six. Each role owns the tasks listed for it, hands off through the artefacts named, and signs off in the final report. If you are one agent, play each role in turn and keep their outputs separate; if you can spawn sub-agents, give each role its own agent with this whole brief plus its role section.
+
+| Role | Count | Owns |
+| --- | --- | --- |
+| Product manager (PM) | 1 | Scope, order, acceptance, the final report |
+| Frontend lead (FE lead) | 1 | Branch setup, merge, shared components, review of every frontend commit |
+| Junior frontend engineers (FE-1, FE-2) | 2 | Page-level rollout tasks |
+| Backend engineers (BE-1, BE-2) | 2 | Connecting the new components to real data |
+
+### Product manager
+- Before any code: read `UI_LAB_DECISIONS.md` and this brief, then write `docs/design/ROLLOUT_PLAN.md` (with the doc-status header) listing every task T1–T11, its owner, what "done" looks like, and which data each data-driven component needs (series, per-engine status, budget, daily counts).
+- Is the only role that decides scope. If a task needs something this brief does not allow, the PM marks it **Skipped** with the reason — nobody else invents a workaround.
+- Accepts each task against §5 and §7 before the next one starts. Rejects any use of a rejected item.
+- Writes the final report (§8), with a sign-off line from each role.
+
+### Frontend lead
+- Does §3 (branch, merge `test_UI`, fix merge fallout) alone, before anyone else starts.
+- Owns the shared layer: `src/components/ui/*`, `src/components/app/*`, `src/components/portal/ui.jsx`, `src/styles/*`. Juniors do not edit these; they ask the lead.
+- Does T1 (scroll reveal), T2 (stat tiles in `ui.jsx` and `StatTile`) and T11 (sweep).
+- Reviews every junior commit before the next task: tokens only, no rejected items, reduced motion respected, guard tests green. Fixes or sends back.
+- Owns the data contracts with the backend: for each component that needs data, agrees the exact prop shape (e.g. `series: number[]` oldest first, `delta: { text, direction }`) and writes it into `ROLLOUT_PLAN.md`.
+
+### Junior frontend engineer 1 (FE-1)
+- T3 (charts to Bklit Line / Bar) and T4 (loading states).
+- Works only in page-level files under `src/components/portal/**` and `src/app/portal/**`, plus `src/components/perceev/charts/TrendChart.jsx`.
+
+### Junior frontend engineer 2 (FE-2)
+- T6 (hold / slide confirmations), T7 (dialog emblems, morphing dialogs), T8 (empty states, alerts, onboarding checklist), T10 (public site).
+- Same file limits as FE-1. `PricedActionButton.tsx` is shared: FE-2 proposes the change, the FE lead makes it.
+
+### Backend engineer 1 (BE-1) — scans and visibility data
+- Supplies data for T2, T5 and T9's engine cards: visibility % per scan (for the spark series and delta), the current scan stage and progress, background tasks the app already tracks (for `StatusIsland`), and per-engine per-day collection status (for `UptimeCard`) **if it is already stored**.
+- Prefers data that existing API responses already return. Where a field is stored but not returned, adds it to the existing read endpoint.
+
+### Backend engineer 2 (BE-2) — usage, content and checks data
+- Supplies data for T8 and T9: budget and spend for `LiquidGauge`, daily "answers naming you" counts for `MetricCard`, crawler / robots / llms.txt check results and the existing re-check function for `InlineAlert`, onboarding checklist steps for `OnboardingChecklist`.
+- Same rules as BE-1.
+
+### Rules for the backend engineers
+- **Read-only.** You may add fields to existing GET responses or add new GET routes that read data already stored. You may not add writes, change existing response fields, or change scoring, billing, spend guards, auth or job logic.
+- **No migrations, no new tables, no new columns.** If a component needs data that is not stored, stop: the PM marks that component Skipped.
+- Every new or changed route gets a test next to it, following the existing `*.test.mjs` / `*.test.ts` pattern, and keeps the existing perimeter / auth checks.
+- Unknown stays `null` all the way to the screen, never `0`.
+- Hand the FE lead the exact response shape and an example payload, written into `ROLLOUT_PLAN.md`.
+
+### Order of work
+1. PM writes `ROLLOUT_PLAN.md`. FE lead does §3.
+2. BE-1 and BE-2 confirm which data exists and write the shapes into the plan; the PM marks anything missing as Skipped.
+3. FE lead does T1 and T2. In parallel, BE-1 and BE-2 build their read endpoints.
+4. FE-1 and FE-2 take their tasks in task-number order; the FE lead reviews each before the next.
+5. FE lead does T11. PM checks §7 and writes §8.
+
+Two roles never edit the same file at once. Every commit message starts with the role, e.g. `FE-1: T3 rank trend chart to Bklit LineChart`.
+
 ---
 
 ## 1. Stack and layout (facts — do not change them)
@@ -43,7 +99,7 @@ To see the reference live: `npm run dev`, open `http://localhost:3000/ui-lab`. E
 ## 2. Hard rules (breaking any of these fails the run)
 
 1. **Secrets.** Never print, quote, cat or grep a credential. Exclude `.env*` from every recursive search (`rg --glob '!.env*'`, `grep -r --exclude='.env*'`). Prefer `git grep`. Never use `--no-ignore`, `-uu` or `--hidden` at the repo root. Never stage `.env`, `.env.local`, `.env.*.local` or `supabase/.temp/`. If a secret ever appears in output: stop, do not repeat it, name the file and variable in your report.
-2. **No behaviour changes.** Do not touch API routes (`src/app/api/**`), `src/server/**` logic, `src/shared/**` business logic, Supabase migrations, the worker, auth, billing or data fetching. You change presentation only: markup, classes, which presentational component is used.
+2. **No behaviour changes.** Frontend roles change presentation only: markup, classes, which presentational component is used. Nobody touches Supabase migrations, the worker, auth, billing, spend guards or scoring. The only server work allowed is the backend engineers' **read-only** data exposure described in §0.1.
 3. **Do not change data semantics on screen.** An unknown value stays an em dash "—", never `0`. "Not measured", "insufficient sample" and "measured zero" stay distinct. Simulated data stays labelled. Copy text stays the same unless this brief says otherwise.
 4. **No new dependencies.** Everything you need is installed. Do not run `npm install <pkg>`. If you believe one is needed, stop and report it.
 5. **Do not add components from registries** unless this brief names them. If you do run `npx shadcn add`, the CLI will (a) append colour variables and `@custom-variant dark (&:is(.dark *));` to `src/app/globals.css` and (b) create `src/lib/utils.ts`. **Revert both** every time.
@@ -193,9 +249,10 @@ Wherever a scan in progress is shown (`ScanProgressCard`, `ScanRunningCard`, the
 - Overview setup checklist (`src/components/portal/overview/SetupChecklist.tsx`): render with Watermelon `OnboardingChecklist`, steps from the existing checklist model.
 
 ### T9 — Usage and engines
-- `src/app/portal/usage`: add `LiquidGauge` (read-only) for budget used vs. budget, from existing usage data. If there is no budget, skip it.
-- Overview or scans page: `UptimeCard` showing per-engine collection status **only if** per-engine per-day status already exists in the data. If not, skip and report.
-- `MetricCard`: use on the overview for "Answers naming you" only if daily data exists. Otherwise skip and report.
+Owners: BE-2 / BE-1 supply the data, FE lead wires it.
+- `src/app/portal/usage`: add `LiquidGauge` (read-only) for budget used vs. budget, from data BE-2 exposes. If no budget is stored, skip it.
+- Overview or scans page: `UptimeCard` showing per-engine collection status, from data BE-1 exposes, **only if** per-engine per-day status is already stored. If not, skip and report.
+- `MetricCard`: use on the overview for "Answers naming you" from daily counts BE-2 exposes, only if they are already stored. Otherwise skip and report.
 
 ### T10 — Public site
 - Hero/feature cards on `src/app/page.js` → wrap the main sample-answer card in `Tilt` (rotationFactor ≈ 6).
@@ -233,11 +290,13 @@ If you cannot log in to the portal locally, say so in the report and list which 
 
 Reply with:
 
-1. **Branch and commits** — branch name, list of commit hashes + one-line messages.
+1. **Branch and commits** — branch name, list of commit hashes + one-line messages, grouped by role.
 2. **Done** — per task T1–T11: what changed, files touched.
 3. **Skipped / not covered** — each with the reason (e.g. "no per-engine daily data, UptimeCard skipped").
 4. **Checks** — exact output summary of typecheck / test / lint; which routes were checked in the browser and which were not.
 5. **Risks** — anything you are unsure about, especially data-semantics (em dash vs 0, gaps vs zero) and conflicts resolved during the `test_UI` merge.
 6. **Secrets** — confirm no `.env*` file was read, printed or staged. If anything leaked, name file and variable (never the value).
+7. **Backend changes** — every route added or changed, the fields it returns, and its test.
+8. **Sign-off** — one line each from PM, FE lead, FE-1, FE-2, BE-1, BE-2: what they own and that it meets §5 and §7.
 
 Do not claim something works unless you ran it. If a test fails and you cannot fix it, report the failing test name and the decisive error line.
