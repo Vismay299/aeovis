@@ -7,6 +7,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { CardShell } from "@/components/app/CardShell";
+import { InlineAlert } from "@/components/app/InlineAlert";
 import { SegmentedToggle } from "@/components/app/SegmentedToggle";
 import {
   Table,
@@ -93,11 +94,13 @@ export function AiAccessView({ summary }: { summary: AuditSummary }) {
               No robots.txt, so every crawler is allowed.
             </p>
           ) : (
-            <Alert variant="warning">
-              <AlertDescription>
-                We couldn't read robots.txt, so these results are unverified.
-              </AlertDescription>
-            </Alert>
+            // No retry: robots.txt was read once, during the audit. Reloading
+            // the stored summary would not read it again, so a Retry here
+            // would promise a re-check that never happens.
+            <InlineAlert
+              tone="warning"
+              title="We couldn't read robots.txt, so these results are unverified."
+            />
           )}
 
           <p className="text-sm font-medium">

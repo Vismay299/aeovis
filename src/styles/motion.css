@@ -773,6 +773,46 @@ a:hover [data-slot="perceev-mark"] .perceev-mark__upper { translate: 2% -2%; }
   from { opacity: 0; translate: 0 6px; }
 }
 
+/* ── Inline alert (T8) ─────────────────────────────────────────────── */
+
+/* The passed share of the checks wipes across in success green. */
+[data-slot="inline-alert-wipe"] {
+  transition: clip-path 600ms var(--ease-out-quart);
+}
+/* The checks list folds on a grid row so its height eases without measuring. */
+[data-slot="inline-alert-checks"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition:
+    grid-template-rows var(--dur-base) var(--ease-out-quart),
+    opacity var(--dur-fast) var(--ease-out-quart);
+}
+[data-slot="inline-alert-checks"][data-open] {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot="inline-alert"] {
+    animation: alert-in 260ms var(--ease-out-quart) backwards;
+  }
+  /* a glyph that changes (alert → spinner → result) pops in again */
+  [data-slot="inline-alert-swap"] {
+    animation: alert-swap 200ms var(--ease-out-quart) backwards;
+  }
+  [data-slot="inline-alert-tick"] path {
+    stroke-dasharray: 1;
+    animation: draw 260ms var(--ease-out-quart) 60ms backwards;
+  }
+}
+
+@keyframes alert-in {
+  from { opacity: 0; translate: 0 6px; scale: 0.98; }
+}
+@keyframes alert-swap {
+  from { opacity: 0; scale: 0.8; }
+}
+
 /* ── Scrolling ─────────────────────────────────────────────────────── */
 
 #app-content {
@@ -893,6 +933,8 @@ a:hover [data-slot="perceev-mark"] .perceev-mark__upper { translate: 2% -2%; }
   [data-slot="tabs-indicator"],
   [data-slot="empty-art-card"],
   [data-slot="empty-art-front"],
+  [data-slot="inline-alert-wipe"],
+  [data-slot="inline-alert-checks"],
   [data-slot="switch-thumb"],
   [data-slot="button-status"],
   .motion-popup,
