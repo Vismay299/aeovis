@@ -17,7 +17,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useReducedMotion } from 'motion/react';
 
-import { TextEffect } from '@/components/motion-primitives/text-effect';
+import { BlurInText } from '@/components/landing/BlurInText';
 import { Tilt } from '@/components/motion-primitives/tilt';
 
 import { DEFAULT_UNBRANDED_TARGET } from '@/shared/scoring/promptSetSize';
@@ -31,7 +31,7 @@ import { Reveal } from '@/components/landing/Reveal';
 import { DomainField } from '@/components/landing/DomainField';
 import { AnswerSheet } from '@/components/landing/AnswerSheet';
 import { EngineRail } from '@/components/landing/EngineRail';
-import { FlowDiagram } from '@/components/charts/FlowDiagram';
+import { FlowDiagram } from '@/components/perceev/charts/FlowDiagram';
 import { Reveal as RevealFlow } from '@/components/landing/Reveal';
 import {
   CapabilityDeck, TrackedSetViz, TrendViz, RivalViz, SourcesViz,
@@ -265,13 +265,9 @@ export default function Landing() {
           <div>
             <Reveal as="span" className="tag tag--brand">Answer-engine intelligence</Reveal>
             <Reveal as="h1" delay={60}>
-              <TextEffect as="span" per="word" preset="fade-in-blur">
-                The answer names two brands.
-              </TextEffect>{' '}
+              <BlurInText>The answer names two brands.</BlurInText>{' '}
               <em>
-                <TextEffect as="span" per="word" preset="fade-in-blur" delay={0.35}>
-                  Is one of them yours?
-                </TextEffect>
+                <BlurInText delayMs={350}>Is one of them yours?</BlurInText>
               </em>
             </Reveal>
             <Reveal as="p" className="lede hero__sub" delay={120}>

@@ -797,7 +797,7 @@ test("R2.7.11 ACCEPT — driving the page-level builder with no engines passes a
     if (specifier === "@/components/landing/Reveal") {
       return { Reveal: ({ children, className }) => React.createElement("div", { className }, children) };
     }
-    if (specifier === "@/components/charts/Gauge") {
+    if (specifier === "@/components/perceev/charts/Gauge") {
       return { Gauge: () => null };
     }
     return () => null;

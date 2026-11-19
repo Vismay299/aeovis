@@ -74,8 +74,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SHELL_PATH = path.join(HERE, "DashboardShell.jsx");
 const SCORE_BAND_PATH = path.join(HERE, "ScoreBand.jsx");
 const OVERVIEW_PATH = path.join(HERE, "OverviewView.jsx");
-const FLOW_PATH = path.join(HERE, "..", "charts", "FlowDiagram.jsx");
-const GAUGE_PATH = path.join(HERE, "..", "charts", "Gauge.jsx");
+const FLOW_PATH = path.join(HERE, "..", "perceev", "charts", "FlowDiagram.jsx");
+const GAUGE_PATH = path.join(HERE, "..", "perceev", "charts", "Gauge.jsx");
 
 /** Every tier word a chip could print, and the classes each one paints. */
 const TIER_WORDS = ["Strong", "Moderate", "Weak", "strong", "moderate", "weak"];
@@ -178,8 +178,8 @@ async function renderShell(scan) {
   const overviewModules = new Map([
     ["react", patchedReact],
     LUCIDE,
-    ["@/components/charts/FlowDiagram", { ...flow, __esModule: true }],
-    ["@/components/charts/Gauge", { ...gauge, __esModule: true }],
+    ["@/components/perceev/charts/FlowDiagram", { ...flow, __esModule: true }],
+    ["@/components/perceev/charts/Gauge", { ...gauge, __esModule: true }],
     ["@/shared/scoring/rosterContinuity", { ...rosterContinuityModule, __esModule: true }],
     ["./interlocking", { ...interlockingModule, __esModule: true }],
     // Stubbed on purpose: a chain of four analytics panels, none of which

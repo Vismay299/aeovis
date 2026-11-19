@@ -41,7 +41,9 @@ export function AppShell({
         {banner}
         <div className="relative min-h-0 flex-1 overflow-auto" id="app-content">
           {overlay ? (
-            <div className="pointer-events-none sticky top-2 z-30 -mb-10 flex justify-center">
+            // Zero height so the pill floats over the page: it never takes
+            // layout space, whether or not there is background work to show.
+            <div className="pointer-events-none sticky top-2 z-30 flex h-0 justify-center overflow-visible">
               <div className="pointer-events-auto">{overlay}</div>
             </div>
           ) : null}

@@ -184,6 +184,26 @@
   }
 }
 
+/* ── Blur-in headline ──────────────────────────────────────────────── */
+
+/* Words sharpen in one after another (BlurInText). Applied only when motion
+   is welcome, so reduced motion and no-animation both leave plain text. */
+.blur-in-word {
+  display: inline-block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .blur-in-word {
+    animation: word-blur-in 560ms var(--ease-out-quart) both;
+    animation-delay: calc(var(--d, 0ms) + var(--i, 0) * 55ms);
+  }
+}
+
+@keyframes word-blur-in {
+  from { opacity: 0; filter: blur(10px); translate: 0 14px; }
+  to { opacity: 1; filter: none; translate: none; }
+}
+
 /* ── Keyframes ─────────────────────────────────────────────────────── */
 
 @keyframes page-in {
