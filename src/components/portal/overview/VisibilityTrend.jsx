@@ -1,72 +1,88 @@
 "use client";
 
 /**
- * Visibility over time. The line and area are inline SVG on a 0–100 grid that
- * stretches to the card width; the gridline labels, dots and dates are HTML so
- * they keep their size on phones.
+ * Visibility over time, as a Bklit line on a fixed 0–100% axis. Each scan is
+ * a point at its scan time; the latest reading is labelled at the line's end.
  */
 
-import { useId } from "react";
+import { curveMonotoneX } from "d3-shape";
 import { Card, EmptyState, ProgressBar, Skeleton, formatPct } from "../ui";
 import { TrendingUp } from "lucide-react";
+import { ChartTooltip, Grid, Line, LineChart, XAxis, YAxis } from "@/components/charts";
+import { useChartStable } from "@/components/charts/chart-context";
+import { TooltipContent } from "@/components/charts/tooltip";
 import { engineLabel, scanSeries, shortDate, toNumber } from "./overviewModel";
 
-const GRID = [100, 75, 50, 25, 0];
+const GRID = [0, 25, 50, 75, 100];
+const COLOR = "var(--primary)";
+
+/**
+ * The latest value, drawn above the last point. Reads the chart's scales, so
+ * it sits on the line whatever the width. No `dataKey` prop on purpose: a
+ * child with one would be registered as a series.
+ */
+function LatestValueLabel({ text }) {
+  const { data, xScale, yScale, xAccessor, chartPhase } = useChartStable();
+  const last = data[data.length - 1];
+  if (!last || typeof last.visibility !== "number" || chartPhase !== "ready") return null;
+  const x = xScale(xAccessor(last)) ?? 0;
+  const y = yScale(last.visibility) ?? 0;
+  return (
+    <text
+      x={x}
+      y={y - 12}
+      textAnchor="end"
+      className="fill-foreground text-xs font-semibold tabular-nums"
+      aria-hidden="true"
+    >
+      {text}
+    </text>
+  );
+}
 
 function Chart({ points }) {
-  const gradientId = `pv-overview-area-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
-  const count = points.length;
-  const xAt = (i) => (count === 1 ? 50 : (i / (count - 1)) * 100);
-  const yAt = (value) => 100 - value;
-
-  const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${xAt(i).toFixed(2)},${yAt(p.visibility).toFixed(2)}`).join(" ");
-  const area = `${line} L${xAt(count - 1).toFixed(2)},100 L${xAt(0).toFixed(2)},100 Z`;
-  const first = points[0];
-  const last = points[count - 1];
+  // A scan without a timestamp cannot be placed on the time axis; it stays in
+  // the text summary below but is not drawn.
+  const data = points
+    .map((p) => ({ ...p, time: p.at ? new Date(p.at).getTime() : Number.NaN }))
+    .filter((p) => Number.isFinite(p.time));
+  const labels = data.map((p) => shortDate(p.at));
+  const last = data[data.length - 1] ?? points[points.length - 1];
   const summary = points.map((p) => `${shortDate(p.at)}: ${formatPct(p.visibility)}`).join(", ");
 
   return (
-    <div className="grid grid-cols-[36px_minmax(0,1fr)] gap-x-2.5 pt-6">
-      <div className="relative h-[200px]" aria-hidden="true">
-        {GRID.map((g) => (
-          <span key={g} className="absolute right-0 text-[11.5px] tabular-nums text-muted-foreground -translate-y-1/2" style={{ top: `${100 - g}%` }}>{g}%</span>
-        ))}
-      </div>
-      <div className="relative h-[200px] mr-2.5">
-        <svg className="absolute inset-0 size-full overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none" role="img" aria-labelledby={`${gradientId}-title`}>
-          <title id={`${gradientId}-title`}>{`AI visibility by scan. ${summary}.`}</title>
-          <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--primary)" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="var(--primary)" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-          {GRID.map((g) => (
-            <line key={g} className="stroke-border stroke-1 [vector-effect:non-scaling-stroke]" x1="0" x2="100" y1={yAt(g)} y2={yAt(g)} />
-          ))}
-          <path d={area} fill={`url(#${gradientId})`} />
-          <path className="fill-none stroke-primary stroke-2 stroke-round stroke-cap-round [vector-effect:non-scaling-stroke]" d={line} />
-        </svg>
-        {points.map((p, i) => (
-          <span
-            key={`${p.id || i}`}
-            className={`absolute rounded-full border-2 border-primary bg-background -translate-x-1/2 -translate-y-1/2 ${i === count - 1 ? "size-3 bg-primary" : "size-2.5"}`}
-            style={{ left: `${xAt(i)}%`, top: `${yAt(p.visibility)}%` }}
-            aria-hidden="true"
-          />
-        ))}
-        <span
-          className="absolute rounded-md border border-border bg-background px-1.5 py-0.5 text-xs font-semibold tabular-nums text-foreground -translate-x-1/2 -translate-y-full"
-          style={{ left: `${xAt(count - 1)}%`, top: `${yAt(last.visibility)}%` }}
-          aria-hidden="true"
-        >
-          {formatPct(last.visibility)}
-        </span>
-      </div>
-      <div className="col-start-2 flex justify-between gap-2 mt-2.5 mr-2.5 text-[11.5px] tabular-nums text-muted-foreground" aria-hidden="true">
-        <span>{shortDate(first.at)}</span>
-        <span>{shortDate(last.at)}</span>
-      </div>
+    <div className="pt-6" role="img" aria-label={`AI visibility by scan. ${summary}.`}>
+      <LineChart
+        data={data}
+        xDataKey="time"
+        aspectRatio=""
+        className="h-[230px]"
+        margin={{ top: 8, right: 12, bottom: 28, left: 44 }}
+        yDomainOverrides={{ left: [0, 100] }}
+      >
+        <Grid horizontal rowTickValues={GRID} />
+        <Line
+          dataKey="visibility"
+          stroke={COLOR}
+          strokeWidth={2}
+          curve={curveMonotoneX}
+          fadeEdges={false}
+          showMarkers
+          markers={{ radius: 3.5, fill: "var(--background)", stroke: COLOR, strokeWidth: 2 }}
+        />
+        <LatestValueLabel text={formatPct(last.visibility)} />
+        <YAxis tickValues={GRID} formatValue={(v) => `${v}%`} />
+        <XAxis labels={labels} />
+        <ChartTooltip
+          dateLabels={labels}
+          content={({ point }) => (
+            <TooltipContent
+              title={shortDate(point.at)}
+              rows={[{ color: COLOR, label: "Visibility", value: formatPct(point.visibility) }]}
+            />
+          )}
+        />
+      </LineChart>
     </div>
   );
 }
