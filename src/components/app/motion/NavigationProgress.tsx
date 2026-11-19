@@ -42,11 +42,23 @@ function ProgressBar() {
         timers.current.push(window.setTimeout(() => setWidth(68), 600));
         timers.current.push(window.setTimeout(() => setWidth(82), 1800));
         timers.current.push(window.setTimeout(() => setWidth(90), 4200));
+        // A click that never becomes a navigation (a handler cancelled it)
+        // must not leave the bar parked at 90%.
+        timers.current.push(
+          window.setTimeout(() => {
+            pending.current = false;
+            setPhase("idle");
+            setWidth(0);
+          }, 15000),
+        );
       }, 120),
     );
   }, [clearTimers]);
 
   React.useEffect(() => {
+    // Capture phase: next/link calls preventDefault() in its own click
+    // handler and routes client-side, so by the bubble phase every in-app
+    // link click looks "prevented" and the bar would never start.
     const onClick = (event: MouseEvent) => {
       if (event.defaultPrevented || !isPlainLeftClick(event)) return;
       const anchor = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
@@ -62,8 +74,8 @@ function ProgressBar() {
       if (same) return;
       start();
     };
-    document.addEventListener("click", onClick);
-    return () => document.removeEventListener("click", onClick);
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
   }, [start]);
 
   // The URL changed: the route has arrived.
