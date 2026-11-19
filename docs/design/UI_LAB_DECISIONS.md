@@ -75,8 +75,8 @@ The review dock at the bottom switches scheme variants and component shape.
 | Rise, Slide, Flip | **Rejected** |
 | Scroll progress bar, top-edge shade, back-to-top | Keep |
 
-Note: the app currently applies the Rise reveal (`reveal-on-scroll`) to cards
-in `#app-content`. Switch that rule to Focus when building the frontend.
+In the app: Focus is opt-in per list (`data-reveal="focus"`); the app shell
+has the scroll progress bar, top-edge shade and back-to-top.
 
 ## Charts (Bklit, `src/components/charts`)
 
@@ -88,7 +88,8 @@ in `#app-content`. Switch that rule to Focus when building the frontend.
 | Sparkline: **Area** (`AreaSparkline`), hover to read | Keep |
 | Line and Bar sparklines | **Rejected** |
 
-Existing portal charts still use Recharts; move them to Bklit Line / Bar.
+Every portal chart now uses Bklit Line / Bar (Recharts removed). A numeric
+`YAxis` and `ReferenceArea` were added beside the vendored charts.
 
 ## Library section
 
@@ -106,8 +107,9 @@ Existing portal charts still use Recharts; move them to Bklit Line / Bar.
 | Inline alert, empty state | Keep | `kokonutui/inline-alert.tsx`, `empty-state.tsx` |
 | Continuous tabs, labelled progress, onboarding checklist | Keep | `src/components/watermelon/` |
 
-The Kokonut data cards still show their built-in sample data; wire them to
-Perceev data when building the frontend.
+The data cards run on Perceev data (Overview and Usage) with no sample data in
+the product. The notification stack is not used: the app has no real source of
+stacked notifications.
 
 ## Where the system lives
 

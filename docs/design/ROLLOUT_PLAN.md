@@ -42,17 +42,29 @@ screen sharp, reduced-motion leaves everything visible, and no rejected item
 | §3 | Merge `test_UI` into `dev` | FE lead | Done | `dev` has both sides' behaviour; typecheck, tests, lint run |
 | T1 | Scroll reveal Rise → Focus | FE lead | Done | App-wide Rise rule gone; Focus is opt-in per list; first screen never blurred |
 | T2 | Stat tiles → Spark | FE lead | Done | `Stat` renders `StatTile variant="spark"`; KpiRow passes a real series and delta; no fabricated series |
-| T3 | Charts → Bklit Line / Bar | FE-1 | **Skipped** | See decision 1 |
-| T4 | Loading states | FE-1 | Partial | Settings group loader added, recent-scans stagger added; in-card skeletons were already in place; in-button spinners left as the button's own busy state |
+| T3 | Charts → Bklit Line / Bar | FE-1 | Done (19 Nov) | Every Recharts chart is a Bklit `LineChart` or `BarChart`; new numeric `YAxis` (incl. reversed rank scale) and `ReferenceArea`; null values break the line; Recharts removed |
+| T4 | Loading states | FE-1 | Done (19 Nov) | Remaining bare spinners / "Loading…" text replaced with content-shaped shimmer skeletons that step in; buttons keep their own busy spinner |
 | T5 | Running scan visual + StatusIsland | FE lead | Done | `DotGridPulse` + `TextShimmer` stage label, rolling percentage, determinate bar kept, StatusIsland shows only the tracked scan |
 | T6 | Hold / slide confirmations | FE-2 | Done | `ConfirmDialog` and both inline confirm paths hold for 1200 ms; `PricedActionButton` spends confirm by slider with the price in the label |
-| T7 | Dialog emblems, morphing dialogs | FE-2 | Partial | Emblems on question edit, version approval and report share; morphing dialog not done (see decision 3) |
-| T8 | Empty states, alerts, checklist | FE-2 | **Skipped** | See decision 2 |
-| T9 | Usage and engines data cards | BE-1/BE-2 + FE lead | Partial | Monthly `LiquidGauge` wired from the existing usage `position`; `MetricCard` and `UptimeCard` need a read field that was not added |
+| T7 | Dialog emblems, morphing dialogs | FE-2 | Done (19 Nov) | Emblems as before; morphing dialog opens long Local SEO reviews into the full review and reply (no card grid opens a detail elsewhere) |
+| T8 | Empty states, alerts, checklist | FE-2 | Done (19 Nov) | Empty states take the locked drawing and entrance with their own copy; honest `InlineAlert` (retry = real refetch) for load errors and crawler checks; setup checklist gets the progress strip and motion, actions unchanged |
+| T9 | Usage and engines data cards | BE-1/BE-2 + FE lead | Done (19 Nov) | `LiquidGauge` on Usage; `dailyMentions` and `engines` read fields on the overview route feed "Answers naming you" and "Answer engines" on Overview, with no-scan days as gaps |
 | T10 | Public site | FE-2 | Done | Evidence card tilts, headline uses `TextEffect`, reduced motion swaps Tilt for a plain card, landing components import no `.tsx` |
 | T11 | Sweep | FE lead | Done | No `framer-motion`, no hardcoded colours or `bg-white`/`text-black` in changed files, no rejected items |
 
 ## Decisions taken by the PM
+
+> **Update 19 November 2026:** decisions 1–4 below were reversed. The
+> constraints they describe were solved instead of skipped: a numeric Y axis
+> was added beside the vendored Bklit charts (T3); the Kokonut empty state,
+> inline alert and checklist were adapted so they carry real data and real
+> actions (T8); the morphing dialog found a real card-to-detail use (T7); and
+> the two read fields for T9 were added. Also rolled out: scroll progress and
+> back-to-top in the app shell, the header section pill (Context page),
+> continuous tabs, labelled progress for scan stages and audit phases. Not
+> used: the notification stack (no real multi-notification source exists;
+> toasts already stack) and the scramble / sliding-number text effects (live
+> numbers already use the locked rolling number).
 
 1. **T3 skipped.** The chosen Bklit `LineChart` has no numeric Y axis at
    all — `XAxis` and `Grid` are the only axis primitives exported, and
