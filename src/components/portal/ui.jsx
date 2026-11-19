@@ -9,6 +9,7 @@ import Link from "next/link";
 import { RollingNumber } from "@/components/app/motion/RollingNumber";
 import { ripple } from "@/components/app/motion/ripple";
 import { StatTile } from "@/components/app/StatTile";
+import { EmptyArt } from "@/components/app/motion/EmptyArt";
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, Check, X, Loader2 } from "lucide-react";
 
 const cx = (...parts) => parts.filter(Boolean).join(" ");
@@ -241,8 +242,11 @@ export function EmptyState({ icon: Icon, title, children, action }) {
   return (
     <div data-slot="empty" className={cx(EMPTY_DASHED, "pv-empty")}>
       {Icon ? (
-        <div className="flex shrink-0 items-center justify-center text-muted-foreground pv-empty__icon [&_svg]:size-8">
-          <Icon aria-hidden="true" />
+        <div className="mb-1 flex shrink-0 items-center justify-center pv-empty__icon">
+          {/* T8: the locked drawing; the icon rides on its front card. */}
+          <EmptyArt>
+            <Icon aria-hidden="true" />
+          </EmptyArt>
         </div>
       ) : null}
       {title ? <p className="font-semibold text-foreground pv-empty__title">{title}</p> : null}

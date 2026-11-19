@@ -721,6 +721,58 @@ a:hover [data-slot="perceev-mark"] .perceev-mark__upper { translate: 2% -2%; }
   background: var(--sidebar-primary);
 }
 
+/* ── Empty state: blank cards fan out behind the front card (T8) ──── */
+
+/* The resting pose is plain CSS, so the server renders the finished drawing;
+   the entrance below only replays from a closed fan. Hovering or focusing
+   the empty state's action leans the cards further apart. */
+[data-slot="empty-art-card"] {
+  --fan: 1;
+  rotate: calc(var(--fan-side) * 7.5deg * var(--fan));
+  translate: calc(var(--fan-side) * 1.375em * var(--fan)) 0.375em;
+  transition:
+    rotate var(--dur-slow) var(--ease-spring),
+    translate var(--dur-slow) var(--ease-spring);
+}
+[data-slot="empty-art-card"][data-side="start"] { --fan-side: -1; }
+[data-slot="empty-art-card"][data-side="end"] { --fan-side: 1; }
+[data-slot="empty-art-front"] {
+  transition: translate var(--dur-slow) var(--ease-spring);
+}
+[data-slot="empty"]:has(:is([data-slot="empty-content"], .pv-empty__action) :is(:hover, :focus-visible)) [data-slot="empty-art-card"] {
+  --fan: 1.35;
+}
+[data-slot="empty"]:has(:is([data-slot="empty-content"], .pv-empty__action) :is(:hover, :focus-visible)) [data-slot="empty-art-front"] {
+  translate: 0 -0.3em;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* backwards fill only: once played, the hover transition owns the pose */
+  [data-slot="empty-art-card"] {
+    animation: empty-fan 680ms var(--ease-spring) 90ms backwards;
+  }
+  [data-slot="empty-art-front"] {
+    animation: rise-in 460ms var(--ease-out-quart) backwards;
+  }
+  /* title, words and action step in after the drawing */
+  [data-slot="empty"] :is([data-slot="empty-title"], .pv-empty__title) {
+    animation: empty-reveal 320ms var(--ease-out-quart) 100ms backwards;
+  }
+  [data-slot="empty"] :is([data-slot="empty-description"], .pv-empty__text) {
+    animation: empty-reveal 320ms var(--ease-out-quart) 150ms backwards;
+  }
+  [data-slot="empty"] :is([data-slot="empty-content"], .pv-empty__action) {
+    animation: empty-reveal 320ms var(--ease-out-quart) 200ms backwards;
+  }
+}
+
+@keyframes empty-fan {
+  from { rotate: 0deg; translate: 0 0; }
+}
+@keyframes empty-reveal {
+  from { opacity: 0; translate: 0 6px; }
+}
+
 /* ── Scrolling ─────────────────────────────────────────────────────── */
 
 #app-content {
@@ -839,6 +891,8 @@ a:hover [data-slot="perceev-mark"] .perceev-mark__upper { translate: 2% -2%; }
   }
   [data-slot="number-reel"],
   [data-slot="tabs-indicator"],
+  [data-slot="empty-art-card"],
+  [data-slot="empty-art-front"],
   [data-slot="switch-thumb"],
   [data-slot="button-status"],
   .motion-popup,
