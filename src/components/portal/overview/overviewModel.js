@@ -61,3 +61,53 @@ export function visibilityTone(value) {
   if (n >= 20) return "warn";
   return "neutral";
 }
+
+/*
+ * T9 — the Overview data cards. `dailyMentions` and `engines` come from
+ * GET /api/customer/overview as one entry per calendar day; a day without a
+ * scan is null and stays null here (a gap), never 0.
+ */
+const ENGINE_STATUS = {
+  measured: "up",
+  measured_zero: "up",
+  failed: "down",
+  not_assessed: "unassessed",
+};
+
+/** Engine keys in the order the API lists them. */
+export function engineKeys(overview) {
+  return (Array.isArray(overview?.engines) ? overview.engines : [])
+    .map((row) => row?.engine)
+    .filter(Boolean);
+}
+
+/** MetricCard points: the blended count, plus one part per engine key. */
+export function mentionSeries(overview, keys = engineKeys(overview)) {
+  const days = Array.isArray(overview?.dailyMentions) ? overview.dailyMentions : [];
+  return days
+    .filter((day) => day && typeof day.date === "string")
+    .map((day) => ({
+      date: day.date,
+      value: toNumber(day.mentioned),
+      parts: keys.map((key) => toNumber(day.byEngine?.[key])),
+    }));
+}
+
+/** UptimeCard rows: one per engine, one status per day. No row is "none". */
+export function engineStatusRows(overview, label = engineLabel) {
+  const rows = Array.isArray(overview?.engines) ? overview.engines : [];
+  return rows
+    .filter((row) => row?.engine && Array.isArray(row.days))
+    .map((row) => ({
+      name: label(row.engine),
+      days: row.days.map((day) => ENGINE_STATUS[day?.state] ?? "none"),
+    }));
+}
+
+/** The last calendar day the history covers, or null. */
+export function historyEndDate(overview) {
+  const engines = Array.isArray(overview?.engines) ? overview.engines : [];
+  const days = Array.isArray(overview?.dailyMentions) ? overview.dailyMentions : engines[0]?.days || [];
+  const last = days[days.length - 1];
+  return typeof last?.date === "string" ? last.date : null;
+}

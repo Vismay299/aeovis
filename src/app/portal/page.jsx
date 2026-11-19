@@ -9,6 +9,7 @@ import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
 import { SetupChecklist } from "@/components/portal/overview/SetupChecklist";
 import KpiRow from "@/components/portal/overview/KpiRow";
 import VisibilityTrend from "@/components/portal/overview/VisibilityTrend";
+import EngineCards from "@/components/portal/overview/EngineCards";
 import RecentScans from "@/components/portal/overview/RecentScans";
 import ContentStudioCard from "@/components/portal/overview/ContentStudioCard";
 import { websiteHost } from "@/components/portal/overview/overviewModel";
@@ -70,6 +71,8 @@ export default function OverviewPage() {
             screen, so each one sharpens as it scrolls in; the KPI row above
             never carries the attribute and never starts blurred. */}
         <div className="space-y-6" data-reveal="focus">
+          <EngineCards overview={overview} />
+
           <VisibilityTrend overview={overview} />
 
           <div className="grid gap-5 lg:grid-cols-2 items-start">
