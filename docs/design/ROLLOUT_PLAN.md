@@ -45,7 +45,7 @@ screen sharp, reduced-motion leaves everything visible, and no rejected item
 | T3 | Charts → Bklit Line / Bar | FE-1 | **Skipped** | See decision 1 |
 | T4 | Loading states | FE-1 | Partial | Settings group loader added, recent-scans stagger added; in-card skeletons were already in place; in-button spinners left as the button's own busy state |
 | T5 | Running scan visual + StatusIsland | FE lead | Done | `DotGridPulse` + `TextShimmer` stage label, rolling percentage, determinate bar kept, StatusIsland shows only the tracked scan |
-| T6 | Hold / slide confirmations | FE-2 | Done | `ConfirmDialog` destructive path holds for 1200 ms; `PricedActionButton` spends confirm by slider with the price in the label |
+| T6 | Hold / slide confirmations | FE-2 | Done | `ConfirmDialog` and both inline confirm paths hold for 1200 ms; `PricedActionButton` spends confirm by slider with the price in the label |
 | T7 | Dialog emblems, morphing dialogs | FE-2 | Partial | Emblems on question edit, version approval and report share; morphing dialog not done (see decision 3) |
 | T8 | Empty states, alerts, checklist | FE-2 | **Skipped** | See decision 2 |
 | T9 | Usage and engines data cards | BE-1/BE-2 + FE lead | Partial | Monthly `LiquidGauge` wired from the existing usage `position`; `MetricCard` and `UptimeCard` need a read field that was not added |
