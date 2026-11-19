@@ -138,6 +138,32 @@ export function textOf(html) {
 const PRESENTATIONAL_PASSTHROUGH = ["@/components/app/motion/"];
 
 /**
+ * `Stat` in the portal facade now renders `StatTile`, whose Spark variant pulls
+ * in the chart library. Harnesses that render a page for its numbers do not
+ * assert the sparkline, but they DO assert the label, value and sub-line, so a
+ * children-only pass-through would silently delete the number under test.
+ * This stub renders exactly those props and nothing else. A test that asserts
+ * the sparkline itself must map the real module.
+ */
+const STAT_TILE_STUB = {
+  __esModule: true,
+  StatTile: ({ label, value, suffix, sub, className }) =>
+    React.createElement(
+      "div",
+      { className, "data-slot": "stat-tile", "data-variant": "spark" },
+      React.createElement("span", null, label),
+      React.createElement(
+        "span",
+        null,
+        value === null || value === undefined ? "—" : String(value),
+        suffix || null
+      ),
+      sub ? React.createElement("span", null, sub) : null
+    ),
+};
+STAT_TILE_STUB.default = STAT_TILE_STUB.StatTile;
+
+/**
  * Compile a JSX file with sucrase and evaluate it as a CommonJS module.
  *
  * @param {string} filePath  Absolute path to the .jsx file.
@@ -186,6 +212,7 @@ export async function compileJsx(filePath, opts = {}) {
 
   const requireShim = (specifier) => {
     if (modules.has(specifier)) return modules.get(specifier);
+    if (specifier === "@/components/app/StatTile") return STAT_TILE_STUB;
     for (const prefix of PRESENTATIONAL_PASSTHROUGH) {
       if (specifier.startsWith(prefix)) return passThroughExports;
     }

@@ -94,6 +94,10 @@ test("ui.jsx facade parity with shadcn base-nova primitives (F04-AC-16)", async 
     modules: new Map([
       ["react", React],
       ["next/link", { default: ({ children, ...props }) => React.createElement("a", props, children) }],
+      // Stat renders StatTile now. This proof only reads Button, Badge, Banner
+      // and Card class lists, so the tile is deliberately nulled rather than
+      // pulled in with its chart/motion graph.
+      ["@/components/app/StatTile", { StatTile: () => null, default: () => null }],
     ]),
     autoNull: ["lucide-react"],
   });
