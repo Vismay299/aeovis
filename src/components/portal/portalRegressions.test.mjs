@@ -967,6 +967,7 @@ test("Overview renders SetupChecklist only when onboarding_wizard is on, else no
         ],
         ["@/components/portal/overview/KpiRow", { __esModule: true, default: () => null }],
         ["@/components/portal/overview/VisibilityTrend", { __esModule: true, default: () => null }],
+        ["@/components/portal/overview/EngineCards", { __esModule: true, default: () => null }],
         ["@/components/portal/overview/RecentScans", { __esModule: true, default: () => null }],
         ["@/components/portal/overview/ContentStudioCard", { __esModule: true, default: () => null }],
         [
