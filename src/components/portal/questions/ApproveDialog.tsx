@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
+import { BadgeCheck } from "lucide-react";
 import { ApiError } from "@/shared/query/fetchJson";
 import { usePortal } from "@/components/portal/PortalShell";
 import type { QuestionsState } from "./hooks/useQuestions";
@@ -86,7 +87,12 @@ export function ApproveDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent fullScreenOnMobile>
-        <DialogHeader><DialogTitle>Approve version {nextVersion}?</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <div data-slot="dialog-emblem" aria-hidden="true">
+            <BadgeCheck />
+          </div>
+          <DialogTitle>Approve version {nextVersion}?</DialogTitle>
+        </DialogHeader>
         <div className="space-y-3 py-2">
           {conflict ? (
             <Alert variant="destructive">
