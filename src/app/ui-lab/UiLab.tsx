@@ -28,6 +28,7 @@ import { StatTile, type StatTileVariant } from "@/components/app/StatTile";
 import { RollingNumber } from "@/components/app/motion/RollingNumber";
 import { SidebarActivePill } from "@/components/app/motion/SidebarActivePill";
 import { VerifyCheck, type VerifyState } from "@/components/app/motion/VerifyCheck";
+import { SectionNav } from "@/components/app/navigation/SectionNav";
 import { CopyButton } from "@/components/app/CopyButton";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
@@ -881,43 +882,16 @@ function Swatch({ name, token, text }: { name: string; token: string; text: stri
 
 /* ── section nav: the pill follows the section in view ────────────── */
 
-function SectionNav() {
-  const [active, setActive] = React.useState<string>(SECTIONS[0].id);
-  React.useEffect(() => {
-    const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-section]"));
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) if (entry.isIntersecting) setActive(entry.target.id);
-      },
-      { rootMargin: "-25% 0px -65% 0px" },
-    );
-    nodes.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, []);
+// The shared SectionNav (src/components/app/navigation/SectionNav.tsx). The
+// lab scrolls the window, not #app-content, and sits in its own sticky
+// header, so the nav itself is not sticky here.
+function LabSectionNav() {
   return (
-    <nav aria-label="Sections" className="flex items-center gap-1 overflow-x-auto py-2">
-      {SECTIONS.map((section) => (
-        <a
-          key={section.id}
-          href={`#${section.id}`}
-          aria-current={active === section.id ? "true" : undefined}
-          onClick={(event) => {
-            event.preventDefault();
-            document.getElementById(section.id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-          }}
-          className="relative rounded-full px-3 py-1.5 text-sm font-medium text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 aria-[current]:text-primary-foreground"
-        >
-          {active === section.id ? (
-            <motion.span
-              layoutId="lab-section-pill"
-              transition={{ type: "spring", bounce: 0.2, visualDuration: 0.35 }}
-              className="absolute inset-0 rounded-full bg-primary"
-            />
-          ) : null}
-          <span className="relative">{section.label}</span>
-        </a>
-      ))}
-    </nav>
+    <SectionNav
+      sections={SECTIONS}
+      scrollerId={null}
+      className="static mx-0 bg-transparent px-0 backdrop-blur-none"
+    />
   );
 }
 
@@ -968,7 +942,7 @@ export default function UiLab() {
             </nav>
           </div>
           <div className="mx-auto max-w-6xl px-4 md:px-6">
-            <SectionNav />
+            <LabSectionNav />
           </div>
           {/* fills as the page scrolls */}
           <div className="absolute inset-x-0 bottom-0 h-0.5">
