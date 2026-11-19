@@ -10,7 +10,19 @@
  * @github: https://github.com/kokonut-labs/kokonutui
  */
 
-import { CircleCheck, TriangleAlert, X } from "lucide-react";
+// Perceev edit (T9): reshaped for scan days instead of uptime.
+// - Each row carries one status per day, taken from stored data; nothing is
+//   assumed "up". Statuses are answered, failed, not assessed, or no scan.
+// - Uptime percentages, incident minutes and the incident log are gone: the
+//   data has none of them. A row says "Measured on N of D days", and a pinned
+//   day lists each row's status.
+// - Built-in sample services and dates are gone; `services` and `endDate` are
+//   required. The UI lab passes its own sample.
+// - The axis names the first and last dates rather than "Today", which the
+//   last day may not be.
+// - Colours use the app's tokens instead of zinc / white.
+
+import { X } from "lucide-react";
 import {
   type KeyboardEvent,
   type PointerEvent,
@@ -30,155 +42,25 @@ const SPREAD = 2.4;
 const EASE = 18;
 const DAY = 86_400_000;
 
-export type DayStatus = "up" | "degraded" | "down" | "none";
-
-export interface IncidentUpdate {
-  /** HH:MM, local to the status page. */
-  time: string;
-  label: string;
-  note?: string;
-}
-
-export interface Incident {
-  title: string;
-  status: Exclude<DayStatus, "up" | "none">;
-  /** Minutes of impact that day. */
-  minutes: number;
-  updates: IncidentUpdate[];
-}
+/**
+ * up: measured that day. down: the measurement failed. unassessed: a scan ran
+ * but this row could not be assessed. none: no scan that day.
+ */
+export type DayStatus = "up" | "down" | "unassessed" | "none";
 
 export interface UptimeService {
   name: string;
-  /** Incidents by day index, 0 being the oldest day shown. */
-  incidents?: Record<number, Incident>;
-  /** Days with no data (before the service existed), from the start. */
-  missing?: number;
+  /** One status per day, oldest first; the last is `endDate`. */
+  days: DayStatus[];
 }
 
 export interface UptimeCardProps {
-  title?: string;
-  services?: UptimeService[];
-  days?: number;
+  title: string;
+  services: UptimeService[];
   /** The last day shown, as YYYY-MM-DD. */
-  endDate?: string;
+  endDate: string;
   className?: string;
 }
-
-const DEFAULT_SERVICES: UptimeService[] = [
-  {
-    name: "API",
-    incidents: {
-      19: {
-        title: "Elevated error rates on writes",
-        status: "degraded",
-        minutes: 18,
-        updates: [
-          {
-            time: "14:02",
-            label: "Investigating",
-            note: "5xx on POST rose to 2%.",
-          },
-          {
-            time: "14:11",
-            label: "Identified",
-            note: "A bad config push to one region.",
-          },
-          {
-            time: "14:20",
-            label: "Resolved",
-            note: "Rolled back; error rates normal.",
-          },
-        ],
-      },
-      84: {
-        title: "Slow responses in eu-west",
-        status: "degraded",
-        minutes: 23,
-        updates: [
-          {
-            time: "09:41",
-            label: "Investigating",
-            note: "p95 latency up 3x in eu-west.",
-          },
-          {
-            time: "09:52",
-            label: "Monitoring",
-            note: "Added capacity to the pool.",
-          },
-          { time: "10:04", label: "Resolved" },
-        ],
-      },
-    },
-  },
-  {
-    name: "Dashboard",
-    incidents: {
-      43: {
-        title: "Charts failed to load",
-        status: "degraded",
-        minutes: 12,
-        updates: [
-          { time: "18:30", label: "Investigating" },
-          {
-            time: "18:42",
-            label: "Resolved",
-            note: "A CDN cache rule was reverted.",
-          },
-        ],
-      },
-    },
-  },
-  {
-    name: "Webhooks",
-    incidents: {
-      69: {
-        title: "Deliveries delayed",
-        status: "down",
-        minutes: 48,
-        updates: [
-          {
-            time: "02:15",
-            label: "Investigating",
-            note: "The delivery queue stopped draining.",
-          },
-          {
-            time: "02:38",
-            label: "Identified",
-            note: "A worker deploy failed health checks.",
-          },
-          {
-            time: "03:03",
-            label: "Resolved",
-            note: "Backlog delivered in order.",
-          },
-        ],
-      },
-    },
-  },
-  {
-    name: "Database",
-    missing: 6,
-    incidents: {
-      27: {
-        title: "Failover to replica",
-        status: "down",
-        minutes: 9,
-        updates: [
-          {
-            time: "22:07",
-            label: "Investigating",
-            note: "Primary stopped accepting writes.",
-          },
-          {
-            time: "22:16",
-            label: "Resolved",
-            note: "Promoted the replica; no data lost.",
-          },
-        ],
-      },
-    },
-  },
-];
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v));
@@ -191,22 +73,15 @@ const formatDay = (ms: number) =>
     timeZone: "UTC",
   });
 
-function statusOf(service: UptimeService, day: number): DayStatus {
-  if (day < (service.missing ?? 0)) {
-    return "none";
-  }
-  return service.incidents?.[day]?.status ?? "up";
-}
+const formatShort = (ms: number) =>
+  new Date(ms).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  });
 
-/** Downtime counts in full, degraded time at half. */
-function uptimeOf(service: UptimeService, days: number) {
-  const tracked = days - (service.missing ?? 0);
-  let lost = 0;
-  for (const incident of Object.values(service.incidents ?? {})) {
-    lost += incident.minutes * (incident.status === "down" ? 1 : 0.5);
-  }
-  return 100 * (1 - lost / (tracked * 1440));
-}
+const statusOf = (service: UptimeService, day: number): DayStatus =>
+  service.days[day] ?? "none";
 
 /** Target widths: a swell around the focus, flat without one. */
 function swell(count: number, focus: number | null, out: Float64Array) {
@@ -235,44 +110,49 @@ function barAt(weights: Float64Array, x: number) {
   return weights.length - 1;
 }
 
-function incidentsOn(services: UptimeService[], day: number) {
-  return services.flatMap((s) => {
-    const incident = s.incidents?.[day];
-    return incident ? [{ service: s.name, incident }] : [];
-  });
-}
-
-function describeDay(list: { service: string; incident: Incident }[]) {
-  const first = list[0];
-  if (!first) {
-    return "No incidents";
-  }
-  const how = first.incident.status === "down" ? "down" : "degraded";
-  const more = list.length > 1 ? `, +${list.length - 1} more` : "";
-  return `${first.service} ${how} for ${first.incident.minutes} min${more}`;
-}
-
 const BAR_COLOR: Record<DayStatus, string> = {
-  up: "bg-emerald-500 dark:bg-emerald-400",
-  degraded: "bg-amber-400 dark:bg-amber-300",
-  down: "bg-rose-500 dark:bg-rose-400",
-  none: "bg-zinc-200 dark:bg-zinc-800",
+  up: "bg-success",
+  down: "bg-destructive",
+  unassessed: "bg-muted-foreground/35",
+  none: "bg-muted",
+};
+
+const PILL_COLOR: Record<DayStatus, string> = {
+  up: "bg-success/15 text-success",
+  down: "bg-destructive/15 text-destructive",
+  unassessed: "bg-muted text-muted-foreground",
+  none: "bg-muted text-muted-foreground",
 };
 
 const STATUS_TEXT: Record<DayStatus, string> = {
-  up: "Operational",
-  degraded: "Degraded",
-  down: "Outage",
-  none: "No data",
+  up: "Answered",
+  down: "Failed",
+  unassessed: "Not assessed",
+  none: "No scan",
 };
 
+const ORDER: DayStatus[] = ["up", "down", "unassessed"];
+
+/** "2 answered, 1 failed", or "No scan" when no row has anything that day. */
+function describeDay(services: UptimeService[], day: number) {
+  const counts = new Map<DayStatus, number>();
+  for (const service of services) {
+    const status = statusOf(service, day);
+    counts.set(status, (counts.get(status) ?? 0) + 1);
+  }
+  const parts = ORDER.filter((s) => counts.get(s)).map(
+    (s) => `${counts.get(s)} ${STATUS_TEXT[s].toLowerCase()}`
+  );
+  return parts.length ? parts.join(", ") : STATUS_TEXT.none;
+}
+
 export default function UptimeCard({
-  title = "System status",
-  services = DEFAULT_SERVICES,
-  days = 90,
-  endDate = "2026-10-14",
+  title,
+  services,
+  endDate,
   className,
 }: UptimeCardProps) {
+  const days = Math.max(1, ...services.map((s) => s.days.length));
   const [active, setActive] = useState<number | null>(null);
   const [pinned, setPinned] = useState<number | null>(null);
   const barsRef = useRef<HTMLDivElement>(null);
@@ -294,13 +174,27 @@ export default function UptimeCard({
     (day: number) => end - (days - 1 - day) * DAY,
     [end, days]
   );
-  const uptimes = useMemo(
-    () => services.map((s) => uptimeOf(s, days)),
-    [services, days]
+  const counts = useMemo(
+    () =>
+      services.map((s) => ({
+        measured: s.days.filter((d) => d === "up").length,
+        failed: s.days.filter((d) => d === "down").length,
+      })),
+    [services]
   );
-  const openIssues = services.filter(
-    (s) => statusOf(s, days - 1) !== "up" && statusOf(s, days - 1) !== "none"
-  );
+  // The newest day any row has something for.
+  const lastScan = useMemo(() => {
+    for (let day = days - 1; day >= 0; day--) {
+      if (services.some((s) => statusOf(s, day) !== "none")) {
+        return day;
+      }
+    }
+    return null;
+  }, [services, days]);
+  const failedLast =
+    lastScan === null
+      ? 0
+      : services.filter((s) => statusOf(s, lastScan) === "down").length;
 
   // Widths are written straight to the bars, one flex-grow per bar.
   const paint = useCallback(() => {
@@ -451,41 +345,45 @@ export default function UptimeCard({
   const shownDay = active ?? pinned;
   const summary =
     shownDay === null
-      ? "Hover a day to see what happened"
-      : `${formatDay(dateOf(shownDay))} · ${describeDay(incidentsOn(services, shownDay))}`;
+      ? "Hover a day to see each engine"
+      : `${formatDay(dateOf(shownDay))} · ${describeDay(services, shownDay)}`;
   // The log keeps showing the last pinned day while it collapses.
   const lastPinned = useRef<number | null>(null);
   if (pinned !== null) {
     lastPinned.current = pinned;
   }
   const logDay = pinned ?? lastPinned.current;
-  const pinnedIncidents = logDay === null ? [] : incidentsOn(services, logDay);
+
+  let headline = (
+    <p className="text-muted-foreground text-sm">No scans in this range</p>
+  );
+  if (lastScan !== null) {
+    const when = formatShort(dateOf(lastScan));
+    headline = failedLast ? (
+      <p className="text-sm text-warning">
+        {failedLast} of {services.length} failed on {when}
+      </p>
+    ) : (
+      <p className="text-muted-foreground text-sm">
+        Last scan {when} · {describeDay(services, lastScan)}
+      </p>
+    );
+  }
 
   return (
     <div
       className={cn(
-        "w-full max-w-xl select-none rounded-3xl border border-zinc-200 bg-white p-5 text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100",
+        "w-full max-w-xl select-none rounded-xl border border-border bg-card p-5 text-card-foreground",
         className
       )}
     >
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <p className="font-medium text-sm">{title}</p>
-        {openIssues.length ? (
-          <p className="flex items-center gap-1.5 text-amber-600 text-sm dark:text-amber-400">
-            <TriangleAlert aria-hidden className="size-4" />
-            {openIssues.length} service{openIssues.length > 1 ? "s" : ""}{" "}
-            affected
-          </p>
-        ) : (
-          <p className="flex items-center gap-1.5 text-emerald-600 text-sm dark:text-emerald-400">
-            <CircleCheck aria-hidden className="size-4" />
-            All systems operational
-          </p>
-        )}
+        {headline}
       </div>
       <p
         aria-live="polite"
-        className="mt-1 truncate text-sm text-zinc-500 tabular-nums dark:text-zinc-400"
+        className="mt-1 truncate text-muted-foreground text-sm tabular-nums"
       >
         {summary}
       </p>
@@ -496,7 +394,7 @@ export default function UptimeCard({
         aria-valuemin={1}
         aria-valuenow={(shownDay ?? days - 1) + 1}
         aria-valuetext={summary}
-        className="mt-4 cursor-pointer touch-pan-y rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-4 dark:focus-visible:ring-offset-zinc-950"
+        className="mt-4 cursor-pointer touch-pan-y rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-card"
         onBlur={() => {
           if (active !== null) {
             leave();
@@ -524,10 +422,16 @@ export default function UptimeCard({
       >
         {services.map((service, row) => (
           <div className={cn(row > 0 && "mt-3")} key={service.name}>
-            <div className="mb-1.5 flex justify-between text-xs">
-              <span className="font-medium">{service.name}</span>
-              <span className="text-zinc-500 tabular-nums dark:text-zinc-400">
-                {uptimes[row].toFixed(2)}%
+            <div className="mb-1.5 flex justify-between gap-3 text-xs">
+              <span className="truncate font-medium">{service.name}</span>
+              <span className="shrink-0 text-muted-foreground tabular-nums">
+                Measured on {counts[row].measured} of {days} days
+                {counts[row].failed ? (
+                  <span className="text-destructive">
+                    {" "}
+                    · failed on {counts[row].failed}
+                  </span>
+                ) : null}
               </span>
             </div>
             <div className="flex h-7 gap-px sm:gap-[2px]" data-row>
@@ -537,10 +441,11 @@ export default function UptimeCard({
                 return (
                   <div
                     className={cn(
-                      "min-w-0 basis-0 rounded-[2px] transition-opacity duration-150 ease-out",
+                      "min-w-0 basis-0 rounded-[2px] transition-opacity duration-150 ease-out motion-reduce:transition-none",
                       BAR_COLOR[status],
                       shownDay !== null && !lit && "opacity-60"
                     )}
+                    data-status={status}
                     // biome-ignore lint/suspicious/noArrayIndexKey: one bar per day, never reordered
                     key={day}
                     style={{ flexGrow: 1 }}
@@ -550,16 +455,16 @@ export default function UptimeCard({
             </div>
           </div>
         ))}
-        <div className="mt-2 flex justify-between text-xs text-zinc-400 dark:text-zinc-500">
-          <span>{days} days ago</span>
-          <span>Today</span>
+        <div className="mt-2 flex justify-between text-muted-foreground text-xs tabular-nums">
+          <span>{formatShort(dateOf(0))}</span>
+          <span>{formatShort(dateOf(days - 1))}</span>
         </div>
       </div>
 
-      {/* A pinned day opens its incident log. */}
+      {/* A pinned day lists every row's status. */}
       <div
         className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-[260ms] ease-[cubic-bezier(0.23,1,0.32,1)]",
+          "grid transition-[grid-template-rows,opacity] duration-[260ms] ease-[cubic-bezier(0.23,1,0.32,1)] motion-reduce:transition-none",
           pinned === null
             ? "grid-rows-[0fr] opacity-0"
             : "grid-rows-[1fr] opacity-100"
@@ -568,14 +473,14 @@ export default function UptimeCard({
       >
         <div className="overflow-hidden">
           {logDay !== null && (
-            <div className="mt-4 rounded-2xl bg-zinc-50 p-4 dark:bg-zinc-900">
+            <div className="mt-4 rounded-lg bg-muted/50 p-4">
               <div className="flex items-center justify-between">
                 <p className="font-medium text-sm">
                   {formatDay(dateOf(logDay))}
                 </p>
                 <button
                   aria-label="Close day"
-                  className="rounded-full p-1 text-zinc-500 outline-none transition-colors duration-150 ease-out hover:bg-zinc-200 hover:text-zinc-900 focus-visible:ring-2 focus-visible:ring-zinc-400 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="rounded-full p-1 text-muted-foreground outline-none transition-colors duration-150 ease-out hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring motion-reduce:transition-none"
                   onClick={() => {
                     setPinned(null);
                     focusOn(null);
@@ -585,51 +490,27 @@ export default function UptimeCard({
                   <X aria-hidden className="size-3.5" />
                 </button>
               </div>
-              {pinnedIncidents.length === 0 && (
-                <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-                  No incidents recorded. Every service was operational.
-                </p>
-              )}
-              {pinnedIncidents.map(({ service, incident }) => (
-                <div className="mt-3" key={service}>
-                  <p className="flex flex-wrap items-center gap-2 text-sm">
-                    <span
-                      className={cn(
-                        "rounded-full px-2 py-0.5 font-medium text-[11px]",
-                        incident.status === "down"
-                          ? "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300"
-                          : "bg-amber-100 text-amber-800 dark:bg-amber-400/15 dark:text-amber-200"
-                      )}
+              <ul className="mt-2 grid gap-1.5">
+                {services.map((service) => {
+                  const status = statusOf(service, logDay);
+                  return (
+                    <li
+                      className="flex items-center justify-between gap-3 text-sm"
+                      key={service.name}
                     >
-                      {STATUS_TEXT[incident.status]}
-                    </span>
-                    <span className="font-medium">{service}</span>
-                    <span className="text-zinc-500 dark:text-zinc-400">
-                      {incident.title} · {incident.minutes} min
-                    </span>
-                  </p>
-                  <ol className="mt-2.5 ml-1 border-zinc-200 border-l dark:border-zinc-800">
-                    {incident.updates.map((update) => (
-                      <li
-                        className="relative pb-2.5 pl-4 text-sm last:pb-0"
-                        key={`${update.time}-${update.label}`}
-                      >
-                        <span className="absolute top-[7px] -left-[3.5px] size-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500" />
-                        <span className="text-zinc-400 tabular-nums dark:text-zinc-500">
-                          {update.time}
-                        </span>{" "}
-                        <span className="font-medium">{update.label}</span>
-                        {update.note && (
-                          <span className="text-zinc-500 dark:text-zinc-400">
-                            {" "}
-                            {update.note}
-                          </span>
+                      <span className="truncate">{service.name}</span>
+                      <span
+                        className={cn(
+                          "shrink-0 rounded-full px-2 py-0.5 font-medium text-[11px]",
+                          PILL_COLOR[status]
                         )}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              ))}
+                      >
+                        {STATUS_TEXT[status]}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
         </div>

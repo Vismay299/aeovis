@@ -55,6 +55,7 @@ import NotificationStack from "@/components/kokonutui/notification-stack";
 import SlideToConfirm from "@/components/kokonutui/slide-to-confirm";
 import { StatusIsland, type IslandTask } from "@/components/kokonutui/status-island";
 import UptimeCard from "@/components/kokonutui/uptime-card";
+import { SAMPLE, SAMPLE_END, SAMPLE_ENGINES } from "./cardSamples";
 import { ContinuousTabs } from "@/components/watermelon/continuous-tabs";
 import { LabeledProgressIndicator } from "@/components/watermelon/labeled-progress-indicator";
 import { OnboardingChecklist } from "@/components/watermelon/onboarding-checklist";
@@ -371,9 +372,14 @@ export function NotificationsDemo({ run }: { run: number }) {
 export function KokonutCards() {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <MetricCard label="Answers naming you" format="number" />
+      <MetricCard
+        label="Answers naming you"
+        data={SAMPLE.mentions}
+        segments={SAMPLE_ENGINES}
+        breakdownNote="Average per scan, by engine"
+      />
       <div className="grid gap-4">
-        <UptimeCard title="Answer engines" />
+        <UptimeCard title="Answer engines" services={SAMPLE.engines} endDate={SAMPLE_END} />
         <LiquidGauge defaultValue={64} label="Scan budget" total={30} unit="$" warnAt={85} />
       </div>
     </div>
