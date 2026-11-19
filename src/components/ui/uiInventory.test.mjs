@@ -7,7 +7,10 @@ import { fileURLToPath } from "node:url";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const UI_DIR = path.join(REPO, "src/components/ui");
 
-// SPEC GAP 1: 32 primitives ported from every-app/open-seo (spec text mentions 31, but lists 32 files)
+// SPEC GAP 1: 32 primitives were ported from every-app/open-seo (spec text
+// mentions 31, but lists 32 files). chart.tsx, the shadcn Recharts wrapper, was
+// removed in T3 when the charts moved to the Bklit library in
+// src/components/charts, leaving 31.
 const PRIMITIVES = [
   "accordion.tsx",
   "alert-dialog.tsx",
@@ -15,7 +18,6 @@ const PRIMITIVES = [
   "badge.tsx",
   "button.tsx",
   "card.tsx",
-  "chart.tsx",
   "checkbox.tsx",
   "collapsible.tsx",
   "combobox.tsx",
@@ -43,7 +45,7 @@ const PRIMITIVES = [
   "tooltip.tsx",
 ];
 
-test("all 32 UI primitives exist and conform to conventions", () => {
+test("all 31 UI primitives exist and conform to conventions", () => {
   assert.ok(fs.existsSync(UI_DIR), "src/components/ui directory must exist");
 
   for (const filename of PRIMITIVES) {
@@ -89,13 +91,6 @@ test("all 32 UI primitives exist and conform to conventions", () => {
       assert.ok(
         content.includes("fullScreenOnMobile"),
         "dialog.tsx DialogContent must include fullScreenOnMobile prop"
-      );
-    }
-
-    if (filename === "chart.tsx") {
-      assert.ok(
-        content.includes("[data-theme=dark]"),
-        "chart.tsx must define dark theme selector as [data-theme=dark]"
       );
     }
   }

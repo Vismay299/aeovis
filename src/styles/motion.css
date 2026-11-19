@@ -597,23 +597,6 @@ a:hover [data-slot="perceev-mark"] .perceev-mark__upper { translate: 2% -2%; }
   text-align: center;
 }
 
-/* ── Charts ────────────────────────────────────────────────────────── */
-
-[data-slot="chart"] {
-  animation: fade-in 420ms var(--ease-out-quart) both;
-}
-.recharts-tooltip-wrapper {
-  transition: transform 180ms var(--ease-out-quart), opacity 140ms var(--ease-out-quart) !important;
-}
-.recharts-active-dot circle,
-.recharts-dot {
-  transition: r var(--dur-fast) var(--ease-out-quart);
-}
-.recharts-bar-rectangle path,
-.recharts-sector {
-  transition: opacity var(--dur-fast) var(--ease-out-quart), fill-opacity var(--dur-fast) var(--ease-out-quart);
-}
-
 /* ── Shared app and legacy portal surfaces ─────────────────────────── */
 
 [data-slot="progress-indicator"],
@@ -819,7 +802,6 @@ a:hover [data-slot="perceev-mark"] .perceev-mark__upper { translate: 2% -2%; }
   [data-slot="stat-ring"] circle,
   [data-slot="perceev-mark"] path,
   [data-slot="perceev-loader"] path,
-  [data-slot="chart"],
   [data-slot="success-check"] circle,
   .animate-page-in,
   .animate-rise-in,

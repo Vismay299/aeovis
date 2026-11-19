@@ -19,7 +19,6 @@ test("F04 Toolchain — package.json dependencies, PostCSS, and globals.css entr
     "class-variance-authority": "0",
     clsx: "2",
     "tailwind-merge": "3",
-    recharts: "3",
     "react-markdown": "10",
     "remark-gfm": "4",
     "@tanstack/react-query": "5",
@@ -78,6 +77,9 @@ test("F04 Toolchain — package.json dependencies, PostCSS, and globals.css entr
   // no tailwindcss-animate
   assert.equal(pkg.dependencies?.["tailwindcss-animate"], undefined, "tailwindcss-animate must be removed from dependencies");
   assert.equal(pkg.devDependencies?.["tailwindcss-animate"], undefined, "tailwindcss-animate must not be in devDependencies");
+
+  // T3: every chart is a Bklit chart (src/components/charts); Recharts is gone.
+  assert.equal(pkg.dependencies?.recharts, undefined, "recharts must be removed from dependencies");
 
   // postcss.config.mjs
   const postcssContent = fs.readFileSync(repoFile("postcss.config.mjs"), "utf8");
