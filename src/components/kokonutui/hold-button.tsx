@@ -85,6 +85,14 @@ const holdButtonVariants = cva(
           "data-complete:border-zinc-900 data-complete:bg-zinc-900 data-complete:text-white",
           "dark:data-complete:border-zinc-100 dark:data-complete:bg-zinc-100 dark:data-complete:text-zinc-900",
         ],
+        // Token colours for the app's dark Onyx scheme. The palettes above stay
+        // for the lab; the app uses this one so the button follows the palette
+        // instead of a fixed pink. Replacing a vendored hardcoded colour with a
+        // token is the one internal edit the brief allows.
+        destructive: [
+          "border-destructive/40 bg-destructive/15 text-destructive hover:bg-destructive/25",
+          "data-complete:border-destructive data-complete:bg-destructive data-complete:text-primary-foreground",
+        ],
       },
     },
     defaultVariants: {
@@ -112,6 +120,11 @@ const VARIANT_DEFAULTS: Record<
     completeLabel: "Signed out",
   },
   grey: { icon: BanIcon, label: "Hold to block", completeLabel: "Blocked" },
+  destructive: {
+    icon: Trash2Icon,
+    label: "Hold to delete",
+    completeLabel: "Deleted",
+  },
 };
 
 interface HoldButtonProps

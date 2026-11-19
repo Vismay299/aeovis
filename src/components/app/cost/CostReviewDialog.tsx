@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import SlideToConfirm from "@/components/kokonutui/slide-to-confirm";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatUsd } from "@/shared/pricing";
@@ -39,6 +40,13 @@ export type CostReviewDialogProps = {
   onConfirm(maxUsd: number): void;
   onClose(): void;
   detail?: (q: PriceQuote) => React.ReactNode;
+  /**
+   * Spend actions can make the final approval a slide instead of a click. The
+   * price review, the blocked/zero-answer guards and the spend-refusal path are
+   * unchanged; only the last click becomes a deliberate gesture. Off by
+   * default so existing callers and tests keep the button.
+   */
+  slideToConfirm?: boolean;
 };
 
 const ALERT_WARNING_CODES = new Set([
@@ -60,6 +68,7 @@ export function CostReviewDialog({
   onConfirm,
   onClose,
   detail,
+  slideToConfirm = false,
 }: CostReviewDialogProps) {
   const currentQuote = priceChanged ? priceChanged.quote : quote.data;
   const isLoading = Boolean(quote.isPending && !currentQuote);
@@ -286,6 +295,24 @@ export function CostReviewDialog({
         </div>
 
         <DialogFooter className="flex flex-col sm:flex-row gap-2 sm:justify-end">
+          {slideToConfirm && currentQuote && !isLoading && !isError ? (
+            <SlideToConfirm
+              className="order-1 w-full sm:order-2 sm:w-auto"
+              disabled={confirmDisabled}
+              label={`${confirmLabel} · ${formatUsd(currentQuote.totalUsd)}`}
+              confirmingLabel={pendingLabel}
+              doneLabel="Approved"
+              onConfirm={() => {
+                if (confirmDisabled) return;
+                trackEvent("price:approved", {
+                  action: currentQuote.action,
+                  approved_usd: currentQuote.totalUsd,
+                  source: "dialog",
+                });
+                onConfirm(currentQuote.totalUsd);
+              }}
+            />
+          ) : (
           <Button
             type="button"
             className="order-1 sm:order-2"
@@ -304,6 +331,7 @@ export function CostReviewDialog({
             {pending && <Loader2 className="size-4 animate-spin mr-1.5" />}
             {pending ? pendingLabel : confirmLabel}
           </Button>
+          )}
           <Button
             type="button"
             variant="ghost"
