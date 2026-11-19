@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import HoldButton from "@/components/kokonutui/hold-button";
 
 /**
  * Two-step delete for a list row: the trash icon swaps to an explicit
@@ -36,17 +37,22 @@ export function InlineConfirm({
   if (confirming) {
     return (
       <>
-        <Button
+        {/* The final confirm is held, not clicked (1200 ms). The two-step
+            shape and the Cancel path are unchanged. */}
+        <HoldButton
           variant="destructive"
-          size={size}
+          holdDuration={1200}
+          holdingLabel="Keep holding"
+          completeLabel={confirmLabel}
           disabled={pending || disabled}
-          onClick={() => {
+          className={size === "sm" ? "h-8 min-w-0 px-3 text-xs" : "h-7 min-w-0 px-2.5 text-xs"}
+          onHoldComplete={() => {
             setConfirming(false);
             onConfirm();
           }}
         >
           {confirmLabel}
-        </Button>
+        </HoldButton>
         <Button
           variant="ghost"
           size={size}

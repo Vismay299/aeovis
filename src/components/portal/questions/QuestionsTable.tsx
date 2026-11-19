@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import HoldButton from "@/components/kokonutui/hold-button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -32,16 +33,20 @@ function InlineConfirm({
   }
   return (
     <span className="inline-flex items-center gap-1">
-      <Button
+      {/* Held, not clicked: archiving rows cannot be undone from here. */}
+      <HoldButton
         variant="destructive"
-        size="sm"
-        onClick={async () => {
+        holdDuration={1200}
+        holdingLabel="Keep holding"
+        completeLabel="Archived"
+        className="h-8 min-w-0 px-3 text-xs"
+        onHoldComplete={async () => {
           await onConfirm();
           setOpen(false);
         }}
       >
         Confirm
-      </Button>
+      </HoldButton>
       <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
         Cancel
       </Button>
