@@ -74,7 +74,7 @@ function SeriesTrendChart({
         xDataKey="time"
         aspectRatio=""
         className="min-h-0 flex-1"
-        margin={{ left: 60, right: dualAxis ? 60 : 8, top: 8, bottom: 28 }}
+        margin={{ left: 60, right: dualAxis ? 60 : 8, top: 8, bottom: 32 }}
       >
         <Grid horizontal />
         {series.map((s) => (

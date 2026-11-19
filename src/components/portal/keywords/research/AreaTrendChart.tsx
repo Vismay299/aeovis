@@ -44,7 +44,7 @@ export function AreaTrendChart({ row }: { row: KeywordRow }) {
           xDataKey="monthStart"
           aspectRatio=""
           className="h-full"
-          margin={{ left: 8, right: 8, top: 8, bottom: 28 }}
+          margin={{ left: 8, right: 8, top: 8, bottom: 32 }}
         >
           <Grid horizontal />
           <Line dataKey="searchVolume" stroke={COLOR} strokeWidth={2} curve={curveMonotoneX} fadeEdges={false} />

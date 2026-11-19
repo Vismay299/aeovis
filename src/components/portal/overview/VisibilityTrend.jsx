@@ -57,7 +57,7 @@ function Chart({ points }) {
         xDataKey="time"
         aspectRatio=""
         className="h-[230px]"
-        margin={{ top: 8, right: 12, bottom: 28, left: 44 }}
+        margin={{ top: 8, right: 12, bottom: 32, left: 44 }}
         yDomainOverrides={{ left: [0, 100] }}
       >
         <Grid horizontal rowTickValues={GRID} />

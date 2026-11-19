@@ -166,7 +166,7 @@ export function RankTrackingOverview({
                   aspectRatio=""
                   className="h-[220px]"
                   animationDuration={700}
-                  margin={{ top: 8, right: 8, bottom: 28, left: 28 }}
+                  margin={{ top: 8, right: 8, bottom: 32, left: 28 }}
                 >
                   <Grid horizontal />
                   {BUCKETS.map((b) => (

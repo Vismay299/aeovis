@@ -225,9 +225,10 @@ function SessionsTrend({
       aspectRatio=""
       className="h-32 w-full"
       animationDuration={700}
-      margin={{ left: 44, right: 8, top: 8, bottom: 28 }}
+      margin={{ left: 44, right: 8, top: 8, bottom: 32 }}
     >
-      <Grid horizontal />
+      {/* The plot is short (h-32), so three rows instead of five. */}
+      <Grid horizontal numTicksRows={3} />
       <Line
         dataKey="sessions"
         stroke={SESSIONS_COLOR}
@@ -235,7 +236,7 @@ function SessionsTrend({
         curve={curveMonotoneX}
         fadeEdges={false}
       />
-      <YAxis allowDecimals={false} />
+      <YAxis numTicks={3} allowDecimals={false} />
       <XAxis labels={labels} />
       <ChartTooltip
         dateLabels={labels}

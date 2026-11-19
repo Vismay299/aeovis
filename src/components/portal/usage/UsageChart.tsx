@@ -132,7 +132,7 @@ export function UsageChart({
         aspectRatio=""
         className="min-h-0 flex-1"
         animationDuration={700}
-        margin={{ left: 64, right: 8, top: 8, bottom: 28 }}
+        margin={{ left: 64, right: 8, top: 8, bottom: 32 }}
       >
         <defs>
           <pattern

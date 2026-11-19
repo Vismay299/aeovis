@@ -77,7 +77,7 @@ export function RankTrendChart({
         aspectRatio=""
         className="h-56"
         animationDuration={700}
-        margin={{ top: 8, right: 8, bottom: 28, left: 32 }}
+        margin={{ top: 8, right: 8, bottom: 32, left: 32 }}
         // Reversed position axis: [serpDepth, 1] puts rank 1 at the top.
         yDomainOverrides={{ left: () => [serpDepth, 1] }}
       >
