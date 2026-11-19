@@ -726,13 +726,21 @@ a:hover [data-slot="perceev-mark"] .perceev-mark__upper { translate: 2% -2%; }
 
 @supports (animation-timeline: view()) {
   @media (prefers-reduced-motion: no-preference) {
-    /* Cards rise into place as they scroll into view. Whatever is already
-       on screen at load is past the range and simply shows. */
-    .reveal-on-scroll,
-    [data-surface="app"] #app-content :is([data-slot="card"], .pv-card):not(.stagger-children > *) {
+    /* Rise, kept only for the lab's comparison card. */
+    .reveal-on-scroll {
       animation: scroll-rise linear both;
       animation-timeline: view();
       animation-range: entry 0% cover 24%;
+    }
+
+    /* Focus is the chosen reveal for long card lists. It is opt-in per list
+       via data-reveal="focus" so the first screen is never blurred: the
+       focus curve starts soft, and anything already in view at load would
+       otherwise land on that soft edge. */
+    [data-surface="app"] #app-content [data-reveal="focus"] :is([data-slot="card"], .pv-card) {
+      animation: scroll-focus linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
     }
 
     /* Other ways for a row to arrive. Same trigger, different move. */

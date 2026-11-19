@@ -66,11 +66,16 @@ export default function OverviewPage() {
 
         <KpiRow overview={overview} gsc={gsc} />
 
-        <VisibilityTrend overview={overview} />
+        {/* Focus reveal is opt-in per list. These cards sit below the first
+            screen, so each one sharpens as it scrolls in; the KPI row above
+            never carries the attribute and never starts blurred. */}
+        <div className="space-y-6" data-reveal="focus">
+          <VisibilityTrend overview={overview} />
 
-        <div className="grid gap-5 lg:grid-cols-2 items-start">
-          <RecentScans overview={overview} scan={scan} />
-          <ContentStudioCard overview={overview} />
+          <div className="grid gap-5 lg:grid-cols-2 items-start">
+            <RecentScans overview={overview} scan={scan} />
+            <ContentStudioCard overview={overview} />
+          </div>
         </div>
       </div>
     </div>
