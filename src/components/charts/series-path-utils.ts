@@ -18,9 +18,16 @@ export function computeSeriesPathPoints(
   return data.map((datum, index) => {
     const xValue = xAccessor(datum);
     const yValue = datum[dataKey];
+    // Perceev edit: a missing value (null / undefined / NaN) becomes NaN, not
+    // 0, so `seriesPathFromPoints` leaves a gap there. Upstream drew it at
+    // y = 0 px, i.e. a spike to the top of the plot that looks like data.
+    const y =
+      typeof yValue === "number" && Number.isFinite(yValue)
+        ? (yScale(yValue) ?? Number.NaN)
+        : Number.NaN;
     return {
       x: xScale(xValue) ?? 0,
-      y: typeof yValue === "number" ? (yScale(yValue) ?? 0) : 0,
+      y,
       key: String(xValue.getTime?.() ?? index),
     };
   });
@@ -77,6 +84,8 @@ export function seriesPathFromPoints(
   const generator = d3Line<SeriesPathPoint>()
     .x((point) => point.x)
     .y((point) => point.y)
+    // Perceev edit: break the line at missing values (see above).
+    .defined((point) => Number.isFinite(point.y))
     .curve(curve);
 
   return fastShapePath(generator, points);
@@ -154,8 +163,11 @@ export function flattenSeriesPath(
   points: SeriesPathPoint[],
   curve: CurveFactory
 ): SeriesPathPoint[] {
-  if (points.length < 2) {
-    return points;
+  // Perceev edit: the morph tween samples a single polyline, so it bridges
+  // gaps while it runs; the resting path (above) keeps them.
+  const definedPoints = points.filter((point) => Number.isFinite(point.y));
+  if (definedPoints.length < 2) {
+    return definedPoints;
   }
   const recorder = new PolylineRecorder();
   d3Line<SeriesPathPoint>()
@@ -163,7 +175,7 @@ export function flattenSeriesPath(
     .y((point) => point.y)
     .curve(curve)
     // Minimal CanvasPath recorder — only implements the commands d3 curves emit.
-    .context(recorder as unknown as CanvasRenderingContext2D)(points);
+    .context(recorder as unknown as CanvasRenderingContext2D)(definedPoints);
   return recorder.points.sort((a, b) => a.x - b.x);
 }
 

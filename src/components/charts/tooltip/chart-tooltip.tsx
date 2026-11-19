@@ -611,7 +611,12 @@ const ChartTooltipInner = memo(function ChartTooltipInner({
                     strokeColor={chartCssVars.background}
                     strokeWidth={dotStrokeWidth}
                     variant={dotVariant}
-                    visible={visible}
+                    // Perceev edit: no dot for a series with no value in the
+                    // hovered row (upstream parked it at y = 0, the plot top).
+                    visible={
+                      visible &&
+                      tooltipData?.yPositions[line.dataKey] !== undefined
+                    }
                     x={tooltipData?.xPositions?.[line.dataKey] ?? x}
                     y={tooltipData?.yPositions[line.dataKey] ?? 0}
                   />

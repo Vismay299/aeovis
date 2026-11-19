@@ -29,6 +29,7 @@ import {
   TimeSeriesChartInner,
   timeSeriesChartHasRoom,
 } from "./time-series-chart-shell";
+import type { YDomainOverride } from "./y-domain-utils";
 
 export interface LineChartProps {
   /** Data array - each item should have a date field and numeric values */
@@ -67,6 +68,13 @@ export interface LineChartProps {
    * leave headroom above the series. Default: data max.
    */
   yScaleDomainMax?: number;
+  /**
+   * Perceev edit: per-axis y-domain overrides, forwarded to the shell (which
+   * already supported them; upstream `LineChart` did not expose the prop).
+   * A function receives the auto domain. Return `[high, low]` for a reversed
+   * axis, e.g. rank where 1 is best and sits at the top.
+   */
+  yDomainOverrides?: Record<string, YDomainOverride>;
   /** Inline container styles (e.g. fixed height for brush strip). */
   style?: CSSProperties;
   /** Fires when the internal chart phase changes (e.g. OG capture readiness). */
@@ -168,6 +176,7 @@ export function LineChart({
   xDomainSlotCount,
   tweenYDomainOnXDomainChange = false,
   yScaleDomainMax,
+  yDomainOverrides,
   style,
   onPhaseChange,
   children,
@@ -227,6 +236,7 @@ export function LineChart({
                 xDataKey={xDataKey}
                 xDomain={xDomain}
                 xDomainSlotCount={xDomainSlotCount}
+                yDomainOverrides={yDomainOverrides}
                 yDomainTween={yDomainTween}
                 yDomainTweenDuration={yDomainTweenDuration}
                 yScaleDomainMax={yScaleDomainMax}

@@ -12,6 +12,9 @@ export { LineChart } from "./line-chart";
 export { Line } from "./line";
 export { Grid } from "./grid";
 export { XAxis } from "./x-axis";
+// Perceev additions (not upstream Bklit): numeric value axis and a y band.
+export { YAxis } from "./y-axis";
+export { ReferenceArea } from "./reference-area";
 export { ChartTooltip } from "./tooltip";
 export { RingChart } from "./ring-chart";
 export { Ring } from "./ring";
