@@ -9,6 +9,10 @@
 
 import { useEffect, useState } from "react";
 import { Radar, Play } from "lucide-react";
+import { useReducedMotion } from "motion/react";
+import { DotGridPulse } from "@/components/app/motion/DotGridPulse";
+import { RollingNumber } from "@/components/app/motion/RollingNumber";
+import { TextShimmer } from "@/components/motion-primitives/text-shimmer";
 import { usePortal } from "./PortalShell";
 import { PANEL_NOT_APPROVED, SCAN_STAGES } from "./useScanTracker";
 import { scanCompletionNotice } from "@/shared/scanCompletion";
@@ -47,6 +51,9 @@ function ScanStartError({ scan, dismissible }) {
 export function ScanProgressCard({ showIdle = true }) {
   const { scan, brand } = usePortal();
   const elapsed = useElapsed(scan.job?.created_at, scan.active);
+  // TextShimmer is a motion effect with no media-query path of its own, so the
+  // stage label falls back to plain text rather than shimmering regardless.
+  const reduceMotion = useReducedMotion();
 
   if (scan.finished?.status === "complete") {
     const completion = scanCompletionNotice(scan.finished);
@@ -108,12 +115,16 @@ export function ScanProgressCard({ showIdle = true }) {
             <Badge tone="brand" live>Scan running</Badge>
             {scan.reconnecting ? <Badge tone="warn" dot>Reconnecting…</Badge> : null}
           </div>
-          <h2 className="text-lg font-semibold text-foreground pv-card__title">{stageLabel}…</h2>
+          <h2 className="text-lg font-semibold text-foreground pv-card__title">
+            {reduceMotion
+              ? `${stageLabel}…`
+              : <TextShimmer duration={1.6}>{`${stageLabel}…`}</TextShimmer>}
+          </h2>
           <p className="text-sm text-muted-foreground pv-card__desc">{scan.stage?.detail || "Getting your scan ready"}</p>
         </div>
         <div className="text-right">
           <div className="text-3xl font-semibold tabular-nums text-foreground pv-stat__value pv-num">
-            {percent === null ? "—" : `${Math.round(percent)}%`}
+            {percent === null ? "—" : <RollingNumber>{`${Math.round(percent)}%`}</RollingNumber>}
           </div>
           <div className="text-xs text-muted-foreground pv-stat__sub">
             {elapsed === null ? "" : `${formatDuration(elapsed)} elapsed`}
@@ -122,6 +133,11 @@ export function ScanProgressCard({ showIdle = true }) {
       </div>
       <div className="mt-4 grid gap-4 pv-card__body">
         <ProgressBar value={percent} active indeterminate size="lg" label="Scan progress" />
+        {/* The running visual: a dot grid pulsing out from the centre. Anime.js
+            short-circuits it under reduced motion and leaves a static grid. */}
+        <div className="pointer-events-none h-10 overflow-hidden rounded-lg border border-border bg-background px-3">
+          <DotGridPulse columns={21} rows={3} className="opacity-60" />
+        </div>
         <StageSteps steps={SCAN_STAGES} current={scan.stageIndex} />
         {scan.notice ? <Banner tone="info" onDismiss={scan.dismiss}>{scan.notice}</Banner> : null}
         {scan.stalled ? (

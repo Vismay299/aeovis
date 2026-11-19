@@ -19,12 +19,15 @@ import { MobileTopBar } from "./MobileTopBar";
 export function AppShell({
   ready,
   banner,
+  overlay,
   children,
 }: {
   /** The session is confirmed. Until then the shell renders but loads nothing. */
   ready: boolean;
   /** A full-width strip above the content, such as a refresh warning. */
   banner?: ReactNode;
+  /** Floating status for background work, pinned to the top of the content pane. */
+  overlay?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -36,7 +39,12 @@ export function AppShell({
       >
         <MobileTopBar />
         {banner}
-        <div className="min-h-0 flex-1 overflow-auto" id="app-content">
+        <div className="relative min-h-0 flex-1 overflow-auto" id="app-content">
+          {overlay ? (
+            <div className="pointer-events-none sticky top-2 z-30 -mb-10 flex justify-center">
+              <div className="pointer-events-auto">{overlay}</div>
+            </div>
+          ) : null}
           {children}
         </div>
       </SidebarInset>

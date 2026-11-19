@@ -116,6 +116,12 @@ async function renderCard(scan, props = {}) {
       ["./useScanTracker", tracker],
       ["@/shared/scanCompletion", scanCompletion],
       ["./PortalShell", { usePortal: () => ({ scan, brand: { display_name: "Acme" } }) }],
+      // The running visual reads the motion preference to pick shimmer vs
+      // plain text. A server render has no preference, so it takes the plain
+      // branch — the stage label this file asserts on either way.
+      ["motion/react", { __esModule: true, useReducedMotion: () => true }],
+      // A pass-through: the shimmer only decorates the stage label it wraps.
+      ["@/components/motion-primitives/text-shimmer", { TextShimmer: ({ children }) => React.createElement(React.Fragment, null, children), default: ({ children }) => React.createElement(React.Fragment, null, children) }],
     ]),
     autoNull: ["lucide-react"],
   });
