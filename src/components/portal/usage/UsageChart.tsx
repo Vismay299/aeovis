@@ -14,25 +14,25 @@
  */
 
 import { useId } from "react";
-import { Bar, BarChart } from "recharts";
-import { ChartGrid, ChartXAxis, ChartYAxis } from "@/components/app/ChartAxes";
 import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
+  Bar,
+  BarChart,
+  BarXAxis,
   ChartTooltip,
-  type ChartConfig,
-} from "@/components/ui/chart";
+  Grid,
+  YAxis,
+} from "@/components/charts";
+import { ChartLegend } from "@/components/app/ChartLegend";
 import { formatUsd } from "@/shared/money";
 import type { WorkspaceUsage } from "@/shared/costs";
 
-const usageChartConfig = {
-  knownUsd: { label: "Priced or reported", color: "var(--chart-1)" },
-  unknownUsd: {
-    label: "Estimated (cost not reported)",
-    color: "var(--chart-2)",
-  },
-} satisfies ChartConfig;
+const KNOWN_COLOR = "var(--chart-1)";
+const UNKNOWN_COLOR = "var(--chart-2)";
+
+const LEGEND = [
+  { label: "Priced or reported", color: KNOWN_COLOR },
+  { label: "Estimated (cost not reported)", color: UNKNOWN_COLOR },
+];
 
 type UsageDay = WorkspaceUsage["days"][number];
 
@@ -54,28 +54,27 @@ function formatTooltipValue(value: unknown): string {
   return typeof value === "number" ? formatUsd(value) : "";
 }
 
-type TooltipPayloadEntry = { payload?: UsageDay };
-
 /**
  * One line for the whole day: the accounted total and, when any call was
  * unpriced, the estimated part inside it.
  */
-function UsageTooltip({
-  active,
-  payload,
-}: {
-  active?: boolean;
-  payload?: readonly TooltipPayloadEntry[];
-}) {
-  if (!active || !payload?.length) return null;
-  const day = payload[0]?.payload;
-  if (!day) return null;
-
+function UsageTooltip({ day }: { day: UsageDay }) {
   return (
-    <div className="rounded-lg border border-border bg-popover px-2.5 py-1.5 text-xs text-popover-foreground shadow-sm">
+    <div className="px-2.5 py-1.5 text-xs text-popover-foreground">
       {`${formatShortDate(day.date)}: ${formatUsd(day.usd)} (${formatUsd(day.unknownUsd)} estimated)`}
     </div>
   );
+}
+
+/**
+ * Bars are categories, so each day needs a unique label: "Sep 22", or the
+ * full date when a range repeats a short label (it spans more than a year).
+ */
+function dayLabels(days: readonly UsageDay[]): string[] {
+  const short = days.map((day) => formatShortDate(day.date));
+  return new Set(short).size === short.length
+    ? short
+    : days.map((day) => day.date);
 }
 
 export function UsageChart({
@@ -97,86 +96,83 @@ export function UsageChart({
     );
   }
 
+  const labels = dayLabels(days);
+  const bars = days.map((day, index) => ({ ...day, label: labels[index] }));
+
   return (
-    <ChartContainer
-      config={usageChartConfig}
-      className="h-40 w-full md:h-56"
+    <div
+      className="flex h-40 w-full flex-col md:h-56"
       aria-label={`Daily spend, ${range}`}
     >
-      <>
-        <div className="sr-only">
-          <table>
-            <caption>{`Daily spend, ${range}`}</caption>
-            <thead>
-              <tr>
-                <th scope="col">Date</th>
-                <th scope="col">Spend</th>
-                <th scope="col">Estimated</th>
+      <div className="sr-only">
+        <table>
+          <caption>{`Daily spend, ${range}`}</caption>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Spend</th>
+              <th scope="col">Estimated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {days.map((day) => (
+              <tr key={day.date}>
+                <td>{day.date}</td>
+                <td>{formatUsd(day.usd)}</td>
+                <td>{formatUsd(day.unknownUsd)}</td>
               </tr>
-            </thead>
-            <tbody>
-              {days.map((day) => (
-                <tr key={day.date}>
-                  <td>{day.date}</td>
-                  <td>{formatUsd(day.usd)}</td>
-                  <td>{formatUsd(day.unknownUsd)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <BarChart data={days} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
-          <defs>
-            <pattern
-              id={hatchId}
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <BarChart
+        data={bars}
+        xDataKey="label"
+        stacked
+        aspectRatio=""
+        className="min-h-0 flex-1"
+        animationDuration={700}
+        margin={{ left: 64, right: 8, top: 8, bottom: 28 }}
+      >
+        <defs>
+          <pattern
+            id={hatchId}
+            width="8"
+            height="8"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <rect
               width="8"
               height="8"
-              patternUnits="userSpaceOnUse"
-              patternTransform="rotate(45)"
-            >
-              <rect
-                width="8"
-                height="8"
-                fill="var(--color-unknownUsd)"
-                fillOpacity={0.2}
-              />
-              <line
-                x1="0"
-                y1="0"
-                x2="0"
-                y2="8"
-                stroke="var(--color-unknownUsd)"
-                strokeWidth="2"
-              />
-            </pattern>
-          </defs>
-          <ChartGrid />
-          <ChartXAxis
-            dataKey="date"
-            tickFormatter={formatShortDate}
-            minTickGap={24}
-          />
-          <ChartYAxis tickFormatter={formatTooltipValue} width={64} />
-          <ChartTooltip content={<UsageTooltip />} />
-          <ChartLegend content={<ChartLegendContent />} />
-          <Bar
-            dataKey="knownUsd"
-            stackId="spend"
-            fill="var(--color-knownUsd)"
-            animationDuration={700}
-            animationEasing="ease-out"
-          />
-          <Bar
-            dataKey="unknownUsd"
-            stackId="spend"
-            fill={`url(#${hatchId})`}
-            stroke="var(--color-unknownUsd)"
-            strokeWidth={1}
-            animationDuration={700}
-            animationEasing="ease-out"
-          />
-        </BarChart>
-      </>
-    </ChartContainer>
+              fill={UNKNOWN_COLOR}
+              fillOpacity={0.2}
+            />
+            <line
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="8"
+              stroke={UNKNOWN_COLOR}
+              strokeWidth="2"
+            />
+          </pattern>
+        </defs>
+        <Grid horizontal />
+        <Bar dataKey="knownUsd" fill={KNOWN_COLOR} lineCap="butt" />
+        <Bar
+          dataKey="unknownUsd"
+          fill={`url(#${hatchId})`}
+          stroke={UNKNOWN_COLOR}
+          lineCap="butt"
+        />
+        <YAxis formatValue={formatTooltipValue} />
+        <BarXAxis />
+        <ChartTooltip
+          content={({ point }) => <UsageTooltip day={point as UsageDay} />}
+        />
+      </BarChart>
+      <ChartLegend items={LEGEND} />
+    </div>
   );
 }
