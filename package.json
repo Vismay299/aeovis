@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:login": "node --env-file=.env.local scripts/dev-login.mjs",
     "build": "next build && node scripts/telemetry/upload-sourcemaps.mjs",
     "sourcemaps:upload": "node scripts/telemetry/upload-sourcemaps.mjs",
     "skills:build": "node scripts/build-assistant-skills.mjs --write",
