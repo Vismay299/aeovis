@@ -16,6 +16,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { FlipLabel } from "@/components/app/motion/FlipLabel";
 
 export function ProgressCard({
   title,
@@ -38,7 +39,8 @@ export function ProgressCard({
       <CardHeader>
         <CardTitle className="flex flex-wrap items-center gap-2">
           {busy ? <Spinner aria-hidden /> : null}
-          {title}
+          {/* Labelled progress: flips only when the audit's phase changes. */}
+          <FlipLabel labelKey={title}>{title}</FlipLabel>
           <Badge variant="outline">{badge}</Badge>
         </CardTitle>
       </CardHeader>

@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { Radar, Play } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 import { DotGridPulse } from "@/components/app/motion/DotGridPulse";
+import { FlipLabel } from "@/components/app/motion/FlipLabel";
 import { RollingNumber } from "@/components/app/motion/RollingNumber";
 import { TextShimmer } from "@/components/motion-primitives/text-shimmer";
 import { usePortal } from "./PortalShell";
@@ -116,9 +117,13 @@ export function ScanProgressCard({ showIdle = true }) {
             {scan.reconnecting ? <Badge tone="warn" dot>Reconnecting…</Badge> : null}
           </div>
           <h2 className="text-lg font-semibold text-foreground pv-card__title">
-            {reduceMotion
-              ? `${stageLabel}…`
-              : <TextShimmer duration={1.6}>{`${stageLabel}…`}</TextShimmer>}
+            {/* Labelled progress: the stage label flips over only when the
+                tracker reports a new stage (scanTrackerModel.js). */}
+            <FlipLabel labelKey={stageLabel}>
+              {reduceMotion
+                ? `${stageLabel}…`
+                : <TextShimmer duration={1.6}>{`${stageLabel}…`}</TextShimmer>}
+            </FlipLabel>
           </h2>
           <p className="text-sm text-muted-foreground pv-card__desc">{scan.stage?.detail || "Getting your scan ready"}</p>
         </div>
