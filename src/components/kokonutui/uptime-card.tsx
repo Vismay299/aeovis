@@ -113,8 +113,8 @@ function barAt(weights: Float64Array, x: number) {
 const BAR_COLOR: Record<DayStatus, string> = {
   up: "bg-success",
   down: "bg-destructive",
-  unassessed: "bg-muted-foreground/35",
-  none: "bg-muted",
+  unassessed: "bg-muted-foreground/40",
+  none: "bg-muted-foreground/10",
 };
 
 const PILL_COLOR: Record<DayStatus, string> = {
