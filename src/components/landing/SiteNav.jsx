@@ -1,18 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { SiteLogo } from './SiteLogo';
 
 export function Wordmark({ className = '', style }) {
   return (
-    <span className={`wordmark ${className}`.trim()} style={style}>
-      <span className="wordmark__m">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff"
-          strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
-          <circle cx="11" cy="11" r="6" />
-          <path d="M15.5 15.5L21 21" />
-        </svg>
-      </span>
-      perceev
+    <span className={`wordmark ${className}`.trim()} style={style} role="img" aria-label="Perceev">
+      <SiteLogo />
     </span>
   );
 }

@@ -14,6 +14,9 @@ test("first server paint is light and dark mode is confined to app paths", async
       ["@/components/app/theme/SurfaceSync", stubModule],
       ["@/components/app/AppToaster", stubModule],
       ["@/shared/theme/theme", themeModule],
+      ["@/shared/theme/palette", await import("../shared/theme/palette.ts")],
+      ["@/components/app/motion/NavigationProgress", stubModule],
+      ["@/components/app/theme/PaletteSwitcher", stubModule],
     ]),
     autoNull: ["./globals.css", "@/components/design-system/primitives.css", "@/components/portal/portal.css"],
   });

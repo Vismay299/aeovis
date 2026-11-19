@@ -130,6 +130,14 @@ export function textOf(html) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Motion wrappers (`RollingNumber` and friends) only decorate their children:
+ * on the server they render them unchanged. A pass-through stub is therefore
+ * exactly their server output, so every caller resolves them without having
+ * to name them. A test that asserts the motion itself maps the real module.
+ */
+const PRESENTATIONAL_PASSTHROUGH = ["@/components/app/motion/"];
+
+/**
  * Compile a JSX file with sucrase and evaluate it as a CommonJS module.
  *
  * @param {string} filePath  Absolute path to the .jsx file.
@@ -178,6 +186,9 @@ export async function compileJsx(filePath, opts = {}) {
 
   const requireShim = (specifier) => {
     if (modules.has(specifier)) return modules.get(specifier);
+    for (const prefix of PRESENTATIONAL_PASSTHROUGH) {
+      if (specifier.startsWith(prefix)) return passThroughExports;
+    }
     for (const prefix of autoStub) {
       if (specifier.startsWith(prefix)) return passThroughExports;
     }

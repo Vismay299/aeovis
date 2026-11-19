@@ -67,7 +67,7 @@ const iconModule = new Proxy(
   }
 );
 
-/** framer-motion: `motion.<tag>` as the plain tag, animation props dropped. */
+/** motion/react: `motion.<tag>` as the plain tag, animation props dropped. */
 const motionProxy = new Proxy(
   {},
   {
@@ -87,7 +87,7 @@ reactModule.default = reactModule;
 const EXTERNAL = new Map([
   ["react", reactModule],
   [
-    "framer-motion",
+    "motion/react",
     {
       __esModule: true,
       motion: motionProxy,
@@ -119,7 +119,7 @@ const cache = new Map();
 /**
  * Load one project file and everything it imports, for real.
  *
- * Only `react`, `framer-motion` and `lucide-react` are substituted, and none of
+ * Only `react`, `motion/react` and `lucide-react` are substituted, and none of
  * those produces text. There is deliberately no catch-all for project paths: an
  * unresolvable specifier throws, because a stub in this position would replace
  * shareOfVoice.js — the module under test — with something that agrees with
@@ -418,7 +418,7 @@ test("the harness refuses to stub a project module it was not told about", async
   // retired ScoreBreakdown harness's own note said such a suite goes vacuous.
   assert.deepEqual(
     [...EXTERNAL.keys()].sort(),
-    ["framer-motion", "lucide-react", "react"],
+    ["lucide-react", "motion/react", "react"],
     "only these three are substituted; none of them produces text"
   );
   assert.equal(EXTERNAL.has("@/components/perceev/charts/shareOfVoice"), false);

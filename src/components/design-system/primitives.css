@@ -6,8 +6,9 @@
   border: 1px solid transparent; border-radius: var(--r-sm);
   font: 600 14px/1.2 var(--font-sans); letter-spacing: -.01em;
   text-decoration: none; white-space: nowrap; cursor: pointer;
-  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast), color var(--t-fast);
+  transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast), color var(--t-fast), scale 110ms var(--ease);
 }
+.btn:active:not(:disabled), .pv-btn:active:not(:disabled):not([aria-disabled="true"]) { scale: .97; }
 .btn svg, .pv-btn svg { width: 16px; height: 16px; flex: none; }
 .btn:disabled, .pv-btn:disabled, .pv-btn[aria-disabled="true"] { opacity: .55; cursor: not-allowed; }
 .btn--primary, .pv-btn--primary { background: var(--brand); color: var(--on-brand); border-color: var(--brand); }

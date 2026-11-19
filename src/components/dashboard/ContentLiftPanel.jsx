@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { getContentEvents, addContentEvent } from "@/shared/api";
 import { toast } from "sonner";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 import { Plus, Calendar, Link as LinkIcon, TrendingUp, TrendingDown, BookOpen, AlertCircle, ChevronDown, ChevronUp } from "lucide-react";
 
 export default function ContentLiftPanel({ brand }) {

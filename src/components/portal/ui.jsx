@@ -6,6 +6,8 @@
  */
 
 import Link from "next/link";
+import { RollingNumber } from "@/components/app/motion/RollingNumber";
+import { ripple } from "@/components/app/motion/ripple";
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, Check, X, Loader2 } from "lucide-react";
 
 const cx = (...parts) => parts.filter(Boolean).join(" ");
@@ -72,7 +74,7 @@ export function Stat({ label, icon: Icon, value, suffix, sub, className }) {
         {label}
       </span>
       <span className={cx("text-2xl font-semibold tabular-nums pv-stat__value", blank && "is-empty")}>
-        {blank ? "—" : value}
+        {blank ? "—" : <RollingNumber>{value}</RollingNumber>}
         {!blank && suffix ? <small className="text-sm font-normal text-muted-foreground">{suffix}</small> : null}
       </span>
       {sub ? <span className="text-xs text-muted-foreground pv-stat__sub">{sub}</span> : null}
@@ -81,10 +83,10 @@ export function Stat({ label, icon: Icon, value, suffix, sub, className }) {
 }
 
 const BUTTON_BASE =
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap motion-control motion-press outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
 const BUTTON_VARIANTS = {
-  primary: "bg-primary text-primary-foreground hover:bg-primary/80",
+  primary: "bg-primary text-primary-foreground motion-raise hover:bg-primary/90",
   secondary:
     "border-border bg-card shadow-xs hover:bg-foreground/5 hover:text-foreground aria-expanded:bg-foreground/5 aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:shadow-none dark:hover:bg-input/50",
   ghost:
@@ -94,8 +96,8 @@ const BUTTON_VARIANTS = {
 };
 
 const BUTTON_SIZES = {
-  md: "h-10 gap-1.5 px-4",
-  sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3.5",
+  md: "h-10 gap-1.5 px-4 [--button-gap:--spacing(1.5)]",
+  sm: "h-7 gap-1 [--button-gap:--spacing(1)] rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3.5",
 };
 
 /**
@@ -137,9 +139,13 @@ export function Button({
       {children}
     </>
   );
-  if (href) return <Link href={href} className={classes} {...rest}>{content}</Link>;
+  const press = (event) => {
+    ripple(event);
+    rest.onPointerDown?.(event);
+  };
+  if (href) return <Link href={href} className={classes} {...rest} onPointerDown={press}>{content}</Link>;
   return (
-    <button {...rest} type={type} className={classes} disabled={disabled || loading}>
+    <button {...rest} type={type} className={classes} disabled={disabled || loading} onPointerDown={press}>
       {content}
     </button>
   );
@@ -346,7 +352,7 @@ export function Tabs({ items, value, onChange, label = "Views" }) {
 export function Skeleton({ width = "100%", height = 12, style, className }) {
   return (
     <span
-      className={cx("block animate-pulse rounded-md bg-foreground/10 pv-skeleton", className)}
+      className={cx("block skeleton-shimmer rounded-md bg-foreground/10 pv-skeleton", className)}
       style={{ width, height, ...style }}
       aria-hidden="true"
     />
@@ -387,7 +393,7 @@ export function TopLoadingBar({ show }) {
       role="progressbar"
       aria-label="Loading"
     >
-      <div className="h-full w-full bg-primary animate-pulse" />
+      <div className="skeleton-shimmer h-full w-full bg-primary" />
     </div>
   );
 }

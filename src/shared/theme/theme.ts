@@ -16,6 +16,8 @@ export const APP_SURFACES = [
   { prefix: "/auth", theme: "user" },
   { prefix: "/ops", theme: "light" },
   { prefix: "/r", theme: "light" },
+  // Local review page for colour schemes and motion.
+  { prefix: "/ui-lab", theme: "user" },
 ] as const;
 
 export function surfaceForPath(pathname: string): { surface: "app" | "site"; themeMode: "user" | "light" } {

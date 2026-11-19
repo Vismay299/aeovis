@@ -163,7 +163,8 @@ export function UsageChart({
             dataKey="knownUsd"
             stackId="spend"
             fill="var(--color-knownUsd)"
-            isAnimationActive={false}
+            animationDuration={700}
+            animationEasing="ease-out"
           />
           <Bar
             dataKey="unknownUsd"
@@ -171,7 +172,8 @@ export function UsageChart({
             fill={`url(#${hatchId})`}
             stroke="var(--color-unknownUsd)"
             strokeWidth={1}
-            isAnimationActive={false}
+            animationDuration={700}
+            animationEasing="ease-out"
           />
         </BarChart>
       </>

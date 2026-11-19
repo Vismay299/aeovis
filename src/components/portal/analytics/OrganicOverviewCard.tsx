@@ -275,7 +275,8 @@ export function OrganicOverviewCard({
                     dataKey="sessions"
                     fill="var(--color-sessions)"
                     stroke="var(--color-sessions)"
-                    isAnimationActive={false}
+                    animationDuration={700}
+            animationEasing="ease-out"
                     connectNulls={false}
                   />
                 </AreaChart>

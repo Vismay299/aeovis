@@ -1,42 +1,27 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import { Toaster } from "sonner";
-import { surfaceForPath } from "@/shared/theme/theme";
-import { useThemePreference } from "@/components/app/theme/useThemePreference";
+import { CircleAlert, Info, TriangleAlert } from "lucide-react";
+import { Spinner, SuccessCheck } from "@/components/ui/spinner";
 
-const LEGACY_TOAST_STYLE = {
-  background: "var(--surface)",
-  border: "1px solid var(--line)",
-  borderRadius: "var(--r-md)",
-  color: "var(--ink-1)",
-  fontFamily: "var(--font-sans)",
-  fontSize: "14px",
-  boxShadow: "var(--shadow-2)",
-};
-
+/**
+ * The app's toasts. Their look comes from the scheme and shape tokens in
+ * src/styles/shapes.css, so there is one toaster for every surface. A success
+ * draws its tick and a loading toast carries the app spinner.
+ */
 export function AppToaster() {
-  const pathname = usePathname();
-  const { resolvedTheme } = useThemePreference();
-  const { surface } = surfaceForPath(pathname || "/");
-
-  if (surface === "app") {
-    return (
-      <Toaster
-        theme={resolvedTheme}
-        position="bottom-right"
-        mobileOffset={{ bottom: 100 }}
-      />
-    );
-  }
-
   return (
     <Toaster
-      theme="light"
+      theme="dark"
       position="bottom-right"
       mobileOffset={{ bottom: 100 }}
-      toastOptions={{
-        style: LEGACY_TOAST_STYLE,
+      gap={10}
+      icons={{
+        success: <SuccessCheck />,
+        loading: <Spinner />,
+        error: <CircleAlert />,
+        warning: <TriangleAlert />,
+        info: <Info />,
       }}
     />
   );

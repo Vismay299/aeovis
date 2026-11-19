@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 import { PerceevLogo } from "@/components/app/brand/PerceevLogo";
+import { SidebarActivePill } from "@/components/app/motion/SidebarActivePill";
 import { NAV_GROUPS } from "@/components/app/navigation/items";
 import { activeNavItemId, visibleNavGroups } from "@/components/app/navigation/navModel";
 import type { NavItem } from "@/components/app/navigation/navModel";
@@ -33,8 +34,10 @@ import { AccountMenu } from "./AccountMenu";
 import { ScanRunningCard } from "./ScanRunningCard";
 
 /** The nav row: the active row carries an accent and a 3 px brand bar. */
-const navButtonClass =
-  "relative text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground data-active:before:absolute data-active:before:inset-y-1 data-active:before:left-0 data-active:before:w-[3px] data-active:before:rounded-r-full data-active:before:bg-primary";
+// The active highlight is SidebarActivePill, one element that slides between
+// rows, so an active row keeps a transparent background of its own.
+export const navButtonClass =
+  "relative text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground data-active:bg-transparent data-active:text-sidebar-accent-foreground data-active:hover:bg-transparent";
 
 /**
  * The sidebar.
@@ -202,6 +205,7 @@ function SidebarNavLink({
 
   return (
     <SidebarMenuItem>
+      {active ? <SidebarActivePill /> : null}
       {placeholder ? (
         row
       ) : (

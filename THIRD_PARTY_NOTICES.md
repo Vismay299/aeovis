@@ -899,3 +899,23 @@ SOFTWARE.
 - `src/app/api/customer/reports/templates/route.ts` (from `openseo:src/serverFunctions/reportTemplates.ts:7-69`)
 - `src/app/api/customer/reports/templates/[templateId]/route.ts` (from `openseo:src/serverFunctions/reportTemplates.ts:7-69`)
 - `src/app/api/customer/reports/generate/route.ts` (new endpoint; route shape follows `openseo:src/serverFunctions/reports.ts:20-136`)
+## Component libraries vendored through the shadcn registry (MIT)
+
+Source files from the projects below are copied into this repository with
+`npx shadcn add` (registries are listed in `components.json`) and modified for
+Perceev. Each project is published under the MIT license; the full license
+text and copyright notice are in the upstream repository named for each.
+
+| Library | Vendored into | Upstream |
+| --- | --- | --- |
+| Bklit UI (charts) | `src/components/charts/`, `src/components/shimmering-text.tsx` | https://ui.bklit.com · registry `@bklit` |
+| Motion Primitives | `src/components/motion-primitives/` | https://github.com/ibelick/motion-primitives · registry `@motion-primitives` |
+| Kokonut UI | `src/components/kokonutui/` | https://github.com/kokonut-labs/kokonutui · registry `@kokonutui` |
+| Watermelon UI | `src/components/watermelon/` | https://github.com/WatermelonCorp/watermelon-platform · registry `@watermelon` |
+
+`src/components/charts/patterns/` additionally carries code derived from visx;
+its license is kept beside it as `LICENSE-visx-pattern`.
+
+npm packages added for these: `motion` (replaces `framer-motion`), `animejs`,
+`d3-array`, `d3-scale`, `d3-shape`, `@number-flow/react`, `react-use-measure`.
+Each is used under its own license as published on npm.

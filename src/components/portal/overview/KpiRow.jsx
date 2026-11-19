@@ -42,7 +42,7 @@ export default function KpiRow({ overview, gsc }) {
   const siteUrl = gsc?.connection?.site_url;
 
   return (
-    <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className="stagger-children grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Stat
         label="AI visibility"
         icon={Eye}
