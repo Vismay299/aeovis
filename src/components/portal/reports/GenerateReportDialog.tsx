@@ -30,6 +30,7 @@ import {
 import { fetchJson } from "@/shared/query/fetchJson";
 import { describeError } from "@/shared/query/errors";
 import { formatUsd } from "@/shared/money";
+import { Skeleton } from "@/components/ui/skeleton";
 import { assistantConfigQueryOptions } from "@/components/portal/assistant/hooks/useAssistantSessions.ts";
 import {
   reportTemplatesQueryOptions,
@@ -90,7 +91,14 @@ export function GenerateReportDialog({
         </DialogHeader>
 
         {templatesQuery.isPending ? (
-          <DialogDescription>Loading templates…</DialogDescription>
+          // T4: the template field's shape shimmers until the list loads.
+          <div className="space-y-4" role="status" aria-label="Loading templates…">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-20" />
+              <Skeleton className="h-9 w-full" />
+            </div>
+            <Skeleton className="h-4 w-4/5" />
+          </div>
         ) : templatesQuery.isError ? (
           <p className="text-sm text-destructive">
             {describeError(
@@ -114,7 +122,7 @@ export function GenerateReportDialog({
             </Button>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="stagger-children space-y-4">
             <Field>
               <FieldLabel htmlFor="generate-report-template">
                 Template

@@ -22,7 +22,7 @@ import {
 import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
 import { MonthlyProjection } from "@/components/app/cost/MonthlyProjection";
 import { PricedActionButton } from "@/components/app/cost/PricedActionButton";
-import { Spinner } from "@/components/app/Spinner";
+import { SkeletonTableRows } from "@/components/app/SkeletonPresets";
 import {
   DataTable,
   makeSelectionColumn,
@@ -394,8 +394,10 @@ export function KeywordSuggestionStep({
     return (
       <>
         <StepHeader title="Finding your top keywords…" />
-        <div className="flex flex-col items-center justify-center py-16">
-          <Spinner label="This usually takes a few seconds" />
+        {/* T4: the keyword table's shape shimmers until the rows arrive. */}
+        <div className="space-y-3" role="status" aria-label="Finding your top keywords">
+          <p className="text-sm text-muted-foreground">This usually takes a few seconds</p>
+          <SkeletonTableRows rows={6} columns={3} />
         </div>
       </>
     );
@@ -474,17 +476,20 @@ export function KeywordSuggestionStep({
         }
       />
 
-      <DataTable
-        table={table}
-        empty={{ title: "No keywords" }}
-        scrollClassName="max-h-[400px]"
-        onRowClick={(row, event) => {
-          if (applyShiftRangeSelection(event, row, table, selectAnchorRef)) {
-            return;
-          }
-          row.toggleSelected();
-        }}
-      />
+      {/* The rows step in where the skeleton was. */}
+      <div className="animate-page-in">
+        <DataTable
+          table={table}
+          empty={{ title: "No keywords" }}
+          scrollClassName="max-h-[400px]"
+          onRowClick={(row, event) => {
+            if (applyShiftRangeSelection(event, row, table, selectAnchorRef)) {
+              return;
+            }
+            row.toggleSelected();
+          }}
+        />
+      </div>
 
       {saveError ? (
         <Alert variant="destructive">

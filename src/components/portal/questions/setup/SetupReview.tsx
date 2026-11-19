@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { CostReviewDialog } from "@/components/app/cost/CostReviewDialog";
 import { usePriceQuote } from "@/components/app/cost/usePriceQuote";
@@ -128,15 +129,38 @@ export function SetupReview({
 
   if (!review) {
     return (
-      <PCard title="Review your setup">
-        <div className="p-4 text-sm text-muted-foreground">Loading review…</div>
+      // T4: the review's own sections shimmer until it loads.
+      <PCard title="Review your setup" className="mx-auto max-w-3xl">
+        <div className="space-y-6 p-4" role="status" aria-label="Loading review…">
+          <Skeleton className="h-4 w-2/3" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-64" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-48" />
+            <Skeleton className="h-9 w-full" />
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Skeleton className="h-9 w-full" />
+            <Skeleton className="h-9 w-full" />
+          </div>
+          <div className="space-y-4">
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </div>
+        </div>
       </PCard>
     );
   }
 
   return (
     <PCard title="Review your setup" className="mx-auto max-w-3xl">
-      <div className="space-y-6 p-4">
+      <div className="animate-page-in space-y-6 p-4">
         <p className="text-sm text-muted-foreground">
           You can change your context at any time in Context.{" "}
           {features?.project_memory ? <Link href="/portal/context" className="text-primary hover:underline">Context</Link> : null}

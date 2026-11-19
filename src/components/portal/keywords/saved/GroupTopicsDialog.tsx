@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
 import { fetchJson, isApiError, withBrand } from "@/shared/query/fetchJson";
 import { describeError } from "@/shared/query/errors";
@@ -208,9 +209,20 @@ export function GroupTopicsDialog({
           </DialogHeader>
 
           {running ? (
-            <div className="flex items-center gap-2 py-6" aria-live="polite">
-              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              <span>Grouping {ids.length} keywords into topics…</span>
+            // T4: the topic cards' shape shimmers where the proposal lands.
+            <div className="space-y-3 py-2" aria-live="polite" aria-busy>
+              <p>Grouping {ids.length} keywords into topics…</p>
+              {[0, 1, 2].map((row) => (
+                <div key={row} className="space-y-2 rounded border p-3">
+                  <div className="flex items-center gap-2">
+                    <Skeleton className="size-4 rounded-sm" />
+                    <Skeleton className="h-8 w-48" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                    <Skeleton className="h-5 w-14 rounded-full" />
+                  </div>
+                  <Skeleton className="h-3 w-40" />
+                </div>
+              ))}
             </div>
           ) : null}
 
@@ -230,7 +242,7 @@ export function GroupTopicsDialog({
           ) : null}
 
           {done && proposal ? (
-            <div className="max-h-[60vh] space-y-3 overflow-y-auto">
+            <div className="stagger-children max-h-[60vh] space-y-3 overflow-y-auto">
               {proposal.clusters.map((c, i) => {
                 const count = c.savedKeywordIds.length;
                 const isOpen = expanded[i] ?? false;
