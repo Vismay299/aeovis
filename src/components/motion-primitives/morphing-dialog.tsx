@@ -79,7 +79,11 @@ export type MorphingDialogProps = {
 function MorphingDialog({ children, transition }: MorphingDialogProps) {
   return (
     <MorphingDialogProvider>
-      <MotionConfig transition={transition}>{children}</MotionConfig>
+      {/* Perceev edit: reducedMotion="user", so under prefers-reduced-motion
+          the morph becomes a plain open and close. */}
+      <MotionConfig transition={transition} reducedMotion='user'>
+        {children}
+      </MotionConfig>
     </MorphingDialogProvider>
   );
 }
@@ -89,6 +93,9 @@ export type MorphingDialogTriggerProps = {
   className?: string;
   style?: React.CSSProperties;
   triggerRef?: React.RefObject<HTMLButtonElement>;
+  // Perceev edit: the trigger's accessible name. The original forced
+  // "Open dialog <id>", which hid the card's own words from screen readers.
+  'aria-label'?: string;
 };
 
 function MorphingDialogTrigger({
@@ -96,8 +103,14 @@ function MorphingDialogTrigger({
   className,
   style,
   triggerRef,
+  'aria-label': ariaLabel,
 }: MorphingDialogTriggerProps) {
-  const { setIsOpen, isOpen, uniqueId } = useMorphingDialog();
+  const {
+    setIsOpen,
+    isOpen,
+    uniqueId,
+    triggerRef: contextTriggerRef,
+  } = useMorphingDialog();
 
   const handleClick = useCallback(() => {
     setIsOpen(!isOpen);
@@ -115,7 +128,10 @@ function MorphingDialogTrigger({
 
   return (
     <motion.button
-      ref={triggerRef}
+      // Perceev edit: fall back to the provider's ref so focus returns to the
+      // card on close, and never submit a surrounding form.
+      ref={triggerRef ?? contextTriggerRef}
+      type='button'
       layoutId={`dialog-${uniqueId}`}
       className={cn('relative cursor-pointer', className)}
       onClick={handleClick}
@@ -124,7 +140,7 @@ function MorphingDialogTrigger({
       aria-haspopup='dialog'
       aria-expanded={isOpen}
       aria-controls={`motion-ui-morphing-dialog-content-${uniqueId}`}
-      aria-label={`Open dialog ${uniqueId}`}
+      aria-label={ariaLabel}
     >
       {children}
     </motion.button>
@@ -209,6 +225,8 @@ function MorphingDialogContent({
       layoutId={`dialog-${uniqueId}`}
       className={cn('overflow-hidden', className)}
       style={style}
+      // Perceev edit: the id the trigger's aria-controls points at.
+      id={`motion-ui-morphing-dialog-content-${uniqueId}`}
       role='dialog'
       aria-modal='true'
       aria-labelledby={`motion-ui-morphing-dialog-title-${uniqueId}`}
@@ -242,7 +260,9 @@ function MorphingDialogContainer({ children }: MorphingDialogContainerProps) {
         <>
           <motion.div
             key={`backdrop-${uniqueId}`}
-            className='fixed inset-0 h-full w-full bg-white/40 backdrop-blur-xs dark:bg-black/40'
+            // Perceev edit: a token colour (the app is always dark) and a
+            // z-index so the backdrop covers the app shell, not just the page.
+            className='fixed inset-0 z-50 h-full w-full bg-background/60 backdrop-blur-xs'
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -273,6 +293,8 @@ function MorphingDialogTitle({
   return (
     <motion.div
       layoutId={`dialog-title-container-${uniqueId}`}
+      // Perceev edit: the id the dialog's aria-labelledby points at.
+      id={`motion-ui-morphing-dialog-title-${uniqueId}`}
       className={className}
       style={style}
       layout
@@ -338,7 +360,8 @@ function MorphingDialogDescription({
       initial='initial'
       animate='animate'
       exit='exit'
-      id={`dialog-description-${uniqueId}`}
+      // Perceev edit: match the dialog's aria-describedby.
+      id={`motion-ui-morphing-dialog-description-${uniqueId}`}
     >
       {children}
     </motion.div>
