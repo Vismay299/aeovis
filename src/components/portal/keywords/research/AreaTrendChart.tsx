@@ -57,8 +57,7 @@ export function AreaTrendChart({ row }: { row: KeywordRow }) {
                 rows={[
                   {
                     color: COLOR,
-                    // The series name Recharts showed in this tooltip.
-                    label: "searchVolume",
+                    label: "Search volume",
                     value: typeof point.searchVolume === "number" ? point.searchVolume.toLocaleString() : "—",
                   },
                 ]}
