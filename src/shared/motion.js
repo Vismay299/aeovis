@@ -11,7 +11,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-/* Easings as cubic-bezier arrays for framer-motion, mirroring the CSS
+/* Easings as cubic-bezier arrays for the motion library, mirroring the CSS
    custom properties of the same name in globals.css. */
 export const EASE_LAMP = [0.2, 0.9, 0.1, 1];
 export const EASE_DECAY = [0.4, 0, 0.7, 0.2];
