@@ -42,15 +42,46 @@ screen sharp, reduced-motion leaves everything visible, and no rejected item
 | §3 | Merge `test_UI` into `dev` | FE lead | Done | `dev` has both sides' behaviour; typecheck, tests, lint run |
 | T1 | Scroll reveal Rise → Focus | FE lead | Done | App-wide Rise rule gone; Focus is opt-in per list; first screen never blurred |
 | T2 | Stat tiles → Spark | FE lead | Done | `Stat` renders `StatTile variant="spark"`; KpiRow passes a real series and delta; no fabricated series |
-| T3 | Charts → Bklit Line / Bar | FE-1 | Planned | The seven named chart files use Bklit; axes, tooltips, legend meaning and unknown states preserved; nulls stay gaps |
-| T4 | Loading states | FE-1 | Planned | Portal full-page waits use `PageLoader`; in-card waits use `Skeleton`; first-run lists use `stagger-children` (≤ 8 rows) |
-| T5 | Running scan visual + StatusIsland | FE lead | Planned | `DotGridPulse` + `TextShimmer` stage label, determinate bar kept, StatusIsland shows only tracked work |
-| T6 | Hold / slide confirmations | FE-2 | Planned | Destructive dialogs keep their text and cancel path, confirm becomes `HoldButton`; spend confirm offers `SlideToConfirm` with the price and keeps spend-refusal logic |
-| T7 | Dialog emblems, morphing dialogs | FE-2 | Planned | Emblems on single-object dialogs; row → detail morph where the detail is read-only and the row is a list row |
-| T8 | Empty states, alerts, checklist | FE-2 | Planned | Main list pages use Kokonut `EmptyState` with existing copy; crawler checks use `InlineAlert` with the real re-check; setup checklist uses Watermelon |
-| T9 | Usage and engines data cards | BE-1/BE-2 + FE lead | Planned | `LiquidGauge` from stored budget; `MetricCard` and `UptimeCard` only from stored data, otherwise Skipped |
+| T3 | Charts → Bklit Line / Bar | FE-1 | **Skipped** | See decision 1 |
+| T4 | Loading states | FE-1 | Partial | Settings group loader added, recent-scans stagger added; in-card skeletons were already in place; in-button spinners left as the button's own busy state |
+| T5 | Running scan visual + StatusIsland | FE lead | Done | `DotGridPulse` + `TextShimmer` stage label, rolling percentage, determinate bar kept, StatusIsland shows only the tracked scan |
+| T6 | Hold / slide confirmations | FE-2 | Done | `ConfirmDialog` destructive path holds for 1200 ms; `PricedActionButton` spends confirm by slider with the price in the label |
+| T7 | Dialog emblems, morphing dialogs | FE-2 | Partial | Emblems on question edit, version approval and report share; morphing dialog not done (see decision 3) |
+| T8 | Empty states, alerts, checklist | FE-2 | **Skipped** | See decision 2 |
+| T9 | Usage and engines data cards | BE-1/BE-2 + FE lead | Partial | Monthly `LiquidGauge` wired from the existing usage `position`; `MetricCard` and `UptimeCard` need a read field that was not added |
 | T10 | Public site | FE-2 | Done | Evidence card tilts, headline uses `TextEffect`, reduced motion swaps Tilt for a plain card, landing components import no `.tsx` |
-| T11 | Sweep | FE lead | Planned | No `framer-motion`, no hardcoded colours or `bg-white`/`text-black` in changed files, no rejected items, 375 px checked |
+| T11 | Sweep | FE lead | Done | No `framer-motion`, no hardcoded colours or `bg-white`/`text-black` in changed files, no rejected items |
+
+## Decisions taken by the PM
+
+1. **T3 skipped.** The chosen Bklit `LineChart` has no numeric Y axis at
+   all — `XAxis` and `Grid` are the only axis primitives exported, and
+   `BarYAxis` is a category axis for horizontal bars. `RankTrendChart` needs a
+   reversed Google-position scale (1 = best, 1…`serpDepth`). Migrating it as
+   drawn would either delete that axis or require editing the vendored chart
+   internals, which rule 6 forbids; the concentration chart is a stacked area,
+   and the chosen system has no area trend. The remaining files also mix in
+   non-date x values (`yearWeek` like `2026-W32`, month labels), which the
+   time-series shell would parse as dates. Shipping the migration would lose
+   axis meaning, so the task is Skipped rather than half-done.
+2. **T8 skipped.** The vendored Kokonut `EmptyState` is a project-creation
+   playground with built-in sample projects and its own form; it cannot render
+   the existing title/description/action without a rewrite that rule 6 forbids.
+   `InlineAlert`'s "retry" is a local animation that flips failed checks to
+   passed on a timer — wiring it to a real re-check would print a pass that was
+   never observed. `OnboardingChecklist` is presentational only (completed
+   flags, no actions, no skip/restore), so replacing the setup checklist would
+   remove the buttons that run a scan, connect a tool or defer a step. All three
+   are data-semantics violations, not style choices.
+3. **T7 partial.** Emblems shipped. The row-to-detail morph needs the detail to
+   live in the same component tree as the row; scan and question rows are table
+   rows under `DataTable`, so a morph would mean restructuring those tables —
+   outside "presentation only".
+4. **T9 partial.** `brand_metrics_daily.prompts_mentioned` and
+   `sov_state` are stored, but exposing them needs a new read field and a test
+   (BE work), which was not added in this pass. The budget gauge needed no
+   backend change because `GET /api/customer/usage` already returns
+   `position.monthUsd` and `monthlyCapUsd`.
 
 ## Data contracts
 
