@@ -1,4 +1,4 @@
-import { PREFERRED_PRODUCTION_ORIGIN, PRIVATE_ROUTE_PREFIXES } from "../server/publicSite.js";
+import { PREFERRED_PRODUCTION_ORIGIN, PRIVATE_ROUTE_PREFIXES } from "../server/publicSite.mjs";
 
 export default function robots() {
   const isPreview =

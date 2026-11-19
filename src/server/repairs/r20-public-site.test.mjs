@@ -13,7 +13,7 @@ import {
   generateSitemapXml,
   resolveHostPolicy,
   validateMarketingClaims,
-} from "../publicSite.js";
+} from "../publicSite.mjs";
 import robotsHandler from "../../app/robots.js";
 import sitemapHandler from "../../app/sitemap.js";
 
