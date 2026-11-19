@@ -3,10 +3,9 @@
 import { useMemo } from "react";
 import { z } from "zod";
 import { PageHeader } from "@/components/app/PageHeader";
-import { NavTabs } from "@/components/app/NavTabs";
+import { NavTabButton, NavTabs } from "@/components/app/NavTabs";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUrlSearchState } from "@/components/app/hooks/useUrlSearchState";
-import { cn } from "@/shared/utils";
 import { BusinessPicker } from "./BusinessPicker";
 import { ProfileTab } from "./ProfileTab";
 import { ReviewsTab } from "./ReviewsTab";
@@ -118,24 +117,15 @@ export function LocalSeoPage({
           {ownBusiness && (
             <div className="space-y-6">
               <NavTabs label="Local SEO sections">
-                {TABS.map((t) => {
-                  const isActive = activeTab === t.id;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => setUrlState({ tab: t.id, fetch: t.id === activeTab ? urlState.fetch : undefined })}
-                      data-status={isActive ? "active" : undefined}
-                      aria-current={isActive ? "page" : undefined}
-                      className={cn(
-                        "relative inline-flex h-9 items-center px-3 text-sm font-medium text-muted-foreground transition-colors outline-none hover:text-foreground focus-visible:rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 data-[status=active]:text-foreground",
-                        "after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 data-[status=active]:after:opacity-100"
-                      )}
-                    >
-                      {t.label}
-                    </button>
-                  );
-                })}
+                {TABS.map((t) => (
+                  <NavTabButton
+                    key={t.id}
+                    active={activeTab === t.id}
+                    onClick={() => setUrlState({ tab: t.id, fetch: t.id === activeTab ? urlState.fetch : undefined })}
+                  >
+                    {t.label}
+                  </NavTabButton>
+                ))}
               </NavTabs>
 
               {selectedBusiness && (

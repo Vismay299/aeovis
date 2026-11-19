@@ -10,6 +10,7 @@ import { RollingNumber } from "@/components/app/motion/RollingNumber";
 import { ripple } from "@/components/app/motion/ripple";
 import { StatTile } from "@/components/app/StatTile";
 import { EmptyArt } from "@/components/app/motion/EmptyArt";
+import { TabsGlider } from "@/components/app/motion/TabsGlider";
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, Check, X, Loader2 } from "lucide-react";
 
 const cx = (...parts) => parts.filter(Boolean).join(" ");
@@ -338,7 +339,9 @@ const TABS_LIST_LINE =
 /** Segmented tabs. items = [{ value, label, count? }]. */
 export function Tabs({ items, value, onChange, label = "Views" }) {
   return (
-    <div className={cx(TABS_LIST_LINE, "pv-tabs")} role="tablist" aria-label={label} data-variant="line">
+    <div className={cx(TABS_LIST_LINE, "relative pv-tabs")} role="tablist" aria-label={label} data-variant="line">
+      {/* Continuous tabs: the highlight glides between tabs once measured. */}
+      <TabsGlider activeKey={value} />
       {items.map((item) => (
         <button
           key={item.value}
