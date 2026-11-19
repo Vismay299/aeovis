@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { RollingNumber } from "@/components/app/motion/RollingNumber";
 import { ripple } from "@/components/app/motion/ripple";
+import { StatTile } from "@/components/app/StatTile";
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, Check, X, Loader2 } from "lucide-react";
 
 const cx = (...parts) => parts.filter(Boolean).join(" ");
@@ -64,21 +65,28 @@ export function Card({ title, description, actions, footer, flush, className, ch
   );
 }
 
-/** A KPI tile. `value` null/undefined renders an em dash, never 0. */
-export function Stat({ label, icon: Icon, value, suffix, sub, className }) {
+/**
+ * A KPI tile. `value` null/undefined renders an em dash, never 0.
+ *
+ * The locked design is the Spark tile, so this facade renders a `StatTile`
+ * and keeps the legacy `pv-card pv-stat` hooks on the outer element for the
+ * existing CSS. `series` is a real recent history, oldest first — with fewer
+ * than two points no sparkline is drawn, and it is never fabricated.
+ */
+export function Stat({ label, icon, value, suffix, sub, series, delta, className }) {
   const blank = value === null || value === undefined || value === "";
   return (
-    <div className={cx("rounded-lg border border-border bg-card p-4 pv-card pv-stat", className)}>
-      <span className="flex items-center gap-1.5 text-xs text-muted-foreground pv-stat__label">
-        {Icon ? <Icon aria-hidden="true" className="size-4" /> : null}
-        {label}
-      </span>
-      <span className={cx("text-2xl font-semibold tabular-nums pv-stat__value", blank && "is-empty")}>
-        {blank ? "—" : <RollingNumber>{value}</RollingNumber>}
-        {!blank && suffix ? <small className="text-sm font-normal text-muted-foreground">{suffix}</small> : null}
-      </span>
-      {sub ? <span className="text-xs text-muted-foreground pv-stat__sub">{sub}</span> : null}
-    </div>
+    <StatTile
+      variant="spark"
+      label={label}
+      icon={icon}
+      value={blank ? null : String(value)}
+      suffix={suffix}
+      sub={sub}
+      series={series}
+      delta={delta}
+      className={cx("pv-card pv-stat", className)}
+    />
   );
 }
 

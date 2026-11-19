@@ -122,6 +122,7 @@ export function StatTile({
           {delta ? <Delta delta={delta} /> : null}
         </div>
         {number("text-3xl")}
+        {sub ? <span className="truncate text-xs text-muted-foreground">{sub}</span> : null}
         {series && series.length > 1 ? <div className="-mx-1 -mb-1 mt-auto"><Spark series={series} /></div> : null}
       </div>
     );
