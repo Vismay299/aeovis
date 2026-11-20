@@ -558,6 +558,14 @@ try {
 
         const dialog = page.locator('[data-slot="dialog-content"]');
         await dialog.waitFor({ state: "visible", timeout: 10000 });
+        // The dialog springs in from scale 0.92 (motion-modal), so a box read
+        // mid-transition measures 0.92 × 390 = 358.8px. Wait for it to settle.
+        await dialog.evaluate(async (el) => {
+          while (el.hasAttribute("data-starting-style")) {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+          }
+          await Promise.all(el.getAnimations().map((animation) => animation.finished.catch(() => {})));
+        });
 
         const box = await dialog.boundingBox();
         assert.ok(box.width >= 380, `dialog fills mobile width (${box.width}px)`);
