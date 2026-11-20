@@ -32,6 +32,14 @@ export function InlineConfirm({
   onConfirm: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
+  // Each step unmounts the button that was just used, which would drop
+  // keyboard focus to the page (or, inside a popover, to the popup, which can
+  // steal it back mid-hold). Focus moves to the button that replaced it.
+  const [returnFocus, setReturnFocus] = useState(false);
+  const leave = () => {
+    setConfirming(false);
+    setReturnFocus(true);
+  };
   const size = triggerLabel ? "sm" : "xs";
 
   if (confirming) {
@@ -40,6 +48,7 @@ export function InlineConfirm({
         {/* The final confirm is held, not clicked (1200 ms). The two-step
             shape and the Cancel path are unchanged. */}
         <HoldButton
+          autoFocus
           variant="destructive"
           holdDuration={1200}
           holdingLabel="Keep holding"
@@ -47,7 +56,7 @@ export function InlineConfirm({
           disabled={pending || disabled}
           className={size === "sm" ? "h-8 min-w-0 px-3 text-xs" : "h-7 min-w-0 px-2.5 text-xs"}
           onHoldComplete={() => {
-            setConfirming(false);
+            leave();
             onConfirm();
           }}
         >
@@ -56,7 +65,7 @@ export function InlineConfirm({
         <Button
           variant="ghost"
           size={size}
-          onClick={() => setConfirming(false)}
+          onClick={leave}
         >
           Cancel
         </Button>
@@ -67,6 +76,7 @@ export function InlineConfirm({
   if (triggerLabel) {
     return (
       <Button
+        autoFocus={returnFocus}
         variant="destructive"
         size={size}
         disabled={pending || disabled}
@@ -83,6 +93,7 @@ export function InlineConfirm({
       size="icon-xs"
       className="text-destructive hover:text-destructive"
       aria-label={label}
+      autoFocus={returnFocus}
       disabled={pending || disabled}
       onClick={() => setConfirming(true)}
     >
