@@ -80,7 +80,8 @@ on the homepage with existing case history.
   cited.
   - `GUARD — the landing surface manufactures no number` scans `src/app/page.js`
     and every component in `src/components/landing/`, and fails on the shapes a
-    fabricated total is built from: `Math.random`, a timer, a self-incrementing
+    fabricated total is built from (since 2026-11-21 it also scans every component
+    in `src/components/landing2/`, which the home page now renders): `Math.random`, a timer, a self-incrementing
     state updater, and a typed total that is five digits or longer or grouped by
     commas. Its own header states the floor rather than implying there is none — a
     small typed figure ("412 probes this week") trips no rule, and it reads source,

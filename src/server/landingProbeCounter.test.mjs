@@ -79,10 +79,9 @@ import { transform } from "sucrase";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const LANDING_DIR = "src/components/landing";
 const PAGE = "src/app/page.js";
-/* The redesigned landing page (branch landing-page-2) is held to the same line:
-   its route and every component it is built from are scanned below. */
+/* The home page renders src/components/landing2/Landing2. Every component that
+   page is built from is held to the same line as the legacy directory above. */
 const LANDING2_DIR = "src/components/landing2";
-const PAGE2 = "src/app/landing-2/page.js";
 
 /**
  * Comments and string contents removed, so the rules below read CODE.
@@ -381,8 +380,7 @@ function landingSurface() {
       .filter((f) => /\.jsx?$/.test(f) && !f.includes(".test."))
       .map((f) => `${LANDING2_DIR}/${f}`)
     : [];
-  const page2 = existsSync(path.join(REPO, PAGE2)) ? [PAGE2] : [];
-  return [PAGE, ...files, ...page2, ...v2];
+  return [PAGE, ...files, ...v2];
 }
 
 const read = (rel) => readFileSync(path.join(REPO, rel), "utf8");
@@ -749,58 +747,23 @@ async function loadJsx(filePath, requireShim = () => ({})) {
   return moduleRecord.exports;
 }
 
-test("R2.7.11 ACCEPT — driving the page-level builder with no engines passes absent and renders not-measured, never a digit or fabricated zero", async () => {
+test("R2.7.11 ACCEPT — the home page claims no per-engine total, and the rail renders an absent one as not-measured, never a digit or fabricated zero", async () => {
+  // 1. The home page no longer renders the engine rail, so it computes no
+  //    per-engine "asked" figure at all. If a rail or a per-engine total comes
+  //    back to the home page, this is the line that has to be re-derived:
+  //    absent stays absent (undefined), never a substituted 0.
   const pageSource = await readFile(path.join(REPO, PAGE), "utf8");
-  // 1. Static AST/code check: ensure page.js no longer has ternary-to-zero or zero-coalesce for PER_ENGINE_ASKED
-  assert.doesNotMatch(
-    pageSource,
-    /PER_ENGINE_ASKED\s*=\s*[^;]*\?\s*[^;]*:\s*0\b/,
-    "src/app/page.js must not define PER_ENGINE_ASKED via ternary falling back to 0"
-  );
-  assert.doesNotMatch(
-    pageSource,
-    /PER_ENGINE_ASKED\s*=[^;]*(?:\?\?|\|\|)\s*0\b/,
-    "src/app/page.js must not define PER_ENGINE_ASKED via ?? 0 or || 0"
-  );
+  assert.doesNotMatch(pageSource, /EngineRail|PER_ENGINE_ASKED/, "src/app/page.js renders no engine rail");
+  const landing2 = readdirSync(path.join(REPO, LANDING2_DIR)).filter((f) => /\.jsx?$/.test(f));
+  for (const f of landing2) {
+    const src = readFileSync(path.join(REPO, LANDING2_DIR, f), "utf8");
+    assert.doesNotMatch(src, /EngineRail|PER_ENGINE_ASKED/, `${LANDING2_DIR}/${f} renders no engine rail`);
+  }
 
-  // 2. Load page.js module exports
-  const anyNamedExport = new Proxy(
-    { __esModule: true },
-    {
-      get(target, prop) {
-        if (prop in target) return target[prop];
-        return () => null;
-      },
-    }
-  );
-
-  const pageModule = await loadJsx(path.join(REPO, PAGE), (specifier) => {
-    if (specifier === "@/shared/scoring/promptSetSize") return { DEFAULT_UNBRANDED_TARGET: 30 };
-    if (specifier === "@/shared/engines/deployedEngines") {
-      return {
-        ENGINE_LABELS: { aio: "Google AI Overview", chatgpt: "ChatGPT", perplexity: "Perplexity" },
-        deployedEngineLabels: () => ["Google AI Overview"],
-        deployedEngines: () => ["aio"],
-        primaryDeployedEngineLabel: () => "Google AI Overview",
-        formatEngineList: (l) => l.join(", "),
-      };
-    }
-    if (specifier === "@/shared/mockData") {
-      return {
-        SAMPLE_DESTINATIONS: [],
-        SAMPLE_RESULT: { engines: { aio: { answered: 30, visible: 15 } } },
-      };
-    }
-    return anyNamedExport;
-  });
-
-  const { computePerEngineAsked } = pageModule;
-  assert.equal(typeof computePerEngineAsked, "function", "page.js must export computePerEngineAsked");
-
-  // Driving with empty engines returns undefined (absent), NEVER 0
+  // 2. The rail component itself still lives in the legacy directory; an
+  //    absent total is what any future caller must hand it.
   const emptyEngines = [];
-  const asked = computePerEngineAsked(emptyEngines);
-  assert.strictEqual(asked, undefined, "computePerEngineAsked([]) must be undefined, never 0");
+  const asked = undefined;
 
   // 3. Load EngineRail
   const railModule = await loadJsx(path.join(REPO, LANDING_DIR, "EngineRail.jsx"), (specifier) => {

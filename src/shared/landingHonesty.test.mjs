@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -41,9 +41,29 @@ const PAGE_PATH = path.join(REPO, PAGE_REL);
  * left in the served HTML. The list is the fix: a guard that scans one of two
  * identical surfaces is a guard that certifies the one it does not read.
  */
+/*
+ * 2026-11-21 — the home page became the landing2 redesign. page.js is now a
+ * thin wrapper around src/components/landing2/Landing2.jsx, and every string
+ * the home page renders lives in that directory, so the directory is scanned
+ * whole, discovered rather than typed (a file added to it is guarded the day it
+ * lands). AnswerSheet.jsx stays on the list: it is no longer rendered by the
+ * home page, but it still exists, and a guarded file that quietly drops off the
+ * list is how the second sample card went unread for two rounds.
+ */
+const LANDING2_DIR = path.join(REPO, "src/components/landing2");
+const LANDING2_FILES = readdirSync(LANDING2_DIR)
+  .filter((f) => /\.jsx?$/.test(f) && !f.includes(".test."))
+  .sort()
+  .map((f) => ["src/components/landing2/" + f, path.join(LANDING2_DIR, f)]);
+const SAMPLE_REL = "src/components/landing2/sample.js";
+const FAQ_REL = "src/components/landing2/Faq.jsx";
+const FAQ_PATH = path.join(LANDING2_DIR, "Faq.jsx");
+const landing2Code = (name) => withoutComments(readFileSync(path.join(LANDING2_DIR, name), "utf8"));
+
 const LITERAL_SCAN_FILES = [
   ["src/components/landing/AnswerSheet.jsx", SHEET_PATH],
   ["src/app/page.js", PAGE_PATH],
+  ...LANDING2_FILES,
 ];
 
 /**
@@ -330,13 +350,11 @@ function sampleReadingUnder(engines) {
     // R6.4.9 — and the last step decodes escape spellings, because every clause
     // below asks includes() and '\\x43hatGPT' renders ChatGPT to a reader while
     // spelling nothing to a substring search.
+    //
+    // Since the landing2 home page there is no ENGINE_NOTE dictionary anywhere
+    // on the surface, so nothing is exempt: every file is scanned whole.
     const sourceOf = (rel, abs) => {
-      const raw = readFileSync(abs, "utf8");
-      return renderableText(
-        rel === "src/app/page.js"
-          ? withoutComments(withoutEngineNoteDictionary(raw, allLabels))
-          : withoutComments(raw),
-      );
+      return renderableText(withoutComments(readFileSync(abs, "utf8")));
     };
     const typed = {};
     for (const [rel, abs] of ${JSON.stringify(LITERAL_SCAN_FILES)}) {
@@ -414,42 +432,37 @@ test("engineDriftWarning fires when the copy and the fleet disagree", () => {
 });
 
 test("GUARD — the landing page names no engine in prose", async () => {
-  const src = await read("src/app/page.js");
-  /**
-   * R6.4.9, the escape clause, applied here. The negative clause at the bottom
-   * of this test is a TOKEN check, and a token can be written '\x43hatGPT' or
-   * '&#67;hatGPT' and still reach the reader as the name. So it reads the
-   * DECODED text as well as the raw bytes.
-   *
-   * The SHAPE clauses stay on the raw source deliberately: `const X = '` is
-   * structure, decoding is not structure-preserving, and no escape spelling can
-   * evade a shape clause anyway — a typed literal is a typed literal however
-   * its characters are written.
-   */
-  const rendered = renderableText(src);
-
-  // The hero sentence must be DERIVED, not typed.
-  //
-  // This used to assert only that the token ENGINE_SENTENCE appeared somewhere
-  // and that one specific phrasing did not. That left the whole overclaim one
-  // line away: replacing the assignment with
-  //   const ENGINE_SENTENCE = 'Google AI Overview, ChatGPT and Perplexity';
-  // put all three engines back in the rendered hero and every guard here still
-  // passed. Assert the ASSIGNMENT, the way the rail guard does for DEMO_ENGINES.
+  // The engine sentence must be DERIVED, not typed. On the landing2 home page
+  // it is derived once, in sample.js, and every surface that names engines in
+  // prose renders that one value.
+  const sample = withoutComments(await read(SAMPLE_REL));
   assert.match(
-    src,
-    /const ENGINE_SENTENCE = formatEngineList\(deployedEngineLabels\(\)\);/,
-    "ENGINE_SENTENCE must be assigned from formatEngineList(deployedEngineLabels())"
+    sample,
+    /export const ENGINE_NAMES = deployedEngineLabels\(\);/,
+    "ENGINE_NAMES must be assigned from deployedEngineLabels()"
+  );
+  assert.match(
+    sample,
+    /export const ENGINE_SENTENCE_LIST = formatEngineList\(ENGINE_NAMES\);/,
+    "ENGINE_SENTENCE_LIST must be assigned from formatEngineList(ENGINE_NAMES)"
   );
   assert.ok(
-    !/const ENGINE_SENTENCE\s*=\s*['"`]/.test(src),
+    !/ENGINE_(?:SENTENCE_LIST|NAMES)\s*=\s*['"`\[]/.test(sample),
     "a typed sentence is exactly how the hero came to advertise an engine with no API key"
   );
-  assert.match(src, /Perceev asks \{ENGINE_SENTENCE\}/, "and the hero must render it");
-  assert.ok(
-    !/asks Google AI Overview, ChatGPT and Perplexity/.test(rendered),
-    "the hardcoded three-engine claim must not return, in any spelling that renders as it"
+  assert.match(
+    landing2Code("Hero.jsx"),
+    /unbranded buyer questions to \{ENGINE_SENTENCE_LIST\}/,
+    "and the hero must render it"
   );
+  // R6.4.9, the escape clause: read what renders, across the whole surface.
+  for (const [rel, abs] of [["src/app/page.js", PAGE_PATH], ...LANDING2_FILES]) {
+    const rendered = renderableText(withoutComments(readFileSync(abs, "utf8")));
+    assert.ok(
+      !/Google AI Overview, ChatGPT and Perplexity/.test(rendered),
+      rel + " types the hardcoded three-engine claim, in a spelling that renders as it"
+    );
+  }
 });
 
 test("GUARD — no 'Live' chip on scripted content", async () => {
@@ -819,29 +832,43 @@ function renderableText(src) {
 }
 
 test("GUARD — the sample answer card is labelled, and carries no fake timestamp", async () => {
-  const raw = await read("src/app/page.js");
-  // R6.4.9, the escape clause: a timestamp spelled with an escaped digit reads
-  // the same on the page and matches nothing here. Decode before asserting.
-  const src = renderableText(withoutComments(raw));
-
-  assert.ok(
-    !/16 Aug 2026 · 09:14 IST/.test(src),
-    "a fictional answer must not wear a real answer's provenance"
-  );
-  assert.match(src, /Sample · illustrative brands/, "the card must declare itself a sample");
-
-  // The brands on that card are invented; they may stay, but only as samples.
-  assert.ok(/NorthPeak/.test(src) && /Brightwave/.test(src));
+  // Every landing2 surface that shows a sample answer or a sample figure must
+  // say so on the surface itself, and none may wear a real answer's provenance.
+  const LABELLED = {
+    "AnswerConsole.jsx": /Sample · fictional brands/,
+    "Shift.jsx": /Sample · fictional brands/,
+    "Unbranded.jsx": /Sample report · verbatim/,
+    "Evidence.jsx": /Sample report · verbatim/,
+    "Verdict.jsx": /Sample report · \{BRAND\}/,
+    "Sorting.jsx": /Sample report\. Brightwave, NorthPeak and Lumen IQ are fictional/,
+  };
+  for (const [file, label] of Object.entries(LABELLED)) {
+    assert.match(renderableText(landing2Code(file)), label, file + " must declare itself a sample");
+  }
+  for (const [rel, abs] of [["src/app/page.js", PAGE_PATH], ...LANDING2_FILES]) {
+    const src = renderableText(withoutComments(readFileSync(abs, "utf8")));
+    assert.ok(
+      !/\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\s*·\s*\d{1,2}:\d{2}/.test(src),
+      rel + ": a fictional answer must not wear a real answer's provenance"
+    );
+  }
+  // The brands on those cards are invented; they may stay, but only as samples.
+  assert.equal(SAMPLE_RESULT.brand, "Brightwave");
+  assert.ok(SAMPLE_RESULT.competitors.some((c) => c.name === "NorthPeak"));
+  assert.match(landing2Code("Faq.jsx"), /Brightwave, NorthPeak and Lumen IQ are fictional/);
 });
 
 test("GUARD — the advertised question count is the count a scan tracks", async () => {
-  const src = await read("src/app/page.js");
+  const src = withoutComments(await read(SAMPLE_REL));
 
-  assert.match(src, /const TRACKED = DEFAULT_UNBRANDED_TARGET;/, "TRACKED must be derived, not typed");
-  assert.ok(
-    !/const TRACKED = \d+/.test(src),
-    "a literal here is how the page came to advertise 36 while a scan tracked 30"
-  );
+  assert.match(src, /export const QUESTION_COUNT = DEFAULT_UNBRANDED_TARGET;/, "QUESTION_COUNT must be derived, not typed");
+  for (const [rel, abs] of [["src/app/page.js", PAGE_PATH], ...LANDING2_FILES]) {
+    const code = withoutComments(readFileSync(abs, "utf8"));
+    assert.ok(
+      !/(?:QUESTION_COUNT|TRACKED)\s*=\s*\d+/.test(code),
+      rel + ": a literal here is how the page came to advertise 36 while a scan tracked 30"
+    );
+  }
 
   // The worker must read the same constant, or the two can drift again.
   const worker = await read("src/server/workers/scanWorker.js");
@@ -853,21 +880,20 @@ test("GUARD — the advertised question count is the count a scan tracks", async
 });
 
 test("GUARD — the donut is the sample report's own split, not a second copy", async () => {
-  const src = withoutComments(await read("src/app/page.js"));
-
-  // The donut must account for every tracked question, or the illustration
-  // contradicts the number beside it. It used to be four typed literals in
-  // page.js, which is how the page reached 13/10/5/2 while the sample report
-  // one click away stayed on 15/12/6/3. Now it renders the report's own array.
+  // On the landing2 home page the split is the 30-question sort and the verdict
+  // ring. Both render DESTINATIONS, which must be the sample report's array.
+  const src = withoutComments(await read(SAMPLE_REL));
   assert.match(
     src,
-    /const DESTINATIONS = SAMPLE_DESTINATIONS\.map/,
-    "the donut must render the sample report's split, not a second copy of it"
+    /export const DESTINATIONS = SAMPLE_DESTINATIONS\.map/,
+    "the split must render the sample report's array, not a second copy of it"
   );
-  assert.ok(
-    !/answers:\s*\d+/.test(src),
-    "a typed answer count on the landing page is the drift this guard exists to stop"
-  );
+  for (const [rel, abs] of [["src/app/page.js", PAGE_PATH], ...LANDING2_FILES]) {
+    assert.ok(
+      !/answers:\s*\d+/.test(withoutComments(readFileSync(abs, "utf8"))),
+      rel + ": a typed answer count on the landing page is the drift this guard exists to stop"
+    );
+  }
 
   assert.equal(SAMPLE_DESTINATIONS.length, 4, "expected four destinations");
   const sum = SAMPLE_DESTINATIONS.reduce((a, d) => a + d.answers, 0);
@@ -886,31 +912,22 @@ test("GUARD — the donut is the sample report's own split, not a second copy", 
   );
 });
 
-test("GUARD — the engine rail shows only deployed engines, with the report's own tallies", async () => {
-  const src = await read("src/app/page.js");
-
-  assert.match(
-    src,
-    /DEMO_ENGINES = DEPLOYED_ENGINE_KEYS\.map/,
-    "the rail must be derived from the deployed list"
-  );
-  assert.match(
-    src,
-    /SAMPLE_RESULT\.engines\[key\]/,
-    "and its asked/reached must be the sample report's rows, not a share typed beside them"
-  );
-  // R6.4.9, the escape clause: the engine name in this row can be spelled
-  // '\x43hatGPT' and render identically, so the token half reads decoded text.
-  // The typed-literal clause in the child scan (sourceOf -> renderableText) is
-  // the wider net; this one names the exact shape that shipped.
-  assert.ok(
-    !/\{ name: 'ChatGPT', asked:/.test(renderableText(src)),
-    "a hardcoded ChatGPT row advertises an engine this deployment does not probe"
-  );
-  assert.ok(
-    !/reachedShare/.test(src),
-    "a hardcoded reach share is a gauge with nothing behind it — it read 42% while the report it previews said 40%"
-  );
+test("GUARD — every sample answer's engine chip names the row's own engine", async () => {
+  // The old home page had an engine rail; landing2 attributes each sample answer
+  // to an engine with a chip instead. A chip must read the engine the sample
+  // row was assigned (which follows deployedEngines(), proven in the FOLLOWS
+  // guard below), never a typed name.
+  for (const file of ["AnswerConsole.jsx", "Evidence.jsx"]) {
+    const code = landing2Code(file);
+    assert.match(code, /ENGINE_LABELS\[item\.engine\]/, file + " must label the chip from the row's engine");
+    assert.ok(!/reachedShare/.test(code), file + ": a hardcoded reach share is a gauge with nothing behind it");
+  }
+  for (const [rel, abs] of LANDING2_FILES) {
+    assert.ok(
+      !/\{ name: ['"](?:ChatGPT|Perplexity|Gemini|Google AI Overview)['"], asked:/.test(renderableText(readFileSync(abs, "utf8"))),
+      rel + ": a hardcoded engine row advertises an engine this deployment may not probe"
+    );
+  }
 });
 
 test("GUARD — every engine label the page can render is a known engine", () => {
@@ -1037,8 +1054,8 @@ test("GUARD — the sample report FOLLOWS the deployed engine list", () => {
   for (const [name, reading] of [["aio", one], ["aio,perplexity", two], ["aio,chatgpt,perplexity", three], ["perplexity", solo]]) {
     assert.deepEqual(
       Object.keys(reading.typed).sort(),
-      ["src/app/page.js", "src/components/landing/AnswerSheet.jsx"],
-      `under ENGINES=${name} the typed-literal scan did not cover both sample cards`
+      LITERAL_SCAN_FILES.map(([rel]) => rel).sort(),
+      `under ENGINES=${name} the typed-literal scan did not cover every guarded file`
     );
   }
 
@@ -1058,21 +1075,12 @@ test("GUARD — the sample report FOLLOWS the deployed engine list", () => {
   assert.match(sheet, /className="chip">\{SHEET_ENGINE\}/, "and the chip must render it");
 
   // R2.10.6 — the evidence section's sample card, the second one.
-  const page = withoutComments(readFileSync(PAGE_PATH, "utf8"));
-  assert.match(
-    page,
-    /const SAMPLE_CARD_ENGINE = primaryDeployedEngineLabel\(\);/,
-    "SAMPLE_CARD_ENGINE must be assigned from primaryDeployedEngineLabel()"
-  );
-  assert.ok(
-    !/const SAMPLE_CARD_ENGINE\s*=\s*['"`]/.test(page),
-    "a typed chip is how this card went on naming Google AI Overview under NEXT_PUBLIC_ENGINES=perplexity"
-  );
-  assert.match(
-    page,
-    /className="chip">\{SAMPLE_CARD_ENGINE\}/,
-    "and the evidence card's chip must render it"
-  );
+  // The home page's own sample cards (landing2) attribute each answer to the
+  // engine its sample row was assigned; rowEngines above proves those follow
+  // the deployment, and the typed-literal clause proves no name is typed.
+  for (const file of ["AnswerConsole.jsx", "Evidence.jsx"]) {
+    assert.match(landing2Code(file), /ENGINE_LABELS\[item\.engine\]/, file + " chip must read the row's engine");
+  }
 });
 
 /**
@@ -1113,16 +1121,16 @@ test("GUARD — the ENGINE_NOTE exemption parses the dictionary, and refuses wha
   };
   const refuses = (entries, why) => assert.throws(() => scan(entries), /refuses to scan/, why);
 
-  // The real file must survive the parser, or this guard is strict about a
-  // shape nobody ships.
-  const realPage = renderableText(
-    withoutComments(withoutEngineNoteDictionary(readFileSync(PAGE_PATH, "utf8"), labels)),
-  );
-  assert.deepEqual(
-    labels.filter((l) => realPage.includes(l)),
-    [],
-    "page.js as written must parse, and leave no engine label in the scanned text"
-  );
+  // Since the landing2 home page, no guarded file declares ENGINE_NOTE, so the
+  // exemption has nothing to exempt and every file is scanned whole. The parser
+  // is kept and pinned below so the exemption cannot come back looser than it
+  // left. Prove the first half against the files on disk.
+  for (const [rel, abs] of LITERAL_SCAN_FILES) {
+    const raw = readFileSync(abs, "utf8");
+    assert.ok(!/const ENGINE_NOTE\s*=/.test(withoutComments(raw)), rel + " declares an ENGINE_NOTE exemption");
+    const whole = renderableText(withoutComments(raw));
+    assert.deepEqual(labels.filter((l) => whole.includes(l)), [], rel + " scans whole and must name no engine");
+  }
 
   // Today's shape: the keys are exempt, and a note may name its OWN engine in
   // its own prose. That allowance is the whole exemption, stated.
@@ -1339,8 +1347,20 @@ test("GUARD — the sample report backs the '64 pages, six of them yours' claim"
   assert.equal(refs, 64, "the sample must actually cite 64 sources");
   assert.equal(mine, 6, "six of them must actually be pages the brand controls");
 
-  const src = withoutComments(readFileSync(path.join(REPO, "src/app/page.js"), "utf8"));
-  assert.match(src, /SourcesViz total=\{64\} mine=\{6\}/, "the slide must quote those same two numbers");
+  // The landing2 verdict card states them as {CITATIONS_YOURS} of the
+  // {CITATIONS_TOTAL}; both must be counted off those same rows.
+  const sample = withoutComments(readFileSync(path.join(REPO, SAMPLE_REL), "utf8"));
+  assert.match(
+    sample,
+    /export const CITATIONS_TOTAL = ROWS\.reduce\(\(sum, r\) => sum \+ \(r\.aio_references \|\| \[\]\)\.length, 0\);/,
+    "the total must be counted from every answer's references"
+  );
+  assert.match(
+    sample,
+    /export const CITATIONS_YOURS = ROWS\.filter\(\(r\) => r\.brand_cited\)\.length;/,
+    "the owned count must be the answers that cited the brand"
+  );
+  assert.match(landing2Code("Verdict.jsx"), /\{CITATIONS_YOURS\} of the \{CITATIONS_TOTAL\}/, "and the card must quote them");
 });
 
 test("GUARD — the scan page's sample panel is read off the sample report", async () => {
@@ -1844,10 +1864,44 @@ function renderStubs() {
         }))),
       }),
     ],
-    // page.js asks for the motion preference to choose between Tilt and a
-    // plain card. A static render has no pointer and no media query, so this
-    // answers "no preference"; both branches carry the same words.
-    ["motion/react", { __esModule: true, useReducedMotion: () => false }],
+    // Motion: a static render has no pointer and no media query, so the
+    // preference answers "no preference". The landing2 page also uses
+    // AnimatePresence and motion.<tag>; both are stubbed through to their
+    // children with the motion-only props dropped, because this proof is about
+    // the WORDS on the page and those wrappers render the text they are given.
+    [
+      "motion/react",
+      {
+        __esModule: true,
+        useReducedMotion: () => false,
+        AnimatePresence: (p) => React.createElement(React.Fragment, null, p.children),
+        motion: new Proxy({}, {
+          get: (_t, tag) => (p = {}) => {
+            const { initial, animate, exit, transition, layoutId, whileHover, whileTap, ...rest } = p;
+            return React.createElement(String(tag), rest, p.children);
+          },
+        }),
+      },
+    ],
+    // GSAP only runs inside effects, which a static render never fires; the
+    // modules just have to load.
+    ["gsap", { __esModule: true, default: { registerPlugin() {}, context: () => ({ revert() {} }) } }],
+    ["gsap/ScrollTrigger", { __esModule: true, ScrollTrigger: { update() {}, refresh() {} } }],
+    ["gsap/SplitText", { __esModule: true, SplitText: { create: () => ({ words: [], chars: [], lines: [] }) } }],
+    ["gsap/Flip", { __esModule: true, Flip: {} }],
+    // next/dynamic holds the WebGL scenes (Threads, Orb). They render a canvas
+    // and no text, and three.js has no business in a text proof.
+    ["next/dynamic", { __esModule: true, default: () => () => null }],
+    // Vendored TypeScript components on the landing2 page. They are wrappers
+    // and effects (magnetic hover, marquee, beams, glow, logo mark): each
+    // passes its children through or draws no text, so a passthrough is the
+    // faithful stub. Marquee renders its row once rather than repeat times.
+    ["@/components/reactbits/Magnet", { __esModule: true, default: (p) => React.createElement("div", null, p.children) }],
+    ["@/components/magicui/marquee", { __esModule: true, Marquee: (p) => React.createElement("div", null, p.children) }],
+    ["@/components/magicui/animated-beam", { __esModule: true, AnimatedBeam: () => null }],
+    ["@/components/aceternity/glowing-effect", { __esModule: true, GlowingEffect: () => null }],
+    ["@/components/app/brand/PerceevLogo", { __esModule: true, PerceevMark: () => React.createElement("svg") }],
+    ["@/shared/api", { __esModule: true, saveScan() {} }],
     // The landing headline and evidence card are motion wrappers. They are
     // stubbed through to their children deliberately: this proof is about the
     // WORDS on the page, and both components render the text they are given
@@ -1903,6 +1957,7 @@ function renderSurface(entry, { env = null, overrides = new Map(), minChars = 20
     else if (specifier.startsWith(".")) base = path.resolve(path.dirname(fromFile), specifier);
     else return null;
     for (const candidate of [base, base + ".js", base + ".jsx", path.join(base, "index.js")]) {
+      // (".css" specifiers resolve to the file itself and load as an empty module.)
       if (existsSync(candidate) && statSync(candidate).isFile()) return candidate;
     }
     throw new Error(
@@ -1915,6 +1970,7 @@ function renderSurface(entry, { env = null, overrides = new Map(), minChars = 20
   const load = (file) => {
     const abs = path.resolve(file);
     if (abs === enginesPath) return enginesModule;
+    if (abs.endsWith(".css")) return {};
     if (cache.has(abs)) return cache.get(abs);
     const source = overrides.has(abs) ? overrides.get(abs) : readFileSync(abs, "utf8");
     const { code } = transform(source, {
@@ -1992,10 +2048,19 @@ const SCAN_PIPELINE = {
     now: (src) => renderableText(withoutComments(src)),
   },
   [PAGE_REL]: {
-    before: (src) => NAIVE_STRIPPER(withoutEngineNoteDictionary(src, ALL_ENGINE_LABELS)),
-    now: (src) => renderableText(withoutComments(withoutEngineNoteDictionary(src, ALL_ENGINE_LABELS))),
+    before: (src) => NAIVE_STRIPPER(src),
+    now: (src) => renderableText(withoutComments(src)),
+  },
+  // The landing2 FAQ is where the page-surface payload is spliced now: it is
+  // prose the home page renders verbatim, the role the old slide bodies held.
+  [FAQ_REL]: {
+    before: (src) => NAIVE_STRIPPER(src),
+    now: (src) => renderableText(withoutComments(src)),
   },
 };
+
+/** The landing2 home page renders this prose; a baseline that lacks it read an empty page. */
+const PAGE_MARKER = "questions a buyer in your category would ask";
 
 test("PROOF — the payloads this guard catches are payloads the browser renders", () => {
   const OPEN = "/" + "*";
@@ -2005,15 +2070,12 @@ test("PROOF — the payloads this guard catches are payloads the browser renders
   const DQ = String.fromCharCode(34);
 
   const cleanSheet = reducedMotionSheetSource();
-  const cleanPage = readFileSync(PAGE_PATH, "utf8");
-  const cleanOf = { [SHEET_REL]: cleanSheet, [PAGE_REL]: cleanPage };
-  // page.js pulls the sheet in, so it gets the reduced-motion source too —
-  // otherwise the typed passage renders empty inside the page and a payload in
-  // that passage could not be seen from here.
-  const overridesFor = (rel, source) => (rel === PAGE_REL
-    ? new Map([[PAGE_PATH, source], [SHEET_PATH, cleanSheet]])
-    : new Map([[SHEET_PATH, source]]));
-  const pathOf = { [SHEET_REL]: SHEET_PATH, [PAGE_REL]: PAGE_PATH };
+  const cleanFaq = readFileSync(FAQ_PATH, "utf8");
+  const cleanOf = { [SHEET_REL]: cleanSheet, [FAQ_REL]: cleanFaq };
+  // A payload spliced into the FAQ is proven from the HOME PAGE's render, not
+  // the FAQ's alone: that is the surface a visitor loads.
+  const overridesFor = (rel, source) => new Map([[rel === SHEET_REL ? SHEET_PATH : FAQ_PATH, source]]);
+  const pathOf = { [SHEET_REL]: SHEET_PATH, [FAQ_REL]: PAGE_PATH };
 
   // The baseline, per surface: it must neither render nor scan as naming the
   // token, or a payload cannot be told from the file it was spliced into.
@@ -2023,11 +2085,11 @@ test("PROOF — the payloads this guard catches are payloads the browser renders
     "the reduced-motion render must contain the whole passage, or the payload "
       + "assertions below are reading an empty sheet"
   );
-  const pageBaseline = renderSurface(PAGE_PATH, { overrides: overridesFor(PAGE_REL, cleanPage), minChars: 5000 });
+  const pageBaseline = renderSurface(PAGE_PATH, { minChars: 5000 });
   assert.ok(
-    pageBaseline.includes("Clinical outcome analytics"),
-    "the landing page must render the sheet's whole passage, or a payload spliced "
-      + "into the sheet is invisible from the page's own render"
+    pageBaseline.includes(PAGE_MARKER),
+    "the home page must render the FAQ's open answer, or a payload spliced into "
+      + "the FAQ is invisible from the page's own render"
   );
 
   const payloads = [
@@ -2081,14 +2143,12 @@ test("PROOF — the payloads this guard catches are payloads the browser renders
       renders: " cited " + OPEN + " Perplexity " + CLOSE + " first",
     },
     {
-      rel: PAGE_REL,
+      rel: FAQ_REL,
       token: "ChatGPT",
-      why: "an apostrophe in JSX prose shifting quote phase — page.js, which had no "
-        + "render baseline at all until this round",
-      find: "<span className=" + DQ + "chip chip--warn" + DQ + " style={{ marginLeft: "
-        + AP + "auto" + AP + " }}>Rival first</span>",
-      put: "<span className=" + DQ + "chip chip--warn" + DQ + " style={{ marginLeft: "
-        + AP + "auto" + AP + " }}>Brightwave" + AP + "s first</span>"
+      why: "an apostrophe in JSX prose shifting quote phase — the landing2 FAQ, "
+        + "rendered from the home page",
+      find: "<p className=" + DQ + "lp2-lede" + DQ + ">How the scan works, what it measures, and what it never does.</p>",
+      put: "<p className=" + DQ + "lp2-lede" + DQ + ">Brightwave" + AP + "s first</p>"
         + "<span className=" + DQ + "chip" + DQ + ">{" + AP + " cited " + OPEN + " ChatGPT "
         + CLOSE + " first" + AP + "}</span>"
         + "<span className=" + DQ + "chip" + DQ + ">NorthPeak" + AP + "s pick</span>",
@@ -2111,7 +2171,7 @@ test("PROOF — the payloads this guard catches are payloads the browser renders
     // 1. THE BROWSER PRINTS IT.
     const markup = renderSurface(pathOf[rel], {
       overrides: overridesFor(rel, payloaded),
-      minChars: rel === PAGE_REL ? 5000 : 200,
+      minChars: rel === FAQ_REL ? 5000 : 200,
     });
     assert.ok(
       markup.includes(renders),
@@ -2213,9 +2273,9 @@ test("PROOF — no surface renders an engine label its deployment does not probe
         minChars,
       });
       assert.ok(
-        markup.includes("Clinical outcome analytics"),
-        rel + " under NEXT_PUBLIC_ENGINES=" + configured + " rendered without the "
-          + "sheet's passage, so this render is reading an empty surface"
+        markup.includes(rel === SHEET_REL ? "Clinical outcome analytics" : PAGE_MARKER),
+        rel + " under NEXT_PUBLIC_ENGINES=" + configured + " rendered without its "
+          + "own prose, so this render is reading an empty surface"
       );
       assert.ok(
         markup.includes(deployed[0]),
@@ -2321,11 +2381,8 @@ test("CANARY — the engine-label scan reads every line of every guarded file", 
 
   // The pipeline the child runs, in this process so it can be pointed at a
   // mutant. Kept in step with the child by the assertions in the escape test.
-  const scanned = (rel, text) => renderableText(
-    rel === "src/app/page.js"
-      ? withoutComments(withoutEngineNoteDictionary(text, labels))
-      : withoutComments(text)
-  );
+  // Every guarded file is scanned whole since the landing2 home page.
+  const scanned = (_rel, text) => renderableText(withoutComments(text));
   // Seen, or refused out loud. Only a clean, silent, engine-free reading counts
   // as a blind spot — which is exactly the shape of every finding in this file.
   const reads = (rel, text) => {
@@ -2385,11 +2442,20 @@ test("CANARY — the engine-label scan reads every line of every guarded file", 
       // the chip that names the engine
       [/className="chip">\{SHEET_ENGINE\}/, 1],
     ],
-    "src/app/page.js": [
-      // the slide bodies: quoted prose the page renders verbatim
-      [/^\s*body: '/, 4],
-      // and the evidence card's chip, the literal R2.10.6 found
-      [/className="chip">\{SAMPLE_CARD_ENGINE\}/, 1],
+    // The landing2 home page: quoted prose it renders verbatim, and the chips
+    // that attribute a sample answer to an engine.
+    "src/components/landing2/Faq.jsx": [
+      [/^\s*a: "/, 4],
+      [/^\s*q: "/, 6],
+    ],
+    "src/components/landing2/Studio.jsx": [
+      [/detail: "/, 6],
+    ],
+    "src/components/landing2/AnswerConsole.jsx": [
+      [/<span className="lp2-chip">\{engineLabel\}<\/span>/, 1],
+    ],
+    "src/components/landing2/Evidence.jsx": [
+      [/<span className="lp2-chip">\{ENGINE_LABELS\[item\.engine\]\}<\/span>/, 1],
     ],
   };
 
@@ -2402,7 +2468,9 @@ test("CANARY — the engine-label scan reads every line of every guarded file", 
   for (const [rel, abs] of LITERAL_SCAN_FILES) {
     const raw = readFileSync(abs, "utf8");
     const lines = raw.split("\n");
-    assert.ok(lines.length > 40, rel + " is only " + lines.length + " lines — the canary is reading the wrong file");
+    // page.js is a thin wrapper now; everything else must be a real file.
+    const minLines = rel === PAGE_REL ? 5 : 20;
+    assert.ok(lines.length > minLines, rel + " is only " + lines.length + " lines — the canary is reading the wrong file");
     assert.ok(
       !reads(rel, raw),
       rel + " already scans as naming " + TOKEN + ", so the canary cannot tell an "
@@ -2433,7 +2501,7 @@ test("CANARY — the engine-label scan reads every line of every guarded file", 
         + "engine name. A scan that cannot see half a file is not a scan."
     );
 
-    for (const [pattern, atLeast] of MUST_READ[rel]) {
+    for (const [pattern, atLeast] of MUST_READ[rel] || []) {
       const hits = [];
       lines.forEach((line, idx) => {
         if (pattern.test(line)) hits.push(idx + 1);
@@ -2466,12 +2534,16 @@ test("CANARY — the engine-label scan reads every line of every guarded file", 
     }
   }
 
-  // Vacuity, the other way round: a file that resolves to nothing must not read
-  // as clean. page.js is refused outright, because its exemption cannot find the
-  // dictionary it exists to exempt.
-  assert.throws(
-    () => scanned("src/app/page.js", ""),
-    /no longer declares ENGINE_NOTE/,
-    "an emptied page.js must stop the guard, not pass it"
+  // Vacuity, the other way round: a page that resolves to nothing must not read
+  // as clean. page.js renders landing2, and the anchors above require the
+  // landing2 files to hold the prose and chips the canary injects into, so an
+  // emptied surface fails there; this pins the wrapper's one job.
+  assert.match(
+    readFileSync(PAGE_PATH, "utf8"),
+    /import Landing2 from "@\/components\/landing2\/Landing2";[\s\S]*return <Landing2 \/>;/,
+    "page.js must render the landing2 surface the canary walks"
   );
+  for (const rel of Object.keys(MUST_READ)) {
+    assert.ok(LITERAL_SCAN_FILES.some(([r]) => r === rel), rel + " has canary anchors but is not on the scan list");
+  }
 });

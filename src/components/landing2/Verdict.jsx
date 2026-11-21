@@ -153,7 +153,7 @@ export default function Verdict() {
               <GlowingEffect spread={40} glow disabled={false} proximity={64} inactiveZone={0.01} borderWidth={1} variant="white" />
               <h3 className="lp2-h3">The sources behind the answers</h3>
               <p className="lp2-muted">
-                {CITATIONS_YOURS} of the {CITATIONS_TOTAL} citations point to pages you control. The rest is where
+                {CITATIONS_YOURS} of the {CITATIONS_TOTAL} sources the engines cited are pages you control. The rest is where
                 your next piece of content needs to be good enough to replace.
               </p>
               <div className="lp2-src__bar" aria-hidden="true">

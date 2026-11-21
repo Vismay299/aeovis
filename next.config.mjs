@@ -45,8 +45,12 @@ const nextConfig = {
     skipTrailingSlashRedirect: true,
     productionBrowserSourceMaps: process.env.POSTHOG_SOURCEMAPS === "true",
     async redirects() {
-        return [{ source: "/:path*", has: [{ type: "host", value: "www.perceev.com" }],
-            destination: "https://perceev.com/:path*", permanent: true }];
+        return [
+            { source: "/:path*", has: [{ type: "host", value: "www.perceev.com" }],
+                destination: "https://perceev.com/:path*", permanent: true },
+            // The redesign was previewed at /landing-2 before it became the home page.
+            { source: "/landing-2", destination: "/", permanent: false },
+        ];
     },
     // Content-pipeline skill prompts are markdown files read from disk at
     // runtime (loader.js). Serverless bundling only traces imported modules,

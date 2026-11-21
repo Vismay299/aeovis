@@ -81,7 +81,7 @@ export default function Hero() {
             <p className="lp2-hero__fine">
               No signup.{" "}
               <button type="button" className="lp2-link" onClick={openSample} data-testid="preview-sample-cta">
-                Or open the sample report
+                See a sample report
               </button>
             </p>
           </div>

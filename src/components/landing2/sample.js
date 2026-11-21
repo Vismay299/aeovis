@@ -51,11 +51,12 @@ export const STANDINGS = [
   .sort((a, b) => b.mentions - a.mentions)
   .slice(0, 5);
 
-/* Sources the engines cited, counted from the report's domain table. */
-const DOMAINS = SAMPLE_RESULT.topDomains;
-export const CITATIONS_TOTAL = DOMAINS.reduce((sum, d) => sum + d.count, 0);
-export const CITATIONS_YOURS = DOMAINS.filter((d) => d.type === "brand").reduce((sum, d) => sum + d.count, 0);
-export const TOP_DOMAINS = DOMAINS.slice(0, 8);
+/* Sources the engines cited, counted from the answers themselves: every
+   reference an answer carried, and the answers that cited a page you control.
+   The bar and list below them come from the report's domain table. */
+export const CITATIONS_TOTAL = ROWS.reduce((sum, r) => sum + (r.aio_references || []).length, 0);
+export const CITATIONS_YOURS = ROWS.filter((r) => r.brand_cited).length;
+export const TOP_DOMAINS = SAMPLE_RESULT.topDomains.slice(0, 8);
 
 /* Three verbatim answers from the sample: one you won, one a rival won, one
    that named nobody. Text, citations and named brands come off the row. */
