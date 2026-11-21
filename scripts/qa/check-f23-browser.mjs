@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { openPortal, SUPABASE_URL } from "./portalFixtureHarness.mjs";
+import { holdToConfirm } from "./confirmGestures.mjs";
 // Every body the page POSTs/PUTs/DELETEs is checked against the schemas the
 // real routes use, so a page that sends something the real route would refuse
 // fails here, not in prod.
@@ -470,7 +471,8 @@ try {
       await page.getByRole("menuitem", { name: "Delete" }).click();
       await page.getByText(`Delete “${BENIGN_TITLE}”?`).waitFor();
       await page.getByText("This cannot be undone. A public link stops working.").waitFor();
-      await page.getByRole("button", { name: "Delete report" }).click();
+      // Destructive confirms are hold-to-confirm; a plain click does not delete.
+      await holdToConfirm(page.getByRole("button", { name: "Delete report" }));
       await page.getByText("Report deleted").waitFor();
       await page.waitForURL(new URL("/portal/reports", origin).href);
       await page.getByRole("link", { name: BENIGN_TITLE }).waitFor({ state: "detached" });
@@ -525,7 +527,7 @@ try {
       await page.getByRole("menuitem", { name: "Delete" }).click();
       await page.getByText("Delete “Quarterly business review v2”?").waitFor();
       await page.getByText("Reports already written from it are not affected.").waitFor();
-      await page.getByRole("button", { name: "Delete template" }).click();
+      await holdToConfirm(page.getByRole("button", { name: "Delete template" }));
       await page.getByText("Template deleted").waitFor();
       await page.getByRole("button", { name: "Quarterly business review v2", exact: true }).waitFor({ state: "detached" });
       await page.getByRole("button", { name: "Monthly client check-in", exact: true }).waitFor();
