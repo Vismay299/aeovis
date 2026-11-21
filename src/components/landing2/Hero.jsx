@@ -32,16 +32,11 @@ export default function Hero() {
       .from(".lp2-hero__cta > *", { opacity: 0, y: 16, duration: 1, stagger: 0.08 }, "-=0.8")
       .from(".lp2-hero__threads", { opacity: 0, duration: 2.4, ease: "power2.out" }, 0);
 
-    /* As the hero leaves, the threads sink and the copy lifts away. */
+    /* As the hero leaves, the copy lifts away. The WebGL layer stays put:
+       moving a full-screen canvas on every scroll frame is pure GPU cost. */
     gsap.to(".lp2-hero__copy", {
       yPercent: -18,
       opacity: 0.2,
-      ease: "none",
-      scrollTrigger: { trigger: root.current, start: "top top", end: "bottom top", scrub: true },
-    });
-    gsap.to(".lp2-hero__threads", {
-      yPercent: 22,
-      scale: 1.08,
       ease: "none",
       scrollTrigger: { trigger: root.current, start: "top top", end: "bottom top", scrub: true },
     });

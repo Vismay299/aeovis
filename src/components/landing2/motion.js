@@ -1,12 +1,11 @@
 "use client";
 
 /**
- * One GSAP + Lenis setup for the whole page.
+ * One GSAP setup for the whole page.
  *
- * Lenis owns the scroll; GSAP's ticker drives Lenis, and every ScrollTrigger
- * updates on Lenis's scroll event, so pinned and scrubbed sections move on the
- * same frame as the page. Under prefers-reduced-motion Lenis is not started
- * and sections render their end state.
+ * Scrolling is the browser's own (see Landing2.jsx for why); ScrollTrigger
+ * reads it directly. Under prefers-reduced-motion sections render their end
+ * state.
  */
 
 import { useEffect, useLayoutEffect, useState } from "react";

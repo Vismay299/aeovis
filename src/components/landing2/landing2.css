@@ -986,7 +986,7 @@
 }
 
 /* Elements GSAP moves every scroll frame: promote once instead of on the fly. */
-.lp2-hero__threads, .lp2-hero__copy, .lp2-reel__strip, .lp2-q, .lp2-serp__row, .lp2-one, .lp2-shift__bar i { will-change: transform; }
+.lp2-hero__copy, .lp2-reel__strip, .lp2-q, .lp2-serp__row, .lp2-one, .lp2-shift__bar i { will-change: transform; }
 .lp2-band__rows .animate-marquee { will-change: transform; }
 
 /* Scan-field beam. The ring is a static mask; only the conic layer inside it

@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import Lenis from "lenis";
-import "lenis/dist/lenis.css";
 import "./landing2.css";
 
-import { gsap, ScrollTrigger, registerGsap, prefersReducedMotion } from "./motion";
+import { ScrollTrigger, registerGsap, prefersReducedMotion } from "./motion";
 import Nav from "./Nav";
 import Hero from "./Hero";
 import QuestionBand from "./QuestionBand";
@@ -22,15 +20,17 @@ import Footer from "./Footer";
 export default function Landing2() {
   useEffect(() => {
     registerGsap();
-    if (prefersReducedMotion()) return undefined;
 
-    const lenis = new Lenis({ lerp: 0.11, wheelMultiplier: 1, smoothWheel: true });
-    lenis.on("scroll", ScrollTrigger.update);
-    const tick = (time) => lenis.raf(time * 1000);
-    gsap.ticker.add(tick);
-    gsap.ticker.lagSmoothing(0);
+    /*
+     * Native scrolling, on purpose. A JS smooth-scroller (Lenis, tried first)
+     * moves the page from the main thread every frame, so the hero's WebGL
+     * work made the scroll itself stutter and trail the wheel by seconds.
+     * The browser's own scroll runs on the compositor thread and cannot be
+     * held up by anything the page draws. ScrollTrigger reads it directly.
+     */
+    const smooth = !prefersReducedMotion();
 
-    /* In-page anchors go through Lenis so they glide instead of jumping. */
+    /* In-page anchors glide (or jump, under reduced motion). */
     const onClick = (event) => {
       const link = event.target.closest("a[href^=\"#\"]");
       if (!link) return;
@@ -39,7 +39,8 @@ export default function Landing2() {
       const target = document.querySelector(id);
       if (!target) return;
       event.preventDefault();
-      lenis.scrollTo(target, { offset: -24, duration: 1.4 });
+      const top = target.getBoundingClientRect().top + window.scrollY - 24;
+      window.scrollTo({ top, behavior: smooth ? "smooth" : "auto" });
     };
     document.addEventListener("click", onClick);
 
@@ -51,8 +52,6 @@ export default function Landing2() {
     return () => {
       document.removeEventListener("click", onClick);
       window.removeEventListener("load", refresh);
-      gsap.ticker.remove(tick);
-      lenis.destroy();
     };
   }, []);
 
