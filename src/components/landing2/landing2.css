@@ -988,3 +988,32 @@
 /* Elements GSAP moves every scroll frame: promote once instead of on the fly. */
 .lp2-hero__threads, .lp2-hero__copy, .lp2-reel__strip, .lp2-q, .lp2-serp__row, .lp2-one, .lp2-shift__bar i { will-change: transform; }
 .lp2-band__rows .animate-marquee { will-change: transform; }
+
+/* Scan-field beam. The ring is a static mask; only the conic layer inside it
+   rotates, which the compositor does without touching the main thread. */
+.lp2-beam {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  overflow: hidden;
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.lp2-beam::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 140%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  background: conic-gradient(from 0deg, transparent 0deg, transparent 300deg, rgba(255, 255, 255, 0.9) 345deg, transparent 360deg);
+  animation: lp2-beam 7s linear infinite;
+  animation-play-state: paused;
+  will-change: transform;
+}
+.lp2-beam[data-on="true"]::before { animation-play-state: running; }
+@keyframes lp2-beam { to { transform: rotate(360deg); } }

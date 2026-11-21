@@ -23,6 +23,10 @@ export interface ThreadsProps extends Omit<HTMLAttributes<HTMLDivElement>, 'colo
   fade?: number;
   opacity?: number;
   paused?: boolean;
+  /** Perceev: longest canvas side in device pixels (upstream fixed this at 1920). */
+  maxRenderDim?: number;
+  /** Perceev: most segments per line (upstream 640). */
+  maxSegments?: number;
 }
 
 type Settings = {
@@ -236,6 +240,8 @@ const Threads = ({
   fade = 0,
   opacity = 1,
   paused = false,
+  maxRenderDim = MAX_RENDER_DIM,
+  maxSegments = 640,
   ...rest
 }: ThreadsProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -394,7 +400,7 @@ const Threads = ({
       const height = Math.max(1, container.clientHeight);
       const baseDpr = Math.min(window.devicePixelRatio || 1, 2);
       const longest = Math.max(width, height) * baseDpr;
-      const dpr = longest > MAX_RENDER_DIM ? (baseDpr * MAX_RENDER_DIM) / longest : baseDpr;
+      const dpr = longest > maxRenderDim ? (baseDpr * maxRenderDim) / longest : baseDpr;
       canvas.width = Math.max(1, Math.round(width * dpr));
       canvas.height = Math.max(1, Math.round(height * dpr));
       state.width = width;
@@ -404,7 +410,7 @@ const Threads = ({
       gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, target, 0);
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      buildStrip(clamp(Math.round(width / 3), 96, 640));
+      buildStrip(clamp(Math.round(width / 3), 96, maxSegments));
       render();
     };
 
@@ -568,7 +574,7 @@ const Threads = ({
       gl.deleteProgram(lineProgram);
       gl.deleteProgram(screenProgram);
     };
-  }, []);
+  }, [maxRenderDim, maxSegments]);
 
   useEffect(() => {
     wakeRef.current?.();

@@ -4,7 +4,6 @@ import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import Magnet from "@/components/reactbits/Magnet";
-import { BorderBeam } from "@/components/magicui/border-beam";
 import { useInView } from "./motion";
 
 /**
@@ -61,9 +60,7 @@ export default function ScanForm({ size = "lg", testId }) {
             <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
           </button>
         </Magnet>
-        {inView ? (
-          <BorderBeam size={120} duration={9} colorFrom="#ffffff" colorTo="rgba(255,255,255,0.05)" borderWidth={1} />
-        ) : null}
+        <span className="lp2-beam" data-on={inView ? "true" : "false"} aria-hidden="true" />
       </div>
       {error ? (
         <p id={`${id}-err`} className="lp2-scan__err" role="alert">{error}</p>

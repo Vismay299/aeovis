@@ -24,7 +24,7 @@ export default function Landing2() {
     registerGsap();
     if (prefersReducedMotion()) return undefined;
 
-    const lenis = new Lenis({ lerp: 0.085, wheelMultiplier: 0.9, smoothWheel: true });
+    const lenis = new Lenis({ lerp: 0.11, wheelMultiplier: 1, smoothWheel: true });
     lenis.on("scroll", ScrollTrigger.update);
     const tick = (time) => lenis.raf(time * 1000);
     gsap.ticker.add(tick);

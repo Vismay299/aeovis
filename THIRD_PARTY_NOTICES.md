@@ -910,8 +910,8 @@ text and copyright notice are in the upstream repository named for each.
 | Motion Primitives | `src/components/motion-primitives/` | https://github.com/ibelick/motion-primitives · registry `@motion-primitives` |
 | Kokonut UI | `src/components/kokonutui/` | https://github.com/kokonut-labs/kokonutui · registry `@kokonutui` |
 | Watermelon UI | `src/components/watermelon/` | https://github.com/WatermelonCorp/watermelon-platform · registry `@watermelon` |
-| Magic UI (animated beam, border beam, marquee) | `src/components/magicui/` | https://github.com/magicuidesign/magicui · registry `@magicui` |
-| Aceternity UI (spotlight, glowing effect; free components) | `src/components/aceternity/` | https://ui.aceternity.com · registry `@aceternity` |
+| Magic UI (animated beam, marquee) | `src/components/magicui/` | https://github.com/magicuidesign/magicui · registry `@magicui` |
+| Aceternity UI (glowing effect; free component) | `src/components/aceternity/` | https://ui.aceternity.com · registry `@aceternity` |
 
 `src/components/charts/patterns/` additionally carries code derived from visx;
 its license is kept beside it as `LICENSE-visx-pattern`.

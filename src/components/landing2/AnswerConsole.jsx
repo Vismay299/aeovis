@@ -20,6 +20,7 @@ const VERDICT = {
  */
 export default function AnswerConsole() {
   const root = useRef(null);
+  const shown = useRef(false);
   const [index, setIndex] = useState(0);
   const item = EVIDENCE[index];
   const tokens = tokenize(item.text, { youNamed: item.named.includes(BRAND) });
@@ -38,13 +39,18 @@ export default function AnswerConsole() {
       return;
     }
 
-    const tl = gsap.timeline({ delay: 0.5 });
-    tl.fromTo(".lp2-console", { opacity: 0.0001, y: 8 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" })
+    /* The card itself appears once. Every later cycle only replaces its body,
+       so the console never blinks out between answers. */
+    const first = !shown.current;
+    shown.current = true;
+    const tl = gsap.timeline({ delay: first ? 0.5 : 0.1 });
+    if (first) tl.fromTo(".lp2-console", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" });
+    tl.fromTo(".lp2-console__body", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, first ? "<0.1" : 0)
       .fromTo(
         ".lp2-console__q",
         { clipPath: "inset(0 100% 0 0)" },
         { clipPath: "inset(0 0% 0 0)", duration: Math.min(2.2, item.question.length * 0.045), ease: `steps(${item.question.length})` },
-        "<0.1",
+        "<",
       )
       .fromTo(".lp2-console__caret", { opacity: 1 }, { opacity: 0, duration: 0.2 })
       .fromTo(".lp2-console__thinking", { opacity: 0, scaleX: 0.2 }, { opacity: 1, scaleX: 1, duration: 0.4, ease: "power2.out" })

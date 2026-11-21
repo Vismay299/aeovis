@@ -3,10 +3,9 @@
 import { useRef } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import { Spotlight } from "@/components/aceternity/spotlight-new";
 import { saveScan } from "@/shared/api";
 import { SAMPLE_RESULT } from "@/shared/mockData";
-import { useGsap, gsap, SplitText, useInView } from "./motion";
+import { useGsap, gsap, SplitText } from "./motion";
 import ScanForm from "./ScanForm";
 import AnswerConsole from "./AnswerConsole";
 import { QUESTION_COUNT, ENGINE_SENTENCE_LIST } from "./sample";
@@ -17,7 +16,6 @@ const Threads = dynamic(() => import("@/components/reactbits/Threads"), { ssr: f
 export default function Hero() {
   const root = useRef(null);
   const router = useRouter();
-  const heroVisible = useInView(root, "0px");
 
   const openSample = () => {
     saveScan({ ...SAMPLE_RESULT, isSample: true });
@@ -56,7 +54,9 @@ export default function Hero() {
           color={[0.96, 0.96, 0.97]}
           amplitude={1.2}
           distance={0.3}
-          lineCount={56}
+          lineCount={40}
+          maxRenderDim={1280}
+          maxSegments={280}
           thickness={0.5}
           speed={0.35}
           brightness={0.9}
@@ -65,14 +65,6 @@ export default function Hero() {
           enableMouseInteraction
         />
       </div>
-      {heroVisible ? (
-        <Spotlight
-          gradientFirst="radial-gradient(68.54% 68.72% at 55.02% 31.46%, hsla(0, 0%, 100%, .09) 0, hsla(0, 0%, 80%, .025) 50%, hsla(0, 0%, 60%, 0) 80%)"
-          gradientSecond="radial-gradient(50% 50% at 50% 50%, hsla(0, 0%, 100%, .06) 0, hsla(0, 0%, 80%, .02) 80%, transparent 100%)"
-          gradientThird="radial-gradient(50% 50% at 50% 50%, hsla(0, 0%, 100%, .04) 0, hsla(0, 0%, 70%, .02) 80%, transparent 100%)"
-          duration={9}
-        />
-      ) : null}
       <div className="lp2-hero__vignette" aria-hidden="true" />
 
       <div className="lp2-wrap lp2-hero__grid">
