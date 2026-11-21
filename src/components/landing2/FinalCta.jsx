@@ -13,13 +13,15 @@ export default function FinalCta() {
 
   useGsap(root, ({ reduced }) => {
     if (reduced) return;
-    const split = SplitText.create(".lp2-final__title", { type: "chars,words", charsClass: "lp2-char" });
-    gsap.from(split.chars, {
+    /* Words rise out of masked lines, in 2D only. A per-letter 3D tilt was
+       tried first: Chrome mis-composites background-clip:text on 3D-transformed
+       layers and painted the letters white and stacked at the line start. */
+    const split = SplitText.create(".lp2-final__title", { type: "words,lines", mask: "lines", linesClass: "lp2-line" });
+    gsap.from(split.words, {
+      yPercent: 110,
       opacity: 0,
-      yPercent: 60,
-      rotateX: -70,
-      stagger: 0.018,
-      duration: 1.1,
+      stagger: 0.06,
+      duration: 1.2,
       ease: "expo.out",
       scrollTrigger: { trigger: root.current, start: "top 65%" },
     });

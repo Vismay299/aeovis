@@ -534,7 +534,7 @@
 /* ── Unbranded ────────────────────────────────────────────────────────── */
 
 .lp2-unb__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(40px, 6vw, 96px); align-items: center; }
-.lp2-unb__panel { perspective: 1200px; }
+
 .lp2-seg {
   display: inline-flex;
   padding: 4px;
@@ -931,14 +931,14 @@
   margin: 0;
   max-width: 12ch;
   text-wrap: balance;
-  perspective: 800px;
   background: var(--l-chrome);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
 }
-.lp2-final__title .lp2-char { background: inherit; -webkit-background-clip: text; background-clip: text; }
-.lp2-final__title div { background: var(--l-chrome); -webkit-background-clip: text; background-clip: text; }
+/* SplitText wraps lines and words in their own boxes; each carries the gradient. */
+.lp2-final__title div { background: var(--l-chrome); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
+.lp2-final__title .lp2-line { padding-bottom: 0.06em; }
 .lp2-final__lede { margin-inline: auto; text-align: center; }
 .lp2-final__cta { margin-top: 40px; width: 100%; display: flex; justify-content: center; }
 

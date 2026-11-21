@@ -44,7 +44,7 @@ export default function Unbranded() {
       scrollTrigger: { trigger: root.current, start: "top 70%" },
     });
     gsap.from(".lp2-unb__panel", {
-      opacity: 0, y: 60, rotateX: 8, duration: 1.4, ease: "expo.out",
+      opacity: 0, y: 60, duration: 1.4, ease: "expo.out",
       scrollTrigger: { trigger: ".lp2-unb__panel", start: "top 85%" },
     });
   });
