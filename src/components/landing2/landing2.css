@@ -325,7 +325,10 @@
   background: color-mix(in oklab, var(--l-bg) 92%, var(--l-ink));
   transition: border-color 0.3s, box-shadow 0.4s var(--l-ease);
 }
-.lp2-scan__field:focus-within { border-color: var(--l-faint); box-shadow: 0 0 0 6px var(--l-ghost); }
+/* The pill is the focus indicator for its input: a clear rounded ring on the
+   whole field, so the input itself draws no square outline inside it. */
+.lp2-scan__field:focus-within { border-color: var(--l-ink); box-shadow: 0 0 0 4px color-mix(in oklab, var(--l-ink) 22%, transparent); }
+.lp2 .lp2-scan input:focus, .lp2 .lp2-scan input:focus-visible { outline: none; box-shadow: none; }
 .lp2-scan__prefix { font: 400 14px var(--font-mono, monospace); color: var(--l-faint); margin-right: 2px; }
 .lp2-scan input {
   flex: 1;
