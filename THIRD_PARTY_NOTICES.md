@@ -910,6 +910,8 @@ text and copyright notice are in the upstream repository named for each.
 | Motion Primitives | `src/components/motion-primitives/` | https://github.com/ibelick/motion-primitives · registry `@motion-primitives` |
 | Kokonut UI | `src/components/kokonutui/` | https://github.com/kokonut-labs/kokonutui · registry `@kokonutui` |
 | Watermelon UI | `src/components/watermelon/` | https://github.com/WatermelonCorp/watermelon-platform · registry `@watermelon` |
+| Magic UI (animated beam, border beam, marquee) | `src/components/magicui/` | https://github.com/magicuidesign/magicui · registry `@magicui` |
+| Aceternity UI (spotlight, glowing effect; free components) | `src/components/aceternity/` | https://ui.aceternity.com · registry `@aceternity` |
 
 `src/components/charts/patterns/` additionally carries code derived from visx;
 its license is kept beside it as `LICENSE-visx-pattern`.
@@ -917,3 +919,17 @@ its license is kept beside it as `LICENSE-visx-pattern`.
 npm packages added for these: `motion` (replaces `framer-motion`), `animejs`,
 `d3-array`, `d3-scale`, `d3-shape`, `@number-flow/react`, `react-use-measure`.
 Each is used under its own license as published on npm.
+
+## React Bits (MIT + Commons Clause License Condition v1.0)
+
+`src/components/reactbits/Threads.tsx` and `src/components/reactbits/Magnet.tsx`
+are copied from React Bits (https://github.com/DavidHDev/react-bits, registry
+`@react-bits`), Copyright (c) 2026 David Haz. They are used as part of this
+website under the upstream license, whose Commons Clause permits commercial use
+in an application, website or product but forbids selling, sublicensing or
+redistributing the components themselves, alone or bundled. The full license
+text is in the upstream repository's `LICENSE.md`.
+
+npm packages added for the landing page (branch `landing-page-2`): `gsap`
+(ScrollTrigger, SplitText, Flip), `three`, `@react-three/fiber`. Each is used
+under its own license as published on npm.

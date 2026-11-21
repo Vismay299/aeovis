@@ -79,6 +79,10 @@ import { transform } from "sucrase";
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const LANDING_DIR = "src/components/landing";
 const PAGE = "src/app/page.js";
+/* The redesigned landing page (branch landing-page-2) is held to the same line:
+   its route and every component it is built from are scanned below. */
+const LANDING2_DIR = "src/components/landing2";
+const PAGE2 = "src/app/landing-2/page.js";
 
 /**
  * Comments and string contents removed, so the rules below read CODE.
@@ -372,7 +376,13 @@ function landingSurface() {
   const files = readdirSync(dir)
     .filter((f) => /\.jsx?$/.test(f) && !f.includes(".test."))
     .map((f) => `${LANDING_DIR}/${f}`);
-  return [PAGE, ...files];
+  const v2 = existsSync(path.join(REPO, LANDING2_DIR))
+    ? readdirSync(path.join(REPO, LANDING2_DIR))
+      .filter((f) => /\.jsx?$/.test(f) && !f.includes(".test."))
+      .map((f) => `${LANDING2_DIR}/${f}`)
+    : [];
+  const page2 = existsSync(path.join(REPO, PAGE2)) ? [PAGE2] : [];
+  return [PAGE, ...files, ...page2, ...v2];
 }
 
 const read = (rel) => readFileSync(path.join(REPO, rel), "utf8");

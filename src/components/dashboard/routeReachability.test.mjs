@@ -663,9 +663,14 @@ test("the walker calls a component orphaned even when a live file mentions it in
 
 test("no code-splitting form exists that this static walker cannot see", async () => {
   // A `dynamic(() => import(x))` or `React.lazy(...)` edge is invisible to a
-  // regex over literal specifiers, so a component mounted that way would be
-  // reported as an orphan and this guard would be lying. Today the repo uses
-  // none; the day it does, this fails rather than quietly going blind.
+  // regex over literal specifiers UNLESS its loader is a literal
+  // `import("...")`, which LITERAL_DYNAMIC already follows (see the
+  // specifiersIn cases above). So the line is drawn at the loader, not at the
+  // API: every `dynamic(` / `lazy(` call must carry a literal import within its
+  // own argument. A computed specifier, a loader passed by reference, or any
+  // other shape that the walker cannot read still fails here rather than
+  // quietly going blind. (Opened up for src/components/landing2, which
+  // code-splits its WebGL scenes so three.js stays out of first load.)
   const files = (await listFiles(SRC)).filter(
     (f) => /\.(jsx?|mjs)$/.test(f) && !f.includes(".test.") && !f.endsWith(".testutil.mjs")
   );
@@ -673,15 +678,29 @@ test("no code-splitting form exists that this static walker cannot see", async (
   for (const file of files) {
     const source = await readFile(file, "utf8");
     const stripped = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
-    if (/\bnext\/dynamic\b/.test(stripped) || /\bReact\.lazy\s*\(|\blazy\s*\(\s*\(\s*\)\s*=>/.test(stripped)) {
-      offenders.push(path.relative(SRC, file));
-    }
+    const usesSplitting = /\bnext\/dynamic\b/.test(stripped) || /\bReact\.lazy\s*\(|\blazy\s*\(\s*\(\s*\)\s*=>/.test(stripped);
+    if (!usesSplitting) continue;
+    const calls = [...stripped.matchAll(/\b(?:dynamic|lazy)\s*\(/g)];
+    const unreadable = calls.filter((m) => {
+      const arg = stripped.slice(m.index, m.index + 240);
+      return !/^\w+(?:\.\w+)?\s*\(\s*\(\s*\)\s*=>\s*import\s*\(\s*["'][^"']+["']\s*\)/.test(arg);
+    });
+    if (calls.length === 0 || unreadable.length > 0) offenders.push(path.relative(SRC, file));
   }
   assert.deepEqual(
     offenders,
     [],
-    "code-splitting was introduced. Teach reachableFromRoutes() to follow it before " +
-      "trusting the orphan guard below, which would otherwise call a live component dead."
+    "a code-splitting call whose loader is not a literal `() => import(\"...\")` was introduced. " +
+      "Teach reachableFromRoutes() to follow it before trusting the orphan guard below, which " +
+      "would otherwise call a live component dead."
+  );
+});
+
+test("a next/dynamic loader with a literal import is a real edge to the walker", () => {
+  assert.deepEqual(
+    specifiersIn('const Orb = dynamic(() => import("./Orb"), { ssr: false });\n'),
+    ["./Orb"],
+    "the walker must follow the literal import inside a dynamic() loader, or the relaxed guard above is lying"
   );
 });
 
