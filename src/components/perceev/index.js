@@ -11,8 +11,8 @@ export { Sidebar } from "./Sidebar";
 export { TrendChart, RankTable, PerformanceMatrix, Donut, DeltaChip } from "./charts";
 
 /* Charts shared with the landing page. `--you` is indigo in all of them. */
-export { FlowDiagram, RIVAL_RAMP } from "@/components/charts/FlowDiagram";
-export { Gauge } from "@/components/charts/Gauge";
+export { FlowDiagram, RIVAL_RAMP } from "@/components/perceev/charts/FlowDiagram";
+export { Gauge } from "@/components/perceev/charts/Gauge";
 
 /* The wordmark lives with the site chrome it belongs to. */
 export { Wordmark } from "@/components/landing/SiteNav";

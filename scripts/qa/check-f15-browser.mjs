@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { openPortal, SUPABASE_URL } from "./portalFixtureHarness.mjs";
+import { slideToConfirm } from "./confirmGestures.mjs";
 
 let chromium;
 try {
@@ -254,9 +255,11 @@ try {
       await dlg.getByRole("button", { name: /Check 20 keywords now/ }).click();
       const review = page.getByRole("dialog", { name: "Check rankings now", exact: true });
       await review.waitFor();
-      await review.getByRole("button", { name: "Run check" }).click();
+      // The final approval is a slide-to-confirm; Enter on its thumb confirms.
+      const approved = await slideToConfirm(review, "Run check");
       await page.getByText("Rank check started").waitFor();
       assert.equal(checkRequests.length, 1, "the first check must run once with its approval");
+      assert.equal(checkRequests[0].maxUsd, approved,`the check must carry the approved maximum, saw ${JSON.stringify(checkRequests[0])}`);
       return "cacheOnly-first fetch, 25 rows with 20 checked, approval retry, then the first check";
     } finally { await context.close(); }
   });

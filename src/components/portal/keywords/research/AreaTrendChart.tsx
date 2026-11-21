@@ -4,14 +4,68 @@
 
 "use client";
 
-import { Area, AreaChart, ResponsiveContainer, Tooltip } from "recharts";
+import { curveMonotoneX } from "d3-shape";
+import { ChartTooltip, Grid, Line, LineChart, XAxis } from "@/components/charts";
+import { TooltipContent } from "@/components/charts/tooltip";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { KeywordRow } from "./hooks/useKeywordResearchData";
 
+const COLOR = "var(--color-primary)";
+
+/**
+ * Monthly search volume as a Bklit line. Each month is placed at its first
+ * day on the time axis; the tick and tooltip labels stay the month text.
+ */
 export function AreaTrendChart({ row }: { row: KeywordRow }) {
   if (!row.trend?.length) return null;
-  const data = row.trend.map((point) => ({ ...point, label: new Date(point.year, point.month - 1).toLocaleString("en", { month: "short", year: "2-digit" }) }));
+  const data = row.trend
+    .map((point) => ({
+      ...point,
+      monthStart: new Date(point.year, point.month - 1, 1).getTime(),
+      searchVolume:
+        typeof point.searchVolume === "number" && Number.isFinite(point.searchVolume)
+          ? point.searchVolume
+          : null,
+      label: new Date(point.year, point.month - 1).toLocaleString("en", { month: "short", year: "2-digit" }),
+    }))
+    .sort((a, b) => a.monthStart - b.monthStart);
+  const labels = data.map((point) => point.label);
   const first = data[0]?.label;
   const last = data[data.length - 1]?.label;
-  return <Card><CardHeader><CardTitle>Search Trends</CardTitle><p className="text-xs text-muted-foreground">{first} - {last}</p></CardHeader><CardContent className="h-44 min-w-0"><ResponsiveContainer width="100%" height="100%"><AreaChart data={data}><Tooltip /><Area type="monotone" dataKey="searchVolume" stroke="var(--color-primary)" fill="var(--color-primary)" fillOpacity={0.16} /></AreaChart></ResponsiveContainer></CardContent></Card>;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Search Trends</CardTitle>
+        <p className="text-xs text-muted-foreground">{first} - {last}</p>
+      </CardHeader>
+      <CardContent className="h-44 min-w-0">
+        <LineChart
+          data={data}
+          xDataKey="monthStart"
+          aspectRatio=""
+          className="h-full"
+          margin={{ left: 8, right: 8, top: 8, bottom: 32 }}
+        >
+          <Grid horizontal />
+          <Line dataKey="searchVolume" stroke={COLOR} strokeWidth={2} curve={curveMonotoneX} fadeEdges={false} />
+          <XAxis labels={labels} />
+          <ChartTooltip
+            dateLabels={labels}
+            content={({ point }) => (
+              <TooltipContent
+                title={String(point.label ?? "")}
+                rows={[
+                  {
+                    color: COLOR,
+                    label: "Search volume",
+                    value: typeof point.searchVolume === "number" ? point.searchVolume.toLocaleString() : "—",
+                  },
+                ]}
+              />
+            )}
+          />
+        </LineChart>
+      </CardContent>
+    </Card>
+  );
 }

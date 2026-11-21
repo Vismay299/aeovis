@@ -15,6 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import HoldButton from "@/components/kokonutui/hold-button";
 
 /**
  * Asks before an action that cannot be undone: a delete, or one that spends
@@ -52,14 +53,28 @@ export function ConfirmDialog({
           <AlertDialogDescription>{children}</AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
-          <Button
-            variant={destructive ? "destructive" : "default"}
-            pending={pending}
-            onClick={onConfirm}
-          >
-            {confirmLabel}
-          </Button>
+          <AlertDialogCancel data-testid="confirm-dialog-cancel" disabled={pending}>Cancel</AlertDialogCancel>
+          {/* A destructive confirm cannot be finished with one click: it is
+              held for 1200 ms (space/enter works too). The dialog, its copy and
+              the cancel path are unchanged. Spending confirmations keep the
+              normal button; their slider lives in PricedActionButton. */}
+          {destructive ? (
+            <HoldButton
+              data-testid="confirm-dialog-hold"
+              variant="destructive"
+              holdDuration={1200}
+              holdingLabel="Keep holding"
+              completeLabel={confirmLabel}
+              disabled={pending}
+              onHoldComplete={onConfirm}
+            >
+              {confirmLabel}
+            </HoldButton>
+          ) : (
+            <Button variant="default" pending={pending} onClick={onConfirm}>
+              {confirmLabel}
+            </Button>
+          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

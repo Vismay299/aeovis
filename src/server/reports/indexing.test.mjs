@@ -11,7 +11,7 @@ import {
   PRIVATE_ROUTE_PREFIXES,
   getPublicUrlInventory,
   getRouteIndexingPolicy,
-} from "../publicSite.js";
+} from "../publicSite.mjs";
 import robotsHandler from "../../app/robots.js";
 import sitemapHandler from "../../app/sitemap.js";
 import nextConfig from "../../../next.config.mjs";

@@ -615,10 +615,15 @@ function SidebarMenuSkeleton({
 }: React.ComponentProps<"div"> & {
   showIcon?: boolean;
 }) {
-  // Random width between 50 to 90%.
-  const [width] = React.useState(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`;
-  });
+  // A width between 50 and 90%, derived from the element's place in the tree
+  // so server and client render the same value (Math.random here caused a
+  // hydration mismatch on every portal load).
+  const id = React.useId();
+  const width = React.useMemo(() => {
+    let hash = 0;
+    for (const char of id) hash = (hash * 31 + char.charCodeAt(0)) % 997;
+    return `${50 + (hash % 40)}%`;
+  }, [id]);
 
   return (
     <div

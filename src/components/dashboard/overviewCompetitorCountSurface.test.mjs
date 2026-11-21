@@ -69,7 +69,7 @@ const iconModule = new Proxy(
   { get: (target, prop) => (prop in target ? target[prop] : () => null) }
 );
 
-/** framer-motion: `motion.<tag>` as the plain tag, animation props dropped. */
+/** motion/react: `motion.<tag>` as the plain tag, animation props dropped. */
 const motionProxy = new Proxy(
   {},
   {
@@ -90,7 +90,7 @@ const EXTERNAL = new Map([
   ["react", reactModule],
   ["lucide-react", iconModule],
   [
-    "framer-motion",
+    "motion/react",
     {
       __esModule: true,
       motion: motionProxy,

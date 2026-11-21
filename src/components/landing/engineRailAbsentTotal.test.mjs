@@ -69,7 +69,7 @@ async function loadRail() {
   });
   const modules = new Map([
     ["@/components/landing/Reveal", { __esModule: true, Reveal }],
-    ["@/components/charts/Gauge", { __esModule: true, Gauge }],
+    ["@/components/perceev/charts/Gauge", { __esModule: true, Gauge }],
   ]);
   const requireShim = (specifier) => {
     if (modules.has(specifier)) return modules.get(specifier);

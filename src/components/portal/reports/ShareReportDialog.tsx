@@ -5,7 +5,7 @@
 "use client";
 
 import { useId, useState } from "react";
-import { Copy, ExternalLink } from "lucide-react";
+import { Copy, ExternalLink, Share2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,6 +89,9 @@ export function ShareReportDialog({
         fullScreenOnMobile
       >
         <DialogHeader className="min-w-0 pr-8">
+          <div data-slot="dialog-emblem" aria-hidden="true">
+            <Share2 />
+          </div>
           <DialogTitle>Share</DialogTitle>
           <DialogDescription className="truncate">
             {report.title}

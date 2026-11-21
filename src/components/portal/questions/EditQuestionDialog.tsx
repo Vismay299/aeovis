@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { toast } from "sonner";
+import { MessageSquareText } from "lucide-react";
 import { useQuestionMutations, isRevisionConflict } from "./hooks/useQuestionMutations";
 
 export function EditQuestionDialog({
@@ -61,7 +62,12 @@ export function EditQuestionDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent fullScreenOnMobile>
-        <DialogHeader><DialogTitle>Edit question</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <div data-slot="dialog-emblem" aria-hidden="true">
+            <MessageSquareText />
+          </div>
+          <DialogTitle>Edit question</DialogTitle>
+        </DialogHeader>
         <div className="space-y-4 py-2">
           {conflict ? (
             <Alert variant="destructive">

@@ -35,7 +35,7 @@ import { buildScorePlan, deriveScanOutcome } from "../../shared/scanOutcome.js";
 
 const ENV = ["BRIGHTDATA_API_KEY", "BRIGHTDATA_SERP_ZONE", "BRIGHTDATA_ZONE_TTL_MS", "ENGINES", "SERP_GEO"];
 
-function useEnv(t, env) {
+function applyEnv(t, env) {
   const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
   for (const k of ENV) delete process.env[k];
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
@@ -56,7 +56,7 @@ function mockFetch(t, handler) {
 }
 
 function pinAioEnv(t) {
-  useEnv(t, {
+  applyEnv(t, {
     BRIGHTDATA_API_KEY: "bd-EXAMPLE-NOT-A-REAL-KEY",
     BRIGHTDATA_SERP_ZONE: "zone_fake",
     ENGINES: "aio",

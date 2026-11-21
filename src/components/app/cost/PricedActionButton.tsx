@@ -168,6 +168,7 @@ export function PricedActionButton({
         priceChanged={priceChanged}
         error={error}
         detail={detail}
+        slideToConfirm
         onConfirm={(maxUsd) => {
           if (!isFresh && !priceChanged) return;
           onRun(maxUsd);

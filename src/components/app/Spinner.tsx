@@ -6,6 +6,7 @@
 
 import { cn } from "@/shared/utils";
 import { Spinner as SpinnerIcon } from "@/components/ui/spinner";
+import { PageLoader } from "@/components/app/brand/PerceevLogo";
 
 /** A loading indicator with an optional visible label, e.g. "Checking…". */
 export function Spinner({
@@ -39,9 +40,5 @@ export function Spinner({
  * chrome to show while the session loads. In the app, pages show skeletons.
  */
 export function PageLoading() {
-  return (
-    <div className="flex min-h-dvh items-center justify-center">
-      <Spinner />
-    </div>
-  );
+  return <PageLoader className="min-h-dvh" />;
 }

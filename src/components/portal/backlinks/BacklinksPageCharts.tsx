@@ -4,32 +4,113 @@
 //   src/client/features/backlinks/BacklinksPageCharts.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { Line, LineChart } from "recharts";
+import { curveMonotoneX } from "d3-shape";
 import {
-  ChartGrid,
-  ChartXAxis,
-  ChartYAxis,
-} from "@/components/app/ChartAxes";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
+  Grid,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+} from "@/components/charts";
+import { TooltipContent } from "@/components/charts/tooltip";
+import { ChartLegend } from "@/components/app/ChartLegend";
 import type { BacklinksOverview } from "@/shared/backlinks";
 import { formatNumber } from "@/shared/backlinks";
 
-const trendChartConfig = {
-  backlinks: { label: "Backlinks", color: "#2563eb" },
-  referringDomains: { label: "Referring domains", color: "#14b8a6" },
-} satisfies ChartConfig;
+type Series = { key: string; label: string; color: string; yAxisId?: string };
 
-const newLostChartConfig = {
-  lostBacklinks: { label: "Lost backlinks", color: "#ef4444" },
-  newBacklinks: { label: "New backlinks", color: "#16a34a" },
-} satisfies ChartConfig;
+const TREND_SERIES: Series[] = [
+  { key: "backlinks", label: "Backlinks", color: "var(--chart-1)", yAxisId: "left" },
+  {
+    key: "referringDomains",
+    label: "Referring domains",
+    color: "var(--chart-3)",
+    yAxisId: "right",
+  },
+];
+
+const NEW_LOST_SERIES: Series[] = [
+  { key: "lostBacklinks", label: "Lost backlinks", color: "var(--chart-negative)" },
+  { key: "newBacklinks", label: "New backlinks", color: "var(--chart-positive)" },
+];
+
+/** A provider date ("2026-08-01…") as local midnight, or null. */
+function dateToTime(value: string | null | undefined): number | null {
+  const parsed = /^(\d{4})-(\d{2})-(\d{2})/.exec(value ?? "");
+  if (!parsed) return null;
+  return new Date(
+    Number(parsed[1]),
+    Number(parsed[2]) - 1,
+    Number(parsed[3]),
+  ).getTime();
+}
+
+/**
+ * Rows on a time axis, oldest first. Values stay as given: `null` (not
+ * reported) is drawn as a gap, never as 0. Rows whose date cannot be read are
+ * left out of the drawing; the screen-reader table still lists them.
+ */
+function toTimeRows<T extends { date: string }>(data: T[]) {
+  return data
+    .map((item) => ({ ...item, time: dateToTime(item.date) }))
+    .filter((item): item is T & { time: number } => item.time !== null)
+    .sort((a, b) => a.time - b.time);
+}
+
+function SeriesTrendChart({
+  rows,
+  series,
+}: {
+  rows: Array<Record<string, unknown> & { date: string }>;
+  series: Series[];
+}) {
+  const labels = rows.map((row) => formatChartTick(row.date));
+  const dualAxis = series.some((s) => s.yAxisId === "right");
+  return (
+    <div className="flex h-56 flex-col">
+      <LineChart
+        data={rows}
+        xDataKey="time"
+        aspectRatio=""
+        className="min-h-0 flex-1"
+        margin={{ left: 60, right: dualAxis ? 60 : 8, top: 8, bottom: 32 }}
+      >
+        <Grid horizontal />
+        {series.map((s) => (
+          <Line
+            key={s.key}
+            dataKey={s.key}
+            yAxisId={s.yAxisId}
+            stroke={s.color}
+            strokeWidth={2}
+            curve={curveMonotoneX}
+            fadeEdges={false}
+          />
+        ))}
+        <YAxis formatValue={formatAxisValue} />
+        {dualAxis ? (
+          <YAxis yAxisId="right" position="right" formatValue={formatAxisValue} />
+        ) : null}
+        <XAxis labels={labels} />
+        <ChartTooltip
+          dateLabels={labels}
+          content={({ point }) => (
+            <TooltipContent
+              title={formatChartLabel(point.date)}
+              rows={series.map((s) => ({
+                color: s.color,
+                label: s.label,
+                value: formatTooltipValue(point[s.key]),
+              }))}
+            />
+          )}
+        />
+      </LineChart>
+      <ChartLegend items={series} />
+    </div>
+  );
+}
 
 function formatTooltipValue(value: unknown) {
   if (Array.isArray(value)) return value.join(", ");
@@ -91,80 +172,30 @@ export function BacklinksTrendChart({
   }
 
   return (
-    <ChartContainer
-      config={trendChartConfig}
-      className="h-56"
-      aria-label="Backlink trend chart"
-    >
-      <>
-        <div className="sr-only">
-          <table>
-            <caption>Backlink trend data</caption>
-            <thead>
-              <tr>
-                <th scope="col">Date</th>
-                <th scope="col">Backlinks</th>
-                <th scope="col">Referring domains</th>
+    <div aria-label="Backlink trend chart">
+      <div className="sr-only">
+        <table>
+          <caption>Backlink trend data</caption>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">Backlinks</th>
+              <th scope="col">Referring domains</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((item) => (
+              <tr key={item.date}>
+                <td>{item.date}</td>
+                <td>{item.backlinks ?? "—"}</td>
+                <td>{item.referringDomains ?? "—"}</td>
               </tr>
-            </thead>
-            <tbody>
-              {data.map((item) => (
-                <tr key={item.date}>
-                  <td>{item.date}</td>
-                  <td>{item.backlinks ?? "—"}</td>
-                  <td>{item.referringDomains ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <LineChart
-          data={data}
-          margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
-        >
-          <ChartGrid />
-          <ChartXAxis
-            dataKey="date"
-            tickFormatter={formatChartTick}
-            minTickGap={24}
-          />
-          <ChartYAxis yAxisId="left" tickFormatter={formatAxisValue} width={60} />
-          <ChartYAxis
-            yAxisId="right"
-            orientation="right"
-            tickFormatter={formatAxisValue}
-            width={60}
-          />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                labelFormatter={formatChartLabel}
-                valueFormatter={formatTooltipValue}
-              />
-            }
-          />
-          <ChartLegend content={<ChartLegendContent />} />
-          <Line
-            yAxisId="left"
-            type="monotone"
-            dataKey="backlinks"
-            stroke="var(--color-backlinks)"
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-          />
-          <Line
-            yAxisId="right"
-            type="monotone"
-            dataKey="referringDomains"
-            stroke="var(--color-referringDomains)"
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-          />
-        </LineChart>
-      </>
-    </ChartContainer>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <SeriesTrendChart rows={toTimeRows(data)} series={TREND_SERIES} />
+    </div>
   );
 }
 
@@ -178,71 +209,29 @@ export function BacklinksNewLostChart({
   }
 
   return (
-    <ChartContainer
-      config={newLostChartConfig}
-      className="h-56"
-      aria-label="New and lost backlinks chart"
-    >
-      <>
-        <div className="sr-only">
-          <table>
-            <caption>New and lost backlinks data</caption>
-            <thead>
-              <tr>
-                <th scope="col">Date</th>
-                <th scope="col">New backlinks</th>
-                <th scope="col">Lost backlinks</th>
+    <div aria-label="New and lost backlinks chart">
+      <div className="sr-only">
+        <table>
+          <caption>New and lost backlinks data</caption>
+          <thead>
+            <tr>
+              <th scope="col">Date</th>
+              <th scope="col">New backlinks</th>
+              <th scope="col">Lost backlinks</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((item) => (
+              <tr key={item.date}>
+                <td>{item.date}</td>
+                <td>{item.newBacklinks ?? "—"}</td>
+                <td>{item.lostBacklinks ?? "—"}</td>
               </tr>
-            </thead>
-            <tbody>
-              {data.map((item) => (
-                <tr key={item.date}>
-                  <td>{item.date}</td>
-                  <td>{item.newBacklinks ?? "—"}</td>
-                  <td>{item.lostBacklinks ?? "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <LineChart
-          data={data}
-          margin={{ left: 8, right: 8, top: 8, bottom: 0 }}
-        >
-          <ChartGrid />
-          <ChartXAxis
-            dataKey="date"
-            tickFormatter={formatChartTick}
-            minTickGap={24}
-          />
-          <ChartYAxis tickFormatter={formatAxisValue} width={60} />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                labelFormatter={formatChartLabel}
-                valueFormatter={formatTooltipValue}
-              />
-            }
-          />
-          <ChartLegend content={<ChartLegendContent />} />
-          <Line
-            type="monotone"
-            dataKey="lostBacklinks"
-            stroke="var(--color-lostBacklinks)"
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-          />
-          <Line
-            type="monotone"
-            dataKey="newBacklinks"
-            stroke="var(--color-newBacklinks)"
-            strokeWidth={2}
-            dot={false}
-            connectNulls={false}
-          />
-        </LineChart>
-      </>
-    </ChartContainer>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <SeriesTrendChart rows={toTimeRows(data)} series={NEW_LOST_SERIES} />
+    </div>
   );
 }

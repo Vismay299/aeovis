@@ -42,7 +42,7 @@ Perceev starts talking to customers by email at the moments that matter: a scan 
   - spend-cap refusals are thrown as `SpendRefused { reason, scope, limitUsd }` by F01's `reserveSpend` and recorded nowhere (`features/F01-platform-foundations.md` §6.2 `src/shared/spend/`).
 - **Milestone sources:** `customer_brands.created_at`; `scans`; `gsc_connections` (enabled OAuth connection); `scan_schedules` with F10's `managed_by = 'customer'` and `enabled`; `content_items.status IN ('approved','published')` (statuses in `src/app/api/customer/content/[id]/route.js:31`); F18 `site_audits.status IN ('completed','partial')` with `completed_at`; F22 `assistant_turns.status = 'completed'`.
 - **Job runner** (F01): `definePeriodic`, `enqueueSystemJob`, step semantics and `jobs_dedupe_idx`; the tick runs every minute.
-- **Public routes:** `src/server/operatorPerimeter.js` treats `/api/customer/*` as self-gated; `src/server/publicSite.js:57-67` lists private (noindexed) prefixes.
+- **Public routes:** `src/server/operatorPerimeter.js` treats `/api/customer/*` as self-gated; `src/server/publicSite.mjs:57-67` lists private (noindexed) prefixes.
 - **Must not break:** Supabase Auth emails and the invite flow (Mixed row "Teams"); scan, schedule and spend behaviour (F25 only reads their rows, plus one fire-and-forget call in the spend refusal branch).
 
 ## 4. Target behaviour and acceptance criteria
@@ -341,7 +341,7 @@ Requests: contacts `PUT {base}/contacts/update`; events `POST {base}/events/send
   The dynamic import keeps the email module out of every caller's load path; the refusal is thrown exactly as before.
 - `src/app/auth/callback/route.js` (F24 first-session branch): add `await enqueueSignupEmails(getSupabaseAdmin(), user)` guarded by `isFeatureEnabled("lifecycle_email")`; failures are swallowed inside the helper.
 - `src/server/features/names.ts`: `lifecycle_email: { spend: [] as const }`; `src/server/features/clientFeatures.ts`: append `"lifecycle_email"`.
-- `src/server/publicSite.js`: append `"/email"` to `PRIVATE_ROUTE_PREFIXES` (noindex the unsubscribe page).
+- `src/server/publicSite.mjs`: append `"/email"` to `PRIVATE_ROUTE_PREFIXES` (noindex the unsubscribe page).
 
 ### 6.3 Jobs
 
@@ -558,7 +558,7 @@ Branches `feat/f25-lifecycle-email-p1` … `-p4`. `NT` = `node --import ./src/se
   - [x] **P3.T1.S2** *Files:* `src/app/api/customer/email/unsubscribe/route.ts`, `src/server/email/unsubscribe.route.test.mjs`. *Do:* §6.5. Cases: valid form post → 303 with `done=1` and the category false; JSON → 200; tampered token → 401 `invalid_link` and no write; cross-site `Origin` → 403 (middleware); `product_updates` → Loops list off. *Verify:* `NT src/server/email/unsubscribe.route.test.mjs src/server/operatorPerimeter.test.mjs` → pass (F25-AC-13 route half).
 - [x] **P3.T2 UI**
   - [x] **P3.T2.S1** *Files:* `src/components/portal/email/{EmailSettings,ProductUpdatesSwitch}.tsx`, `src/components/portal/email/hooks/useEmailPreferences.ts`, `src/app/portal/settings/notifications/page.tsx`, `src/components/portal/settings/tabs.ts`, `src/shared/query/keys.ts`. *Do:* §6.6. *Verify:* `npm run typecheck` and `npm run build` → exit 0.
-  - [x] **P3.T2.S2** *Files:* `src/app/email/unsubscribe/page.jsx`, `src/server/publicSite.js`, `src/server/repairs/r20-public-site.test.mjs`. *Do:* §6.6 page; append `"/email"` to `PRIVATE_ROUTE_PREFIXES`; if `r20-public-site.test.mjs` asserts the exact prefix list, add `"/email"` to its expected list (reason: new private page). *Verify:* `NT src/server/repairs/r20-public-site.test.mjs` → pass; build → exit 0.
+  - [x] **P3.T2.S2** *Files:* `src/app/email/unsubscribe/page.jsx`, `src/server/publicSite.mjs`, `src/server/repairs/r20-public-site.test.mjs`. *Do:* §6.6 page; append `"/email"` to `PRIVATE_ROUTE_PREFIXES`; if `r20-public-site.test.mjs` asserts the exact prefix list, add `"/email"` to its expected list (reason: new private page). *Verify:* `NT src/server/repairs/r20-public-site.test.mjs` → pass; build → exit 0.
   - [x] **P3.T2.S3** *Files:* `src/app/privacy/page.jsx`, `src/app/privacy/privacyCopy.test.mjs` (F24 file). *Do:* add the §6.7 paragraph under "How information is used and shared"; extend the test with its first sentence. *Verify:* `NT src/app/privacy/privacyCopy.test.mjs` → pass.
 - [x] **P3.T3 Browser checks**
   - [x] **P3.T3.S1** *Files:* `scripts/qa/check-f25-browser.mjs`, `tests/fixtures/portal/email-preferences.json`. *Do:* F04 harness (`openPortal`) with fixture `features-acme.json` extended by `lifecycle_email: true`; route `GET/PUT /api/customer/email/preferences`. B1 tab "Emails" visible, four switches with fixture values; B2 toggling "Scan results" sends `PUT { scanResults: false, source: "settings" }`; B3 a 502 response reverts the switch and shows the toast; B4 `/email/unsubscribe` with a token built by `links.ts` and a test secret shows "Stop scan result emails?", submitting posts to the route (intercepted → 303) and the page shows "You're unsubscribed"; a tampered token shows "This link is not valid"; B5 390 px no overflow; B6 with `lifecycle_email: false` the tab is absent. *Verify:* `node scripts/qa/check-f25-browser.mjs http://127.0.0.1:3328` → `ok 6 scenarios` (F25-AC-13 browser half, AC-14).

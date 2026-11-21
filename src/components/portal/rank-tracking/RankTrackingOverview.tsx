@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Area, AreaChart } from "recharts";
+import { curveMonotoneX } from "d3-shape";
 import { fetchJson, withBrand } from "@/shared/query/fetchJson";
 import { keys } from "@/shared/query/keys";
 import { QueryState } from "@/components/app/QueryState";
@@ -17,39 +17,36 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  ChartGrid,
-  ChartXAxis,
-  ChartYAxis,
-} from "@/components/app/ChartAxes";
-import {
-  ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
+  Grid,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+} from "@/components/charts";
+import { TooltipContent as ChartTooltipContent } from "@/components/charts/tooltip";
 import {
   formatDateLabel,
-  TIME_AXIS,
+  TIME_KEY,
+  timeTickLabels,
   TrendEmptyState,
   TrendRangeToggle,
 } from "./RankTrendChart";
 
+// Keyword counts per position bucket at each check. One line per bucket (the
+// counts are read directly off the axis), not a stack.
 const BUCKETS = [
-  { key: "top3", label: "Top 3", color: "#16a34a" },
-  { key: "top4to10", label: "4–10", color: "#2563eb" },
-  { key: "top11to20", label: "11–20", color: "#f59e0b" },
-  { key: "notRanking", label: "Not in top 20", color: "#6b7280" },
+  { key: "top3", label: "Top 3", color: "var(--chart-3)" },
+  { key: "top4to10", label: "4–10", color: "var(--chart-1)" },
+  { key: "top11to20", label: "11–20", color: "var(--chart-4)" },
+  { key: "notRanking", label: "Not in top 20", color: "var(--chart-rival-1)" },
   {
     key: "notChecked",
     label: "Not checked",
-    color: "#d1d5db",
+    color: "var(--chart-rival-3)",
     hint: "Check failed, no position recorded.",
   },
 ] as const;
-
-const chartConfig: ChartConfig = Object.fromEntries(
-  BUCKETS.map((b) => [b.key, { label: b.label, color: b.color }]),
-);
 
 export type TrendPoint = {
   runId: string;
@@ -101,6 +98,7 @@ export function RankTrackingOverview({
       })),
     [points],
   );
+  const tickLabels = useMemo(() => timeTickLabels(chartData), [chartData]);
 
   return (
     <div className="px-4 pt-4 pb-4">
@@ -162,33 +160,42 @@ export function RankTrackingOverview({
               <TrendEmptyState checks={chartData.length} />
             ) : (
               <>
-                <ChartContainer config={chartConfig} className="h-[220px]">
-                  <AreaChart
-                    data={chartData}
-                    margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-                  >
-                    <ChartGrid />
-                    <ChartXAxis {...TIME_AXIS} />
-                    <ChartYAxis allowDecimals={false} width={28} />
-                    <ChartTooltip
-                      content={
-                        <ChartTooltipContent labelFormatter={formatDateLabel} />
-                      }
+                <LineChart
+                  data={chartData}
+                  xDataKey={TIME_KEY}
+                  aspectRatio=""
+                  className="h-[220px]"
+                  animationDuration={700}
+                  margin={{ top: 8, right: 8, bottom: 32, left: 28 }}
+                >
+                  <Grid horizontal />
+                  {BUCKETS.map((b) => (
+                    <Line
+                      key={b.key}
+                      dataKey={b.key}
+                      stroke={b.color}
+                      strokeWidth={2}
+                      curve={curveMonotoneX}
+                      fadeEdges={false}
                     />
-                    {BUCKETS.map((b) => (
-                      <Area
-                        key={b.key}
-                        type="monotone"
-                        dataKey={b.key}
-                        stackId="positions"
-                        stroke={b.color}
-                        fill={b.color}
-                        fillOpacity={0.7}
-                        isAnimationActive={false}
+                  ))}
+                  <YAxis allowDecimals={false} />
+                  <XAxis labels={tickLabels} />
+                  <ChartTooltip
+                    dateLabels={tickLabels}
+                    content={({ point }) => (
+                      <ChartTooltipContent
+                        title={formatDateLabel(point[TIME_KEY])}
+                        rows={BUCKETS.flatMap((b) => {
+                          const value = point[b.key];
+                          return typeof value === "number"
+                            ? [{ color: b.color, label: b.label, value }]
+                            : [];
+                        })}
                       />
-                    ))}
-                  </AreaChart>
-                </ChartContainer>
+                    )}
+                  />
+                </LineChart>
 
                 <table className="sr-only">
                   <caption>Position distribution history</caption>

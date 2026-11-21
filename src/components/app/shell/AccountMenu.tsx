@@ -20,12 +20,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ThemePreferenceDropdownItems } from "@/components/app/theme/ThemePreferenceRadio";
 import { usePortal } from "@/components/portal/PortalShell";
 
 /**
- * The account row at the foot of the sidebar: the reader's email, the theme
- * picker and the way out.
+ * The account row at the foot of the sidebar: the reader's email, settings
+ * and the way out. There is no theme picker: the app has one scheme (Onyx /
+ * White, see src/styles/palettes.css) and renders the same whatever is stored.
  */
 export function AccountMenu({ ready }: { ready: boolean }) {
   const { setOpenMobile } = useSidebar();
@@ -64,7 +64,6 @@ export function AccountMenu({ ready }: { ready: boolean }) {
             <Settings className="size-4" />
             Workspace settings
           </DropdownMenuItem>
-          <ThemePreferenceDropdownItems />
           <DropdownMenuSeparator />
           <DropdownMenuItem
             variant="destructive"

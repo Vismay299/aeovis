@@ -9,8 +9,8 @@
  */
 
 import { ArrowRight } from 'lucide-react';
-import { FlowDiagram, RIVAL_RAMP } from '@/components/charts/FlowDiagram';
-import { Gauge } from '@/components/charts/Gauge';
+import { FlowDiagram, RIVAL_RAMP } from '@/components/perceev/charts/FlowDiagram';
+import { Gauge } from '@/components/perceev/charts/Gauge';
 import { describeRosterState } from '@/shared/scoring/rosterContinuity';
 import { buildInterlocking } from './interlocking';
 import { OverviewAnalytics } from './OverviewAnalytics';

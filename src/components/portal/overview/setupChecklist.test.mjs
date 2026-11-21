@@ -98,6 +98,8 @@ async function loadChecklist({ track = [] } = {}) {
       ["next/link", { __esModule: true, default: "a" }],
       ["@/components/ui/accordion", accordionStub],
       ["@/components/ui/button", { Button: buttonStub }],
+      // The drawn tick on done rows is decoration, like the lucide icons.
+      ["@/components/ui/spinner", { SuccessCheck: () => null }],
       ["@/components/ui/collapsible", collapsibleStub],
       ["@/components/portal/PortalShell", { usePortal: () => portal }],
       ["@/shared/telemetry/client", telemetry],

@@ -5,8 +5,9 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import type { ComponentProps } from "react";
-import { Check, Copy } from "lucide-react";
+import { Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SuccessCheck } from "@/components/ui/spinner";
 import { useCopy } from "@/components/app/hooks/useCopy";
 
 type ButtonProps = ComponentProps<typeof Button>;
@@ -34,7 +35,6 @@ export function CopyButton({
 }) {
   const { copied, copy } = useCopy();
   const iconOnly = size?.startsWith("icon") ?? false;
-  const Icon = copied ? Check : Copy;
 
   return (
     <Button
@@ -49,11 +49,15 @@ export function CopyButton({
         });
       }}
     >
-      <Icon
-        data-icon={iconOnly ? undefined : "inline-start"}
-        className={copied && variant !== "default" ? "text-success" : undefined}
-        aria-hidden
-      />
+      {copied ? (
+        <SuccessCheck
+          data-icon={iconOnly ? undefined : "inline-start"}
+          className={variant !== "default" ? "text-success" : undefined}
+          aria-hidden
+        />
+      ) : (
+        <Copy data-icon={iconOnly ? undefined : "inline-start"} className="animate-fade-in" aria-hidden />
+      )}
       {iconOnly ? null : copied ? "Copied" : label}
     </Button>
   );

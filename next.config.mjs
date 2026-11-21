@@ -1,7 +1,23 @@
-import { NOINDEX_ROUTE_PREFIXES, PRIVATE_ROUTE_PREFIXES, getRouteIndexingPolicy } from "./src/server/publicSite.js";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { NOINDEX_ROUTE_PREFIXES, PRIVATE_ROUTE_PREFIXES, getRouteIndexingPolicy } from "./src/server/publicSite.mjs";
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+    // Pin the project root. A package-lock.json in a parent directory (e.g.
+    // the home folder) otherwise makes Next infer the wrong workspace root.
+    outputFileTracingRoot: path.dirname(fileURLToPath(import.meta.url)),
+    // @vercel/functions has an optional `import("ws")` for its experimental
+    // WebSocket helper (experimental_upgradeWebSocket), which we never call.
+    // `ws` is not installed, so webpack warned "Can't resolve 'ws'" on every
+    // compile, including the edge build of /instrumentation. Ignore that one
+    // optional import; nothing else may import ws silently.
+    webpack(config, { webpack }) {
+        config.plugins.push(
+            new webpack.IgnorePlugin({ resourceRegExp: /^ws$/, contextRegExp: /@vercel[\\/]functions/ }),
+        );
+        return config;
+    },
     async headers() {
         const preview = !getRouteIndexingPolicy("/", process.env).index;
         // Private prefixes are disallowed in robots.txt; the noindex-only

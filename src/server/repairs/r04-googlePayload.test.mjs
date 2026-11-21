@@ -49,7 +49,7 @@ const ENV = [
   "SERP_GEO",
 ];
 
-function useEnv(t, env) {
+function applyEnv(t, env) {
   const saved = Object.fromEntries(ENV.map((k) => [k, process.env[k]]));
   for (const k of ENV) delete process.env[k];
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
@@ -71,7 +71,7 @@ function mockFetch(t, handler) {
 
 /** A configured Bright Data with the zone pinned, so no discovery call fires. */
 function pinZone(t) {
-  useEnv(t, { BRIGHTDATA_API_KEY: "bd-EXAMPLE-NOT-A-REAL-KEY", BRIGHTDATA_SERP_ZONE: "zone_fake" });
+  applyEnv(t, { BRIGHTDATA_API_KEY: "bd-EXAMPLE-NOT-A-REAL-KEY", BRIGHTDATA_SERP_ZONE: "zone_fake" });
 }
 
 /**
@@ -772,7 +772,7 @@ test("R04-17 — headers arrive but the body hangs; the shared deadline aborts t
 });
 
 test("R04-18 — a hanging zone lookup ends within its deadline, and no paid SERP dispatch follows", async (t) => {
-  useEnv(t, { BRIGHTDATA_API_KEY: "bd-EXAMPLE-NOT-A-REAL-KEY" });
+  applyEnv(t, { BRIGHTDATA_API_KEY: "bd-EXAMPLE-NOT-A-REAL-KEY" });
   invalidateBrightDataZoneCache("test setup");
   t.after(() => invalidateBrightDataZoneCache("test teardown"));
 
@@ -813,7 +813,7 @@ test("R04-18 — a zone lookup that stalls its BODY still ends inside its deadli
   // empty zone list. A REAL local server is used because the whole point is
   // whether a real socket read is bounded — a stubbed `json()` proves it only
   // for the stub.
-  useEnv(t, { BRIGHTDATA_API_KEY: "bd-EXAMPLE-NOT-A-REAL-KEY" });
+  applyEnv(t, { BRIGHTDATA_API_KEY: "bd-EXAMPLE-NOT-A-REAL-KEY" });
   invalidateBrightDataZoneCache("test setup");
   t.after(() => invalidateBrightDataZoneCache("test teardown"));
 
@@ -892,7 +892,7 @@ test("R04-19 — remaining lease/chunk time too short refuses dispatch with a re
 });
 
 test("R04-20 — 30 valid no-AIO SERPs give healthy collection, zero trigger, and no conditional score", async (t) => {
-  useEnv(t, {
+  applyEnv(t, {
     BRIGHTDATA_API_KEY: "bd-EXAMPLE-NOT-A-REAL-KEY",
     BRIGHTDATA_SERP_ZONE: "zone_fake",
     ENGINES: "aio",

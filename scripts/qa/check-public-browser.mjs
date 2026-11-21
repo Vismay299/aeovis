@@ -4,7 +4,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { chromium } from "playwright";
-import { getPublicUrlInventory } from "../../src/server/publicSite.js";
+import { getPublicUrlInventory } from "../../src/server/publicSite.mjs";
 import { sha256 } from "../../src/server/repairs/releaseEvidence.mjs";
 
 const origin = new URL(process.argv[2] || "http://127.0.0.1:3328");

@@ -25,6 +25,7 @@ import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import { chromium } from "playwright";
 import { openPortal, SUPABASE_URL } from "./portalFixtureHarness.mjs";
+import { slideToConfirm } from "./confirmGestures.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = path.resolve(HERE, "../../tests/fixtures/f17/api");
@@ -618,8 +619,10 @@ if (requestedScenarios.includes("B6")) {
       });
     });
 
+    const gridRunRequests = [];
     await page.route((url) => url.pathname === "/api/customer/local/grids", async (route) => {
       if (route.request().method() === "POST") {
+        gridRunRequests.push(route.request().postDataJSON());
         return route.fulfill({
           status: 202,
           contentType: "application/json",
@@ -669,11 +672,18 @@ if (requestedScenarios.includes("B6")) {
       "dialog should show the centre warning"
     );
 
-    const confirm = dialog.locator('button:has-text("Run grid")').last();
-    await confirm.click();
+    // The final approval is a slide-to-confirm; Enter on its thumb confirms.
+    const approved = await slideToConfirm(dialog, "Run grid");
+    assert.equal(approved, b6.quoteGrid.totalUsd, "the slider must approve the quoted grid price");
 
     const processing = page.locator('[data-slot="grid-processing"]');
     await processing.waitFor({ timeout: 15000 });
+    assert.equal(gridRunRequests.length, 1, "the grid must run once with its approval");
+    assert.equal(
+      gridRunRequests[0].maxUsd,
+      approved,
+      `the grid run must carry the approved maximum, saw ${JSON.stringify(gridRunRequests[0])}`
+    );
     const processingText = await processing.textContent();
     assert.ok(
       processingText.includes("3 of 9 searches back"),

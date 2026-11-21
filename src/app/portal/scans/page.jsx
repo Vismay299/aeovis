@@ -617,32 +617,36 @@ export default function ScansPage() {
       <div className="space-y-6">
         <ScanProgressCard showIdle={false} />
         {brandKey ? <MockScanPanel key={brandKey} brandKey={brandKey} brandName={brand?.display_name || "this workspace"} onUnauthorized={redirectToLogin} /> : null}
-        {brandKey ? (
-          <Card title="Scan history" description={brand?.display_name ? `Each scan of ${brand.display_name}, newest first.` : "Newest first."} flush>
-            <ScansHistoryTable
-              key={brandKey}
-              brandKey={brandKey}
-              router={router}
-              serverExports={features?.server_exports === true}
-              scan={scan}
-            />
-          </Card>
-        ) : null}
-        {failedRuns.length > 0 ? (
-          <Card title="Failed runs" description="Runs from the last 7 days that stopped before finishing." flush>
-            <div className="divide-y divide-border">
-              {failedRuns.map((job) => (
-                <div key={job.id} className="flex items-center justify-between gap-4 px-4 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">{formatDate(job.created_at, { withTime: true })}</p>
-                    <p className="text-xs text-muted-foreground truncate">{job.error?.message || "Scan stopped before finishing."}</p>
+        {/* Focus reveal is opt-in per list; these cards sit below the running
+            scan and never blur the first screen. */}
+        <div className="space-y-6" data-reveal="focus">
+          {brandKey ? (
+            <Card title="Scan history" description={brand?.display_name ? `Each scan of ${brand.display_name}, newest first.` : "Newest first."} flush>
+              <ScansHistoryTable
+                key={brandKey}
+                brandKey={brandKey}
+                router={router}
+                serverExports={features?.server_exports === true}
+                scan={scan}
+              />
+            </Card>
+          ) : null}
+          {failedRuns.length > 0 ? (
+            <Card title="Failed runs" description="Runs from the last 7 days that stopped before finishing." flush>
+              <div className="divide-y divide-border">
+                {failedRuns.map((job) => (
+                  <div key={job.id} className="flex items-center justify-between gap-4 px-4 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-foreground">{formatDate(job.created_at, { withTime: true })}</p>
+                      <p className="text-xs text-muted-foreground truncate">{job.error?.message || "Scan stopped before finishing."}</p>
+                    </div>
+                    <Badge tone="crit">Failed</Badge>
                   </div>
-                  <Badge tone="crit">Failed</Badge>
-                </div>
-              ))}
-            </div>
-          </Card>
-        ) : null}
+                ))}
+              </div>
+            </Card>
+          ) : null}
+        </div>
       </div>
     </div>
   );

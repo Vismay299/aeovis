@@ -3,7 +3,6 @@
 import { CardShell } from "@/components/app/CardShell";
 import { PermissionHint } from "@/components/app/PermissionHint";
 import { SafeExternalLink } from "@/components/app/SafeExternalLink";
-import { ThemePreferenceRadio } from "@/components/app/theme/ThemePreferenceRadio";
 import { usePortal } from "@/components/portal/PortalShell";
 
 /** The host of the workspace's website, without the scheme or a trailing slash. */
@@ -43,18 +42,6 @@ export default function SettingsPage() {
           action="change the workspace name or website"
           className="mt-4"
         />
-      </CardShell>
-
-      <CardShell title="Appearance">
-        <div className="space-y-2">
-          <span className="text-sm font-medium">Theme</span>
-          <div>
-            <ThemePreferenceRadio showLabels />
-          </div>
-          <p className="text-sm text-muted-foreground">
-            Applies to this browser. The public website is always light.
-          </p>
-        </div>
       </CardShell>
     </div>
   );

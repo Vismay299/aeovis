@@ -30,6 +30,24 @@ Use visible focus rings, semantic form labels, keyboard-accessible controls and
 internal scroll areas for wide tables/canvases. At narrow widths, stack content and
 keep the page itself within the viewport. Respect reduced motion.
 
+## Locked UI decisions
+
+The owner's keep / reject list from the UI lab review is in `docs/design/UI_LAB_DECISIONS.md` (locked 17 November 2026). It governs the frontend build.
+
+## Motion
+
+Timing tokens and motion utilities live in `src/styles/motion.css`. State changes are CSS transitions so they can be interrupted and reversed mid-way; keyframes are kept for loaders and one-shot entrances. Popups and dialogs animate from Base UI's `data-starting-style` / `data-ending-style`. A press scales a control to 0.97 in 110ms. Numbers roll digit by digit (`RollingNumber`), a busy button eases a spinner in and a finished one draws a tick, tabs share one sliding indicator, and a thin bar tracks route changes (`NavigationProgress`). A press also spreads an ink ripple from the pointer, a tick or radio fills from its centre and bursts a ring, the sidebar highlight is one pill that slides between rows (`SidebarActivePill`), and cards rise in as they scroll into view. Everything shortens or stops under `prefers-reduced-motion`.
+
+## Colour scheme review (branch `test_UI`)
+
+The base scheme is Onyx and White (`data-palette="onyx"`, set on `<html>` for every visitor): a dark, two-colour scheme that renders the same in every theme preference. `src/styles/palettes.css` also holds the variants under review, five further shades and six accents, and `src/styles/shapes.css` holds three component shapes (Soft is the base; Edge and Pill are under review). Variants switch with `data-palette` and `data-shape` on `<html>`. No attribute means the shipped palette above. The floating dock (`PaletteSwitcher`) and the `/ui-lab` page are review tools: they render in development, and in a build only with `NEXT_PUBLIC_PALETTE_REVIEW=1`. Once a scheme is chosen, move its values into `app-theme.css` and `globals.css` and delete the dock, the lab and `palettes.css`.
+
+## Component libraries
+
+Four shadcn registries are configured in `components.json` and their components are vendored as source, never imported from a package: Bklit UI for charts (`src/components/charts`, tokens in `src/styles/charts.css`), Motion Primitives (`src/components/motion-primitives`), Kokonut UI (`src/components/kokonutui`) and Watermelon UI (`src/components/watermelon`, Base UI variants only). anime.js drives the scan grid (`DotGridPulse`). Animation imports come from `motion/react`; `framer-motion` is no longer installed.
+
+Adding more: `npx shadcn add @bklit/<name>` and so on. The CLI also tries to append its own colour variables and a `.dark` variant to `src/app/globals.css` and to create `src/lib/utils.ts`. Undo both: chart tokens live in `src/styles/charts.css` mapped to the scheme, and `cn` lives in `src/shared/utils.ts`. Pass `--path src/components/motion-primitives` for Motion Primitives, which otherwise lands in `src/components/ui`.
+
 ## Retired
 
 Do not restore the split-screen auth showcase, the native workspace `<select>`, the `pv-*` layout classes, OS-driven dark mode on the public website, or a theme switch on public pages.

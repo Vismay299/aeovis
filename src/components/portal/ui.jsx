@@ -6,6 +6,11 @@
  */
 
 import Link from "next/link";
+import { RollingNumber } from "@/components/app/motion/RollingNumber";
+import { ripple } from "@/components/app/motion/ripple";
+import { StatTile } from "@/components/app/StatTile";
+import { EmptyArt } from "@/components/app/motion/EmptyArt";
+import { TabsGlider } from "@/components/app/motion/TabsGlider";
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, Check, X, Loader2 } from "lucide-react";
 
 const cx = (...parts) => parts.filter(Boolean).join(" ");
@@ -62,29 +67,36 @@ export function Card({ title, description, actions, footer, flush, className, ch
   );
 }
 
-/** A KPI tile. `value` null/undefined renders an em dash, never 0. */
-export function Stat({ label, icon: Icon, value, suffix, sub, className }) {
+/**
+ * A KPI tile. `value` null/undefined renders an em dash, never 0.
+ *
+ * The locked design is the Spark tile, so this facade renders a `StatTile`
+ * and keeps the legacy `pv-card pv-stat` hooks on the outer element for the
+ * existing CSS. `series` is a real recent history, oldest first — with fewer
+ * than two points no sparkline is drawn, and it is never fabricated.
+ */
+export function Stat({ label, icon, value, suffix, sub, series, delta, className }) {
   const blank = value === null || value === undefined || value === "";
   return (
-    <div className={cx("rounded-lg border border-border bg-card p-4 pv-card pv-stat", className)}>
-      <span className="flex items-center gap-1.5 text-xs text-muted-foreground pv-stat__label">
-        {Icon ? <Icon aria-hidden="true" className="size-4" /> : null}
-        {label}
-      </span>
-      <span className={cx("text-2xl font-semibold tabular-nums pv-stat__value", blank && "is-empty")}>
-        {blank ? "—" : value}
-        {!blank && suffix ? <small className="text-sm font-normal text-muted-foreground">{suffix}</small> : null}
-      </span>
-      {sub ? <span className="text-xs text-muted-foreground pv-stat__sub">{sub}</span> : null}
-    </div>
+    <StatTile
+      variant="spark"
+      label={label}
+      icon={icon}
+      value={blank ? null : String(value)}
+      suffix={suffix}
+      sub={sub}
+      series={series}
+      delta={delta}
+      className={cx("pv-card pv-stat", className)}
+    />
   );
 }
 
 const BUTTON_BASE =
-  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-all outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
+  "group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap motion-control motion-press outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
 const BUTTON_VARIANTS = {
-  primary: "bg-primary text-primary-foreground hover:bg-primary/80",
+  primary: "bg-primary text-primary-foreground motion-raise hover:bg-primary/90",
   secondary:
     "border-border bg-card shadow-xs hover:bg-foreground/5 hover:text-foreground aria-expanded:bg-foreground/5 aria-expanded:text-foreground dark:border-input dark:bg-input/30 dark:shadow-none dark:hover:bg-input/50",
   ghost:
@@ -94,8 +106,8 @@ const BUTTON_VARIANTS = {
 };
 
 const BUTTON_SIZES = {
-  md: "h-10 gap-1.5 px-4",
-  sm: "h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3.5",
+  md: "h-10 gap-1.5 px-4 [--button-gap:--spacing(1.5)]",
+  sm: "h-7 gap-1 [--button-gap:--spacing(1)] rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3.5",
 };
 
 /**
@@ -137,9 +149,13 @@ export function Button({
       {children}
     </>
   );
-  if (href) return <Link href={href} className={classes} {...rest}>{content}</Link>;
+  const press = (event) => {
+    ripple(event);
+    rest.onPointerDown?.(event);
+  };
+  if (href) return <Link href={href} className={classes} {...rest} onPointerDown={press}>{content}</Link>;
   return (
-    <button {...rest} type={type} className={classes} disabled={disabled || loading}>
+    <button {...rest} type={type} className={classes} disabled={disabled || loading} onPointerDown={press}>
       {content}
     </button>
   );
@@ -227,8 +243,11 @@ export function EmptyState({ icon: Icon, title, children, action }) {
   return (
     <div data-slot="empty" className={cx(EMPTY_DASHED, "pv-empty")}>
       {Icon ? (
-        <div className="flex shrink-0 items-center justify-center text-muted-foreground pv-empty__icon [&_svg]:size-8">
-          <Icon aria-hidden="true" />
+        <div className="mb-1 flex shrink-0 items-center justify-center pv-empty__icon">
+          {/* T8: the locked drawing; the icon rides on its front card. */}
+          <EmptyArt>
+            <Icon aria-hidden="true" />
+          </EmptyArt>
         </div>
       ) : null}
       {title ? <p className="font-semibold text-foreground pv-empty__title">{title}</p> : null}
@@ -320,7 +339,9 @@ const TABS_LIST_LINE =
 /** Segmented tabs. items = [{ value, label, count? }]. */
 export function Tabs({ items, value, onChange, label = "Views" }) {
   return (
-    <div className={cx(TABS_LIST_LINE, "pv-tabs")} role="tablist" aria-label={label} data-variant="line">
+    <div className={cx(TABS_LIST_LINE, "relative pv-tabs")} role="tablist" aria-label={label} data-variant="line">
+      {/* Continuous tabs: the highlight glides between tabs once measured. */}
+      <TabsGlider activeKey={value} />
       {items.map((item) => (
         <button
           key={item.value}
@@ -346,7 +367,7 @@ export function Tabs({ items, value, onChange, label = "Views" }) {
 export function Skeleton({ width = "100%", height = 12, style, className }) {
   return (
     <span
-      className={cx("block animate-pulse rounded-md bg-foreground/10 pv-skeleton", className)}
+      className={cx("block skeleton-shimmer rounded-md bg-foreground/10 pv-skeleton", className)}
       style={{ width, height, ...style }}
       aria-hidden="true"
     />
@@ -387,7 +408,7 @@ export function TopLoadingBar({ show }) {
       role="progressbar"
       aria-label="Loading"
     >
-      <div className="h-full w-full bg-primary animate-pulse" />
+      <div className="skeleton-shimmer h-full w-full bg-primary" />
     </div>
   );
 }

@@ -59,8 +59,8 @@ export type KeywordHistoryPoint = {
 };
 
 const DEVICE_STYLE = {
-  desktop: { label: "Desktop", color: "#2563eb" },
-  mobile: { label: "Mobile", color: "#14b8a6" },
+  desktop: { label: "Desktop", color: "var(--chart-1)" },
+  mobile: { label: "Mobile", color: "var(--chart-3)" },
 } as const;
 
 export function KeywordTrendModal({
@@ -246,19 +246,9 @@ export function KeywordTrendModal({
                   series={series}
                   serpDepth={serpDepth}
                   showBottomBand
-                  valueFormatter={(value, item) => {
-                    const payload = item?.payload as Record<string, unknown> | undefined;
-                    const checkedAt = payload?.checkedAt;
-                    const dataKey = item?.dataKey as string | undefined;
-                    if (
-                      typeof checkedAt === "number" &&
-                      typeof dataKey === "string" &&
-                      payload?.[dataKey] === serpDepth
-                    ) {
-                      return "Not found";
-                    }
-                    return String(value);
-                  }}
+                  valueFormatter={(value) =>
+                    value === serpDepth ? "Not found" : String(value)
+                  }
                 />
 
                 <div className="flex items-center justify-end gap-2">

@@ -15,6 +15,10 @@ that document) and every brand on it is fictional.
 
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useReducedMotion } from 'motion/react';
+
+import { BlurInText } from '@/components/landing/BlurInText';
+import { Tilt } from '@/components/motion-primitives/tilt';
 
 import { DEFAULT_UNBRANDED_TARGET } from '@/shared/scoring/promptSetSize';
 import {
@@ -27,7 +31,7 @@ import { Reveal } from '@/components/landing/Reveal';
 import { DomainField } from '@/components/landing/DomainField';
 import { AnswerSheet } from '@/components/landing/AnswerSheet';
 import { EngineRail } from '@/components/landing/EngineRail';
-import { FlowDiagram } from '@/components/charts/FlowDiagram';
+import { FlowDiagram } from '@/components/perceev/charts/FlowDiagram';
 import { Reveal as RevealFlow } from '@/components/landing/Reveal';
 import {
   CapabilityDeck, TrackedSetViz, TrendViz, RivalViz, SourcesViz,
@@ -189,6 +193,50 @@ const FAQ = [
   },
 ];
 
+const SAMPLE_CARD_STYLE = { padding: 'clamp(22px,2.6vw,32px)' };
+
+/**
+ * The evidence section's sample answer. It is the one card the pointer tilts;
+ * the body is split out so the reduced-motion path renders the same markup
+ * inside a plain div instead of a transformed one.
+ *
+ * R2.10.1 — this card is an illustration with fictional brands (NorthPeak,
+ * Brightwave). It carried a precise timestamp, "16 Aug 2026 · 09:14 IST",
+ * which reads as provenance for a real probe. A made-up answer wearing a real
+ * answer's metadata is the exact confusion this page has to avoid.
+ */
+function SampleAnswerBody() {
+  return (
+    <>
+      <div
+        style={{
+          display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap',
+          paddingBottom: 16, borderBottom: '1px solid var(--line-soft)', marginBottom: 18,
+        }}
+      >
+        <span className="chip">{SAMPLE_CARD_ENGINE}</span>
+        <span className="tag">Sample · illustrative brands</span>
+        <span className="chip chip--warn" style={{ marginLeft: 'auto' }}>Rival first</span>
+      </div>
+      <p
+        style={{
+          fontSize: 17, fontWeight: 600, color: 'var(--ink-1)',
+          letterSpacing: '-.02em', marginBottom: 16,
+        }}
+      >
+        &ldquo;best EHR platform for a 200-bed hospital&rdquo;
+      </p>
+      <p style={{ fontSize: 16, lineHeight: 1.85, color: 'var(--ink-2)' }}>
+        For hospitals in the 150–300 bed range, <mark className="lit-rival">NorthPeak</mark>{' '}
+        is the most frequently recommended platform, largely on the strength of its
+        NABH-aligned reporting. <mark className="lit-you">Brightwave</mark> is named
+        alongside it for outcome dashboards and readmission tracking, and is often preferred
+        where clinical analytics matter more than billing workflow.
+      </p>
+    </>
+  );
+}
+
 const CHECK = (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--good)"
     strokeWidth="3" aria-hidden="true">
@@ -198,6 +246,9 @@ const CHECK = (
 
 export default function Landing() {
   const router = useRouter();
+  // Tilt is pointer-driven, so prefers-reduced-motion swaps it for a plain
+  // card rather than leaving a transform the media query cannot reach.
+  const reduceMotion = useReducedMotion();
 
   const viewSample = () => {
     saveScan({ ...SAMPLE_RESULT, isSample: true });
@@ -214,7 +265,10 @@ export default function Landing() {
           <div>
             <Reveal as="span" className="tag tag--brand">Answer-engine intelligence</Reveal>
             <Reveal as="h1" delay={60}>
-              The answer names two brands. <em>Is one of them yours?</em>
+              <BlurInText>The answer names two brands.</BlurInText>{' '}
+              <em>
+                <BlurInText delayMs={350}>Is one of them yours?</BlurInText>
+              </em>
             </Reveal>
             <Reveal as="p" className="lede hero__sub" delay={120}>
               Perceev asks {ENGINE_SENTENCE} the {TRACKED} unbranded
@@ -318,37 +372,16 @@ export default function Landing() {
               </Link>
             </Reveal>
 
-            <Reveal className="card" delay={100} style={{ padding: 'clamp(22px,2.6vw,32px)' }}>
-              <div
-                style={{
-                  display: 'flex', gap: 9, alignItems: 'center', flexWrap: 'wrap',
-                  paddingBottom: 16, borderBottom: '1px solid var(--line-soft)', marginBottom: 18,
-                }}
-              >
-                {/* R2.10.1 — this card is an illustration with fictional brands
-                    (NorthPeak, Brightwave). It carried a precise timestamp,
-                    "16 Aug 2026 · 09:14 IST", which reads as provenance for a
-                    real probe. A made-up answer wearing a real answer's
-                    metadata is the exact confusion this page has to avoid. */}
-                <span className="chip">{SAMPLE_CARD_ENGINE}</span>
-                <span className="tag">Sample · illustrative brands</span>
-                <span className="chip chip--warn" style={{ marginLeft: 'auto' }}>Rival first</span>
-              </div>
-              <p
-                style={{
-                  fontSize: 17, fontWeight: 600, color: 'var(--ink-1)',
-                  letterSpacing: '-.02em', marginBottom: 16,
-                }}
-              >
-                &ldquo;best EHR platform for a 200-bed hospital&rdquo;
-              </p>
-              <p style={{ fontSize: 16, lineHeight: 1.85, color: 'var(--ink-2)' }}>
-                For hospitals in the 150–300 bed range, <mark className="lit-rival">NorthPeak</mark>{' '}
-                is the most frequently recommended platform, largely on the strength of its
-                NABH-aligned reporting. <mark className="lit-you">Brightwave</mark> is named
-                alongside it for outcome dashboards and readmission tracking, and is often preferred
-                where clinical analytics matter more than billing workflow.
-              </p>
+            <Reveal delay={100}>
+              {reduceMotion ? (
+                <div className="card" style={SAMPLE_CARD_STYLE}>
+                  <SampleAnswerBody />
+                </div>
+              ) : (
+                <Tilt rotationFactor={6} className="card" style={SAMPLE_CARD_STYLE}>
+                  <SampleAnswerBody />
+                </Tilt>
+              )}
             </Reveal>
           </div>
         </div>

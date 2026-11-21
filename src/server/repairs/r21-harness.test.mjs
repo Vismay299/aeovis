@@ -10,7 +10,7 @@ import { REPAIR_CASE_COUNTS, allCaseIds, assertInventory, declaredInventory, val
 import { buildSampleManifest, isSampleRecord, assertSampleNotMutated } from "../../shared/sampleIsolation.js";
 import { createObservationEnvelope } from "../../shared/provenance.js";
 import { summarizeEngineSlice } from "../../shared/scoring/enginePipeline.js";
-import { validateMarketingClaims } from "../publicSite.js";
+import { validateMarketingClaims } from "../publicSite.mjs";
 import { hasUnverifiedCitations, CITATIONS_STATE } from "../../shared/engines/perplexity.js";
 
 /**

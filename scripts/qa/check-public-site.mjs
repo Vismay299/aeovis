@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getPublicUrlInventory, PRIVATE_ROUTE_PREFIXES } from "../../src/server/publicSite.js";
+import { getPublicUrlInventory, PRIVATE_ROUTE_PREFIXES } from "../../src/server/publicSite.mjs";
 
 const origin = process.argv[2] || "http://127.0.0.1:3328";
 const read = (pathname, options = {}) => fetch(new URL(pathname, origin), {

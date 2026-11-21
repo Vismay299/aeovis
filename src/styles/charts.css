@@ -1,0 +1,82 @@
+/* Tokens for the Bklit chart components in src/components/charts.
+
+   The library ships its own light and dark values; here every one is drawn
+   from the Onyx scheme instead, so a chart follows whichever variant of the
+   scheme is active. Series colours are passed by the charts themselves:
+   --chart-you for the owned brand, --chart-rival-* for rivals. */
+
+@theme inline {
+  --color-chart-line-primary: var(--chart-line-primary);
+  --color-chart-line-secondary: var(--chart-line-secondary);
+  --color-chart-brush-border: var(--chart-brush-border);
+  --color-chart-tooltip-background: var(--chart-tooltip-background);
+  --color-chart-tooltip-foreground: var(--chart-tooltip-foreground);
+  --color-chart-tooltip-muted: var(--chart-tooltip-muted);
+  --color-chart-scale-01: var(--chart-scale-01);
+  --color-chart-scale-02: var(--chart-scale-02);
+  --color-chart-scale-03: var(--chart-scale-03);
+  --color-chart-scale-04: var(--chart-scale-04);
+  --color-chart-scale-05: var(--chart-scale-05);
+  --color-chart-scale-mix: var(--chart-scale-mix);
+  --color-chart-scale-pattern-color: var(--chart-scale-pattern-color);
+  --color-chart-segment-line: var(--chart-segment-line);
+  --color-chart-segment-background: var(--chart-segment-background);
+  --color-chart-marker-badge-foreground: var(--chart-marker-badge-foreground);
+  --color-chart-marker-badge-background: var(--chart-marker-badge-background);
+  --color-chart-marker-foreground: var(--chart-marker-foreground);
+  --color-chart-marker-border: var(--chart-marker-border);
+  --color-chart-marker-background: var(--chart-marker-background);
+  --color-chart-indicator-secondary-color: var(--chart-indicator-secondary-color);
+  --color-chart-indicator-color: var(--chart-indicator-color);
+  --color-chart-label: var(--chart-label);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-crosshair: var(--chart-crosshair);
+  --color-chart-foreground-muted: var(--chart-foreground-muted);
+  --color-chart-foreground: var(--chart-foreground);
+  --color-chart-background: var(--chart-background);
+  --color-chart-negative: var(--chart-negative);
+  --color-chart-positive: var(--chart-positive);
+  --color-legend: var(--legend);
+  --color-legend-foreground: var(--legend-foreground);
+  --color-legend-muted: var(--legend-muted);
+  --color-legend-muted-foreground: var(--legend-muted-foreground);
+  --color-legend-track: var(--legend-track);
+}
+
+:root {
+  --chart-positive: var(--success);
+  --chart-negative: var(--destructive);
+  --chart-background: var(--card);
+  --chart-foreground: color-mix(in oklab, var(--foreground) 52%, var(--background));
+  --chart-foreground-muted: color-mix(in oklab, var(--foreground) 66%, var(--background));
+  --chart-line-primary: var(--chart-you);
+  --chart-line-secondary: var(--chart-rival-1);
+  --chart-crosshair: color-mix(in oklab, var(--foreground) 46%, var(--background));
+  --chart-grid: color-mix(in oklab, var(--foreground) 11%, var(--background));
+  --chart-brush-border: var(--chart-grid);
+  --chart-tooltip-background: var(--popover);
+  --chart-tooltip-foreground: var(--popover-foreground);
+  --chart-tooltip-muted: var(--muted-foreground);
+  --chart-marker-background: color-mix(in oklab, var(--foreground) 14%, var(--background));
+  --chart-marker-border: color-mix(in oklab, var(--foreground) 30%, var(--background));
+  --chart-marker-foreground: color-mix(in oklab, var(--foreground) 90%, var(--background));
+  --chart-label: color-mix(in oklab, var(--foreground) 72%, var(--background));
+  --chart-scale-mix: color-mix(in oklab, var(--foreground) 14%, var(--background));
+  --chart-scale-01: color-mix(in oklab, var(--foreground) 18%, var(--background));
+  --chart-scale-02: color-mix(in oklab, var(--chart-you) 35%, var(--chart-scale-mix));
+  --chart-scale-03: color-mix(in oklab, var(--chart-you) 55%, var(--chart-scale-mix));
+  --chart-scale-04: color-mix(in oklab, var(--chart-you) 78%, var(--chart-scale-mix));
+  --chart-scale-05: var(--chart-you);
+  --chart-scale-pattern-color: var(--background);
+  --chart-indicator-color: var(--foreground);
+  --chart-indicator-secondary-color: var(--background);
+  --chart-marker-badge-background: var(--foreground);
+  --chart-marker-badge-foreground: var(--background);
+  --chart-segment-background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  --chart-segment-line: color-mix(in oklab, var(--foreground) 25%, transparent);
+  --legend: var(--popover);
+  --legend-foreground: var(--foreground);
+  --legend-muted: var(--muted);
+  --legend-muted-foreground: var(--muted-foreground);
+  --legend-track: color-mix(in oklab, var(--foreground) 14%, var(--background));
+}

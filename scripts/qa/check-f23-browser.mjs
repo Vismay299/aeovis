@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { openPortal, SUPABASE_URL } from "./portalFixtureHarness.mjs";
+import { holdToConfirm } from "./confirmGestures.mjs";
 // Every body the page POSTs/PUTs/DELETEs is checked against the schemas the
 // real routes use, so a page that sends something the real route would refuse
 // fails here, not in prod.
@@ -26,6 +27,19 @@ try {
   // worker path, but only the root install exists); same fallback as F22.
   ({ chromium } = await import("playwright"));
   playwrightSource = "root node_modules/playwright (fallback; worker/node_modules/playwright missing)";
+}
+
+// The iframe element can be visible while its frame is still on about:blank,
+// before the /r/ document commits; wait for the navigation instead of reading
+// page.frame() once.
+async function waitForReportFrame(page, timeout = 15000) {
+  const started = Date.now();
+  for (;;) {
+    const frame = page.frame({ url: /\/r\// });
+    if (frame) return frame;
+    if (Date.now() - started > timeout) return null;
+    await page.waitForTimeout(100);
+  }
 }
 
 const BENIGN_ID = "11111111-1111-1111-1111-111111111111";
@@ -377,7 +391,7 @@ try {
       detail.state.detailHold = null;
       const frame = page.locator(`iframe[title="${BENIGN_TITLE}"]`);
       await frame.waitFor({ state: "visible" });
-      const reportFrame = page.frame({ url: /\/r\// });
+      const reportFrame = await waitForReportFrame(page);
       assert.ok(reportFrame, "report frame attached");
       await reportFrame.waitForLoadState("load");
       // An iframe sized with a percentage inside a min-height-only parent falls back
@@ -470,7 +484,8 @@ try {
       await page.getByRole("menuitem", { name: "Delete" }).click();
       await page.getByText(`Delete “${BENIGN_TITLE}”?`).waitFor();
       await page.getByText("This cannot be undone. A public link stops working.").waitFor();
-      await page.getByRole("button", { name: "Delete report" }).click();
+      // Destructive confirms are hold-to-confirm; a plain click does not delete.
+      await holdToConfirm(page.getByRole("button", { name: "Delete report" }));
       await page.getByText("Report deleted").waitFor();
       await page.waitForURL(new URL("/portal/reports", origin).href);
       await page.getByRole("link", { name: BENIGN_TITLE }).waitFor({ state: "detached" });
@@ -525,7 +540,7 @@ try {
       await page.getByRole("menuitem", { name: "Delete" }).click();
       await page.getByText("Delete “Quarterly business review v2”?").waitFor();
       await page.getByText("Reports already written from it are not affected.").waitFor();
-      await page.getByRole("button", { name: "Delete template" }).click();
+      await holdToConfirm(page.getByRole("button", { name: "Delete template" }));
       await page.getByText("Template deleted").waitFor();
       await page.getByRole("button", { name: "Quarterly business review v2", exact: true }).waitFor({ state: "detached" });
       await page.getByRole("button", { name: "Monthly client check-in", exact: true }).waitFor();
@@ -556,7 +571,7 @@ try {
     try {
       await page.goto(new URL(`/portal/reports/${HOSTILE_ID}`, origin).href, { waitUntil: "networkidle" });
       await page.locator('iframe[title="Acme Tees hostile fixture"]').waitFor({ state: "visible" });
-      const frame = page.frame({ url: /\/r\// });
+      const frame = await waitForReportFrame(page);
       assert.ok(frame, "hostile frame attached");
       await frame.waitForLoadState("load");
       // The served bytes are the raw hostile fixture; the sandbox + CSP keep

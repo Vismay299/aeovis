@@ -5,20 +5,15 @@
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
 import type { ReactNode } from "react";
-import { CircleAlert } from "lucide-react";
 import { EmptyState } from "@/components/app/EmptyState";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
+import { InlineAlert } from "@/components/app/InlineAlert";
 import { Button } from "@/components/ui/button";
 
 /**
  * A failure message with an optional retry.
  *
  * - `inline`: red text and a small button, inside a card or a table.
- * - `card`: a destructive Alert, above or in place of a section.
+ * - `card`: the inline alert, above or in place of a section.
  * - `page`: a centered block that replaces the whole page content.
  */
 export function ErrorState({
@@ -76,12 +71,16 @@ export function ErrorState({
     );
   }
 
+  // T8: the card is the locked inline alert. Its retry is the caller's real
+  // refetch, pending while that request runs; the next render is the result.
   return (
-    <Alert variant="destructive">
-      <CircleAlert aria-hidden />
-      <AlertTitle>{title ?? message}</AlertTitle>
-      {title ? <AlertDescription>{message}</AlertDescription> : null}
-      {button ? <div className="col-start-2 mt-2">{button}</div> : null}
-    </Alert>
+    <InlineAlert
+      tone="error"
+      title={title ?? message}
+      message={title ? message : undefined}
+      onRetry={action ? undefined : onRetry}
+      retrying={isRetrying}
+      action={action}
+    />
   );
 }

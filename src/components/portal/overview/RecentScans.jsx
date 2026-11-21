@@ -25,7 +25,7 @@ export default function RecentScans({ overview, scan }) {
     );
   } else {
     body = (
-      <div className="divide-y divide-border pv-list">
+      <div className="stagger-children divide-y divide-border pv-list">
         {scans.map((item) => {
           const tracked = toNumber(item.prompts_tracked);
           const mentioned = toNumber(item.prompts_mentioned);

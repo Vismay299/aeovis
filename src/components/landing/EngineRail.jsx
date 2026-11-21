@@ -11,7 +11,7 @@
  */
 
 import { Reveal } from '@/components/landing/Reveal';
-import { Gauge } from '@/components/charts/Gauge';
+import { Gauge } from '@/components/perceev/charts/Gauge';
 
 /** A finite number, or a numeric string, or nothing. Anything else is not a reading. */
 const finite = (value) => {

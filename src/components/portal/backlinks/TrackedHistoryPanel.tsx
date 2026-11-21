@@ -1,26 +1,23 @@
 "use client";
 
-import { Line, LineChart } from "recharts";
+import { curveMonotoneX } from "d3-shape";
 import {
-  ChartGrid,
-  ChartXAxis,
-  ChartYAxis,
-} from "@/components/app/ChartAxes";
-import {
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
+  Grid,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+} from "@/components/charts";
+import { TooltipContent } from "@/components/charts/tooltip";
+import { ChartLegend } from "@/components/app/ChartLegend";
 import { formatNumber, type BacklinksSnapshot } from "@/shared/backlinks";
 import type { SnapshotInterval } from "./hooks/useSnapshotTargets";
 
-const config = {
-  backlinks: { label: "Backlinks", color: "#2563eb" },
-  referringDomains: { label: "Referring domains", color: "#14b8a6" },
-} satisfies ChartConfig;
+const SERIES = [
+  { key: "backlinks", label: "Backlinks", color: "var(--chart-1)" },
+  { key: "referringDomains", label: "Referring domains", color: "var(--chart-3)" },
+] as const;
 
 type ChartPoint = {
   date: string;
@@ -40,6 +37,9 @@ export function TrackedHistoryPanel({
   const cadence = interval ?? inferInterval(snapshots);
   const points = withMissingPeriods(snapshots, cadence);
   const firstDate = formatDate(snapshots[0].capturedOn);
+  // Missing periods are null rows: the lines break there instead of joining.
+  const rows = points.map((point) => ({ ...point, time: dayToTime(point.date) }));
+  const labels = rows.map((row) => formatMonth(row.date));
 
   return (
     <section className="space-y-2 rounded-lg border border-border p-3" aria-labelledby="tracked-history-title">
@@ -61,61 +61,67 @@ export function TrackedHistoryPanel({
           </p>
         </div>
       ) : (
-        <ChartContainer config={config} className="h-56" aria-label="Backlink trend chart">
-          <>
-            <div className="sr-only">
-              <table>
-                <caption>Tracked backlink trend data</caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Date</th>
-                    <th scope="col">Backlinks</th>
-                    <th scope="col">Referring domains</th>
+        <div className="flex h-56 flex-col" aria-label="Backlink trend chart">
+          <div className="sr-only">
+            <table>
+              <caption>Tracked backlink trend data</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Date</th>
+                  <th scope="col">Backlinks</th>
+                  <th scope="col">Referring domains</th>
+                </tr>
+              </thead>
+              <tbody>
+                {points.map((point, index) => (
+                  <tr key={`${point.date}-${index}`}>
+                    <td>{point.date}</td>
+                    <td>{formatNumber(point.backlinks)}</td>
+                    <td>{formatNumber(point.referringDomains)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {points.map((point, index) => (
-                    <tr key={`${point.date}-${index}`}>
-                      <td>{point.date}</td>
-                      <td>{formatNumber(point.backlinks)}</td>
-                      <td>{formatNumber(point.referringDomains)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <LineChart data={points} margin={{ left: 8, right: 8, top: 8, bottom: 0 }}>
-              <ChartGrid />
-              <ChartXAxis dataKey="date" tickFormatter={formatMonth} minTickGap={24} />
-              <ChartYAxis width={60} tickFormatter={formatAxisValue} />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    labelFormatter={(value) => formatDate(String(value))}
-                    valueFormatter={(value) => typeof value === "number" ? formatNumber(value) : "—"}
-                  />
-                }
-              />
-              <ChartLegend content={<ChartLegendContent />} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <LineChart
+            data={rows}
+            xDataKey="time"
+            aspectRatio=""
+            className="min-h-0 flex-1"
+            margin={{ left: 60, right: 8, top: 8, bottom: 32 }}
+          >
+            <Grid horizontal />
+            {SERIES.map((series) => (
               <Line
-                type="monotone"
-                dataKey="backlinks"
-                stroke="var(--color-backlinks)"
+                key={series.key}
+                dataKey={series.key}
+                stroke={series.color}
                 strokeWidth={2}
-                dot={false}
-                connectNulls={false}
+                curve={curveMonotoneX}
+                fadeEdges={false}
               />
-              <Line
-                type="monotone"
-                dataKey="referringDomains"
-                stroke="var(--color-referringDomains)"
-                strokeWidth={2}
-                dot={false}
-                connectNulls={false}
-              />
-            </LineChart>
-          </>
-        </ChartContainer>
+            ))}
+            <YAxis formatValue={formatAxisValue} />
+            <XAxis labels={labels} />
+            <ChartTooltip
+              dateLabels={labels}
+              content={({ point }) => (
+                <TooltipContent
+                  title={formatDate(String(point.date))}
+                  rows={SERIES.map((series) => {
+                    const value = point[series.key];
+                    return {
+                      color: series.color,
+                      label: series.label,
+                      value: typeof value === "number" ? formatNumber(value) : "—",
+                    };
+                  })}
+                />
+              )}
+            />
+          </LineChart>
+          <ChartLegend items={SERIES} />
+        </div>
       )}
     </section>
   );
@@ -177,6 +183,11 @@ function formatDate(value: string) {
   const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+}
+
+/** "YYYY-MM-DD" at UTC midnight, matching how the periods are stepped. */
+function dayToTime(value: string) {
+  return new Date(`${value.slice(0, 10)}T00:00:00.000Z`).getTime();
 }
 
 function formatMonth(value: unknown) {

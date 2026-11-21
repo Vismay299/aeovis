@@ -88,7 +88,8 @@ const viewModule = await compileJsx(VIEW_PATH, {
     ["@/shared/scoring/citations", { extractBrandDomain, __esModule: true }],
     ["./SectionStrap", { SectionStrap: passThrough, __esModule: true }],
   ]),
-  autoStub: ["@/components/perceev/", "lucide-react"],
+  // The view's alerts are not under test here; RivalCrawlRow renders no alert.
+  autoStub: ["@/components/perceev/", "@/components/app/InlineAlert", "lucide-react"],
   exposeInternals: ["RivalCrawlRow"],
 });
 
@@ -766,7 +767,8 @@ test("R3.7.8 GUARD — CrawlabilityView renders the derived primary outcome", ()
   assert.match(VIEW, /data-actionable=\{primaryOutcome\.actionable\}/, "and whose problem it is");
   assert.match(
     VIEW,
-    /variant=\{primaryOutcome\.tone === "crit" \? "crit" : "warn"\}/,
+    // T8: the banner is the InlineAlert, whose severity prop is `tone`.
+    /tone=\{primaryOutcome\.tone === "crit" \? "error" : "warning"\}/,
     "the alert's severity follows the derived tone rather than being fixed at warn for everything"
   );
 

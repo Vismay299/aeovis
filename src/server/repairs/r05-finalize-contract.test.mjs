@@ -55,9 +55,9 @@ for (const valid of [20, 28, 29]) {
 test("R05-24 — finalizer, stored JSON, API, rendered hero and export preserve the same qualified contract", async () => {
   const source = await readFile(new URL("../../components/dashboard/ScoreBand.jsx", import.meta.url), "utf8");
   const compiled = transform(source, { transforms: ["jsx", "imports"] }).code;
-  const module = { exports: {} };
-  new Function("module", "exports", "React", compiled)(module, module.exports, React);
-  const ScoreBand = module.exports.ScoreBand;
+  const loaded = { exports: {} };
+  new Function("module", "exports", "React", compiled)(loaded, loaded.exports, React);
+  const ScoreBand = loaded.exports.ScoreBand;
   for (const fixture of [
     { planned: 30, valid: 30, mentioned: 0, expected: 0 },
     { planned: 30, valid: 0, expected: null },

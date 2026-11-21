@@ -4,28 +4,47 @@
 
 "use client";
 
-import type { ComponentProps } from "react";
-import { Line, LineChart, ReferenceArea } from "recharts";
+import { curveMonotoneX } from "d3-shape";
 import { TrendingUp } from "lucide-react";
+import {
+  ChartTooltip,
+  Grid,
+  Line,
+  LineChart,
+  ReferenceArea,
+  XAxis,
+  YAxis,
+} from "@/components/charts";
+import { TooltipContent } from "@/components/charts/tooltip";
 import { EmptyState } from "@/components/app/EmptyState";
 import { SegmentedToggle } from "@/components/app/SegmentedToggle";
-import {
-  ChartGrid,
-  ChartXAxis,
-  ChartYAxis,
-} from "@/components/app/ChartAxes";
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
 
 export interface TrendSeries {
   dataKey: string;
   name: string;
   color: string;
-  strokeDasharray?: string;
+}
+
+/** Formats one plotted position for the tooltip. */
+export type RankValueFormatter = (
+  value: number,
+  dataKey: string,
+  point: Record<string, unknown>,
+) => string;
+
+/** The chart's x key: check time in epoch milliseconds. */
+export const TIME_KEY = "checkedAt";
+
+/**
+ * Rank tick values from 1 down to `serpDepth`: 1, then round steps. The
+ * position axis is reversed, so 1 (best) is drawn at the top.
+ */
+export function rankTicks(serpDepth: number): number[] {
+  const depth = Math.max(1, Math.round(serpDepth));
+  const step = depth <= 10 ? 2 : depth <= 20 ? 5 : depth <= 50 ? 10 : 25;
+  const ticks = [1];
+  for (let value = step; value <= depth; value += step) ticks.push(value);
+  return ticks;
 }
 
 export function RankTrendChart({
@@ -38,12 +57,11 @@ export function RankTrendChart({
   data: Array<Record<string, unknown>>;
   series: TrendSeries[];
   serpDepth: number;
-  valueFormatter?: ComponentProps<typeof ChartTooltipContent>["valueFormatter"];
+  valueFormatter?: RankValueFormatter;
   showBottomBand?: boolean;
 }) {
-  const config: ChartConfig = Object.fromEntries(
-    series.map((s) => [s.dataKey, { label: s.name, color: s.color }]),
-  );
+  const ticks = rankTicks(serpDepth);
+  const labels = data.map((row) => formatDateTick(row[TIME_KEY]));
 
   return (
     <div className="space-y-1">
@@ -53,61 +71,66 @@ export function RankTrendChart({
           Better <span aria-hidden>↑</span>
         </span>
       </div>
-      <ChartContainer config={config} className="h-56">
-        <LineChart
-          data={data}
-          margin={{ top: 8, right: 8, bottom: 0, left: 0 }}
-        >
-          <ChartGrid />
-          {showBottomBand && (
-            <ReferenceArea
-              y1={serpDepth - 0.5}
-              y2={serpDepth}
-              fill="currentColor"
-              fillOpacity={0.06}
-              ifOverflow="extendDomain"
+      <LineChart
+        data={data}
+        xDataKey={TIME_KEY}
+        aspectRatio=""
+        className="h-56"
+        animationDuration={700}
+        margin={{ top: 8, right: 8, bottom: 32, left: 32 }}
+        // Reversed position axis: [serpDepth, 1] puts rank 1 at the top.
+        yDomainOverrides={{ left: () => [serpDepth, 1] }}
+      >
+        <Grid horizontal rowTickValues={ticks} />
+        {showBottomBand ? (
+          <ReferenceArea y1={serpDepth - 0.5} y2={serpDepth} />
+        ) : null}
+        {series.map((s) => (
+          <Line
+            key={s.dataKey}
+            dataKey={s.dataKey}
+            stroke={s.color}
+            strokeWidth={2}
+            curve={curveMonotoneX}
+            fadeEdges={false}
+          />
+        ))}
+        <YAxis tickValues={ticks} allowDecimals={false} />
+        <XAxis labels={labels} />
+        <ChartTooltip
+          dateLabels={labels}
+          content={({ point }) => (
+            <TooltipContent
+              title={formatDateLabel(point[TIME_KEY])}
+              rows={series.flatMap((s) => {
+                const value = point[s.dataKey];
+                // A device with no check at this time has no row, as before.
+                if (typeof value !== "number") return [];
+                return [
+                  {
+                    color: s.color,
+                    label: s.name,
+                    value: valueFormatter
+                      ? valueFormatter(value, s.dataKey, point)
+                      : String(value),
+                  },
+                ];
+              })}
             />
           )}
-          <ChartXAxis {...TIME_AXIS} />
-          <ChartYAxis
-            reversed
-            domain={[1, serpDepth]}
-            allowDecimals={false}
-            width={32}
-          />
-          <ChartTooltip
-            content={
-              <ChartTooltipContent
-                labelFormatter={formatDateLabel}
-                valueFormatter={valueFormatter}
-              />
-            }
-          />
-          {series.map((s) => (
-            <Line
-              key={s.dataKey}
-              type="monotone"
-              dataKey={s.dataKey}
-              stroke={s.color}
-              strokeWidth={2}
-              strokeDasharray={s.strokeDasharray}
-              dot={{ r: 2 }}
-              activeDot={{ r: 4 }}
-              connectNulls={false}
-              isAnimationActive={false}
-            />
-          ))}
-        </LineChart>
-      </ChartContainer>
+        />
+      </LineChart>
     </div>
   );
 }
 
-function formatDateTick(value: number): string {
-  return new Date(value).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+function formatDateTick(value: unknown): string {
+  return typeof value === "number"
+    ? new Date(value).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      })
+    : "";
 }
 
 export function formatDateLabel(label: unknown): string {
@@ -120,13 +143,10 @@ export function formatDateLabel(label: unknown): string {
     : "";
 }
 
-export const TIME_AXIS = {
-  dataKey: "checkedAt",
-  type: "number",
-  scale: "time",
-  domain: ["dataMin", "dataMax"],
-  tickFormatter: formatDateTick,
-} as const;
+/** X-axis tick labels for rows keyed by {@link TIME_KEY}. */
+export function timeTickLabels(rows: ReadonlyArray<Record<string, unknown>>) {
+  return rows.map((row) => formatDateTick(row[TIME_KEY]));
+}
 
 const TREND_RANGES = [
   { value: "30", label: "30d", icon: null },

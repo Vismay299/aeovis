@@ -24,6 +24,9 @@ async function loadDialog() {
       ["@/components/ui/skeleton", anyNamedExport],
       ["@/shared/pricing", await import("../../../shared/pricing.ts")],
       ["@/shared/telemetry/client", { trackEvent() {} }],
+      // The slider is opt-in (`slideToConfirm`), and every proof here leaves it
+      // off, so this stub is never rendered; the button path is what is proven.
+      ["@/components/kokonutui/slide-to-confirm", { default: () => null }],
     ]),
   });
 }

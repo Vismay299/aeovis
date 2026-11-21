@@ -1844,6 +1844,29 @@ function renderStubs() {
         }))),
       }),
     ],
+    // page.js asks for the motion preference to choose between Tilt and a
+    // plain card. A static render has no pointer and no media query, so this
+    // answers "no preference"; both branches carry the same words.
+    ["motion/react", { __esModule: true, useReducedMotion: () => false }],
+    // The landing headline and evidence card are motion wrappers. They are
+    // stubbed through to their children deliberately: this proof is about the
+    // WORDS on the page, and both components render the text they are given
+    // unchanged (TextEffect splits it into words, Tilt boxes it). A stub that
+    // dropped children would make every text assertion below vacuous.
+    [
+      "@/components/motion-primitives/text-effect",
+      {
+        __esModule: true,
+        TextEffect: (p) => React.createElement(p.as || "span", { className: p.className }, p.children),
+      },
+    ],
+    [
+      "@/components/motion-primitives/tilt",
+      {
+        __esModule: true,
+        Tilt: (p) => React.createElement("div", { className: p.className, style: p.style }, p.children),
+      },
+    ],
   ]);
 }
 

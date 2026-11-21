@@ -23,6 +23,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { openPortal, SUPABASE_URL } from "./portalFixtureHarness.mjs";
+import { slideToConfirm } from "./confirmGestures.mjs";
 
 let chromium;
 try {
@@ -494,8 +495,17 @@ try {
       await runBtn.click();
 
       // Verify overview card renders metrics
-      await page.getByText("1,840").waitFor({ state: "visible", timeout: 15000 });
-      await page.getByText("312").waitFor({ state: "visible", timeout: 15000 });
+      // Scoped to the overview's metric rows: 312 also appears as the keyword
+      // count ("312 keywords") and in the pager ("1–50 of 312") once the
+      // keywords table loads, so a bare getByText("312") is ambiguous.
+      await page
+        .getByRole("row", { name: /Estimated organic traffic/ })
+        .getByRole("cell", { name: "1,840", exact: true })
+        .waitFor({ state: "visible", timeout: 15000 });
+      await page
+        .getByRole("row", { name: /Organic keywords/ })
+        .getByRole("cell", { name: "312", exact: true })
+        .waitFor({ state: "visible", timeout: 15000 });
 
       // Verify keywords table rendered
       await page.getByText("oversized t shirt").waitFor({ state: "visible", timeout: 15000 });
@@ -1079,7 +1089,9 @@ try {
         state: "visible",
         timeout: 10000,
       });
-      await costDialog.getByRole("button", { name: "Find competitors", exact: true }).click();
+      // The final approval is a slide-to-confirm; Enter on its thumb confirms.
+      const approvedUsd = await slideToConfirm(costDialog, "Find competitors");
+      assert.equal(approvedUsd, 0.018, "the slider approves the quoted $0.018");
 
       await page.getByText("competitor-one.example").waitFor({ state: "visible", timeout: 15000 });
       await page.getByText("competitor-two.example").waitFor({ state: "visible", timeout: 10000 });
@@ -1710,15 +1722,12 @@ try {
         timeout: 15000,
       });
       assert.equal(liveOverviewRequests.length, 2, "manual retry made one second request");
-      const confirmButton = priceDialog.getByRole("button", { name: "Search", exact: true });
       // The shared cost dialog confirms non-scan quotes (its answers guard is
-      // scan-only), so the reader can approve the new price here.
-      assert.equal(
-        await confirmButton.isDisabled(),
-        false,
-        "the price-change dialog offers the newly quoted Search",
-      );
-      await confirmButton.click();
+      // scan-only), so the reader can approve the new price here: the
+      // slide-to-confirm must become enabled and name the new price.
+      const approvedUsd = await slideToConfirm(priceDialog, "Search");
+      // formatUsd shows four places under $1, so $0.06012 reads $0.0601.
+      assert.equal(approvedUsd, 0.0601, `the slider names the new quote, saw ${approvedUsd}`);
       await page.getByText("1,840").waitFor({ state: "visible", timeout: 15000 });
       assert.equal(liveOverviewRequests.length, 3, "approving the new price made one request");
       assert.ok(

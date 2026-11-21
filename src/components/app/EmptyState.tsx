@@ -14,6 +14,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { EmptyArt } from "@/components/app/motion/EmptyArt";
 
 const KIND_ICONS: Record<EmptyStateKind, LucideIcon> = {
   "no-data": Inbox,
@@ -29,6 +30,9 @@ export type EmptyStateKind = "no-data" | "filtered" | "error";
  * `kind` picks the default icon. Say why the region is empty: "no-data" when
  * nothing exists yet, "filtered" when filters hide every row, "error" when the
  * data failed to load. Name only filters and buttons that exist on the page.
+ *
+ * T8: the icon sits on the locked empty-state drawing (`EmptyArt`), and the
+ * title, body and action step in after it. The words are always the caller's.
  */
 export function EmptyState({
   kind = "no-data",
@@ -57,15 +61,13 @@ export function EmptyState({
     >
       <EmptyHeader>
         {Icon ? (
-          <EmptyMedia
-            variant="icon"
-            className={
-              kind === "error"
-                ? "bg-destructive/10 text-destructive"
-                : undefined
-            }
-          >
-            <Icon aria-hidden />
+          <EmptyMedia>
+            <EmptyArt
+              tone={kind === "error" ? "error" : "default"}
+              size={size ?? "default"}
+            >
+              <Icon aria-hidden />
+            </EmptyArt>
           </EmptyMedia>
         ) : null}
         <EmptyTitle>{title}</EmptyTitle>

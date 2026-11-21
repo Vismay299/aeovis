@@ -26,6 +26,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { SuccessCheck } from "@/components/ui/spinner";
+import { RollingNumber } from "@/components/app/motion/RollingNumber";
 import {
   Collapsible,
   CollapsibleContent,
@@ -138,18 +140,44 @@ export function SetupChecklist({
     );
   };
 
+  // T8 — the locked onboarding checklist's progress: one segment per row,
+  // filled for the rows the server marked done. Counted, never recomputed.
+  const doneCount = completed.length;
+  const total = rows.length;
+
   return (
     <section
       aria-label="Setup checklist"
       className="overflow-hidden rounded-xl border border-border bg-card"
     >
-      <header className="border-b border-border px-5 py-5 sm:px-6">
-        <h2 className="text-lg font-semibold">Get started</h2>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Approve your questions, run a scan and connect your tools.
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3 border-b border-border px-5 py-5 sm:px-6">
+        <div className="min-w-0 flex-1 basis-60">
+          <h2 className="text-lg font-semibold">Get started</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Approve your questions, run a scan and connect your tools.
+          </p>
+        </div>
+        <div
+          role="img"
+          aria-label={`${doneCount} of ${total} setup steps done`}
+          className="flex shrink-0 items-center gap-3 pt-1"
+        >
+          <span aria-hidden className="flex items-center gap-1" data-slot="setup-progress">
+            {rows.map((row) => (
+              <span
+                key={row.id}
+                data-done={row.status === "done" || undefined}
+                className="h-4 w-1 rounded-full bg-foreground/12 transition-colors duration-500 data-done:bg-primary"
+              />
+            ))}
+          </span>
+          <span aria-hidden className="min-w-8 text-right font-mono text-sm font-semibold tabular-nums text-muted-foreground">
+            <RollingNumber>{String(doneCount)}</RollingNumber>/{total}
+          </span>
+        </div>
       </header>
       <Accordion
+        className="stagger-children"
         value={selected ? [selected] : []}
         onValueChange={(value) => {
           const next = remaining.find((step) => step.id === value[0])?.id;
@@ -257,13 +285,14 @@ export function SetupChecklist({
             />
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <ul className="space-y-3 px-5 pb-5 sm:px-6">
+            <ul className="stagger-children space-y-3 px-5 pb-5 sm:px-6">
               {completed.map((item) => (
                 <li
                   key={item.id}
                   className="flex items-center gap-3 text-sm text-muted-foreground"
                 >
-                  <Check
+                  {/* The tick draws itself as the done list opens. */}
+                  <SuccessCheck
                     className="size-4 shrink-0 text-success"
                     aria-hidden="true"
                   />

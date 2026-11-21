@@ -8,7 +8,7 @@
  * colour, because losing a question is not an error.
  */
 
-import { RIVAL_RAMP } from '@/components/charts/FlowDiagram';
+import { RIVAL_RAMP } from '@/components/perceev/charts/FlowDiagram';
 import { describeRosterState } from '@/shared/scoring/rosterContinuity';
 
 export const RivalsView = ({

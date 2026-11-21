@@ -23,6 +23,7 @@ import { getSupabaseBrowserClient } from "@/shared/supabase/browser";
 import { setTelemetryIdentity, resetTelemetry } from "@/shared/telemetry/client";
 import { ConsentBanner } from "@/components/app/telemetry/ConsentBanner";
 import { useScanTracker } from "./useScanTracker";
+import { ScanStatusIsland } from "./ScanStatusIsland";
 import { prefetchPriceQuote } from "@/components/app/cost/usePriceQuote";
 import { ScanCostReview } from "./ScanCostReview";
 import { AppShell } from "@/components/app/shell/AppShell";
@@ -409,7 +410,11 @@ export default function PortalShell({ children }) {
   return (
     <PortalContext.Provider value={value}>
       <WorkspaceProvider value={{ brandKey, features, isOwner }}>
-        <AppShell ready={phase === "ready"} banner={<WorkspaceBanners />}>
+        <AppShell
+          ready={phase === "ready"}
+          banner={<WorkspaceBanners />}
+          overlay={<ScanStatusIsland scan={value.scan} />}
+        >
           <TopLoadingBar show={overviewLoading && !overview} />
           <PageFrame>{children}</PageFrame>
           <ScanCostReview />

@@ -180,59 +180,52 @@ try {
 
   await record(
     "F04-B03",
-    "The theme picker changes the theme at once, survives a reload without a light flash, and never reaches the public site.",
+    "One scheme: no theme picker in the account menu, the Onyx scheme is painted from the first frame, and the public site is not an app surface.",
     async () => {
       const { context, page, blockedWrites } = await openPortal(browser, origin, {
         viewport: { width: 1440, height: 1000 },
       });
       try {
-        await page.goto(new URL("/portal", origin).href, { waitUntil: "networkidle" });
-
-        await page.locator('button[aria-label="Open account menu"]').click();
-        await page.locator('[role="menuitemradio"]:has-text("Dark")').click();
-        await page.waitForTimeout(200);
-
-        assert.equal(
-          await page.evaluate(() => document.documentElement.getAttribute("data-theme")),
-          "dark",
-          "the theme changed at once"
-        );
-
-        // Read the attribute at DOMContentLoaded, before the app's own scripts
-        // could touch it: that is what a reader sees on the first paint.
+        // Read the attributes at DOMContentLoaded, before the app's own
+        // scripts could touch them: that is what a reader sees first.
         await page.addInitScript(() => {
           document.addEventListener("DOMContentLoaded", () => {
-            window.__themeAtFirstPaint = document.documentElement.getAttribute("data-theme");
+            window.__paletteAtFirstPaint = document.documentElement.getAttribute("data-palette");
           });
         });
-        await page.reload({ waitUntil: "networkidle" });
+        await page.goto(new URL("/portal", origin).href, { waitUntil: "networkidle" });
+
+        // The app has one scheme (Onyx / White, src/styles/palettes.css); the
+        // System / Light / Dark picker was removed because it changed nothing.
+        await page.locator('button[aria-label="Open account menu"]').click();
+        await page.locator('[role="menu"]').waitFor();
         assert.equal(
-          await page.evaluate(() => window.__themeAtFirstPaint),
+          await page.locator('[role="menuitemradio"]').count(),
+          0,
+          "the account menu offers no theme picker"
+        );
+        await page.keyboard.press("Escape");
+
+        assert.equal(
+          await page.evaluate(() => window.__paletteAtFirstPaint),
+          "onyx",
+          "the Onyx scheme was set before the first paint"
+        );
+        assert.equal(
+          await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme),
           "dark",
-          "the theme was dark at the first paint after a reload"
+          "the app renders as a dark scheme"
         );
 
         await page.goto(new URL("/", origin).href, { waitUntil: "networkidle" });
-        assert.equal(
-          await page.evaluate(() => document.documentElement.getAttribute("data-theme")),
-          "light",
-          "the public site is always light"
-        );
         assert.equal(
           await page.evaluate(() => document.documentElement.getAttribute("data-surface")),
           null,
           "the public site is not an app surface"
         );
 
-        await page.goto(new URL("/portal", origin).href, { waitUntil: "networkidle" });
-        assert.equal(
-          await page.evaluate(() => document.documentElement.getAttribute("data-theme")),
-          "dark",
-          "the app kept the dark theme"
-        );
-
         assert.deepEqual(blockedWrites, [], "the shell wrote to a customer route");
-        return "Dark applied at once, survived the reload without a flash, and never reached the public site.";
+        return "No theme picker, Onyx painted from the first frame, and the public site is not an app surface.";
       } finally {
         await context.close();
       }

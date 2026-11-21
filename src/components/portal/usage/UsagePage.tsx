@@ -24,6 +24,7 @@ import {
   viewerTimeZone,
   type UsageRange,
 } from "./hooks/useUsage";
+import LiquidGauge from "@/components/kokonutui/liquid-gauge";
 import { UsageLimits } from "./UsageLimits";
 import { UsageChart } from "./UsageChart";
 import { UsageByFeature } from "./UsageByFeature";
@@ -95,10 +96,50 @@ function UsageContent({
 }) {
   const partial = usage.totals.unknownUsd > 0;
 
+  // The gauge is read-only and only exists when a monthly cap is stored. A
+  // missing cap is not a zero budget, so nothing is drawn at all.
+  const monthlyCap = usage.position.monthlyCapUsd;
+  const monthSpend = usage.position.monthUsd;
+  const hasBudget =
+    typeof monthlyCap === "number" &&
+    Number.isFinite(monthlyCap) &&
+    monthlyCap > 0 &&
+    typeof monthSpend === "number" &&
+    Number.isFinite(monthSpend);
+  const budgetUsedPct = hasBudget
+    ? Math.min(100, Math.max(0, (monthSpend / monthlyCap) * 100))
+    : 0;
+
   return (
     <div className="space-y-4">
       <div className="grid gap-4 md:grid-cols-2">
         <UsageLimits position={usage.position} timeZone={usage.timeZone} />
+        {hasBudget ? (
+          <Card className="md:col-span-2">
+            <CardContent className="flex flex-wrap items-center justify-between gap-6 py-6">
+              <div className="min-w-0 space-y-1">
+                <div className="text-sm font-medium">Monthly budget</div>
+                <p className="text-2xl font-semibold tabular-nums">
+                  {formatUsd(monthSpend)}
+                  <span className="text-sm font-normal text-muted-foreground">
+                    {` of ${formatUsd(monthlyCap)}`}
+                  </span>
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Resets at the start of the month. Spend is the provider cost already accounted for.
+                </p>
+              </div>
+              <LiquidGauge
+                readOnly
+                label="Monthly budget"
+                value={budgetUsedPct}
+                total={monthlyCap}
+                unit="$"
+                warnAt={85}
+              />
+            </CardContent>
+          </Card>
+        ) : null}
         <p className="text-xs text-muted-foreground md:col-span-2">
           Limits reset at 00:00 UTC.
         </p>

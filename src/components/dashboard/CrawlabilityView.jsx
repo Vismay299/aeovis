@@ -4,9 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Bot, RefreshCw, ShieldAlert, ShieldCheck, ShieldQuestion } from "lucide-react";
 import { Card } from "@/components/perceev/Card";
 import { Badge } from "@/components/perceev/Badge";
-import { Alert } from "@/components/perceev/Alert";
 import { Skeleton } from "@/components/perceev/Skeleton";
 import { KpiCard } from "@/components/perceev/KpiCard";
+import { InlineAlert } from "@/components/app/InlineAlert";
 import { SectionStrap } from "./SectionStrap";
 import { extractBrandDomain } from "@/shared/scoring/citations";
 import {
@@ -50,6 +50,32 @@ function deriveRivalDomains(competitors) {
   return out;
 }
 
+/**
+ * T8 — the crawler files the live check read, as the inline alert's checks.
+ * Every row is the response's own field; a file that is absent or was not
+ * checked is never drawn as a pass.
+ */
+function crawlChecks(data) {
+  let robots;
+  if (!data.fetched_ok || data.robots_txt_status === "error") {
+    robots = { ok: false, status: "Couldn't read" };
+  } else if (data.robots_txt_status === "missing") {
+    robots = { ok: null, status: "Not found" };
+  } else if (data.robots_malformed) {
+    robots = { ok: false, status: "Couldn't fully parse" };
+  } else {
+    robots = { ok: true, status: "Read" };
+  }
+  let llms;
+  if (data.llms_txt_present === true) llms = { ok: true, status: "Found" };
+  else if (data.llms_txt_present === false) llms = { ok: null, status: "Not found" };
+  else llms = { ok: null, status: "Not checked" };
+  return [
+    { name: "robots.txt", ...robots },
+    { name: "llms.txt", ...llms },
+  ];
+}
+
 function StatusBadge({ status }) {
   const meta = STATUS_META[status] || { label: status || "Unknown", badgeVariant: "neutral" };
   return <Badge variant={meta.badgeVariant}>{meta.label}</Badge>;
@@ -91,8 +117,13 @@ export const CrawlabilityView = ({ brand, competitors }) => {
   const [purposeFilter, setPurposeFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
 
+  // T8: a retry from an alert re-runs the same live check but keeps what is on
+  // screen, so the alert itself can show it is checking until the real answer
+  // replaces it. Nothing here decides a result; the response does.
+  const [rechecking, setRechecking] = useState(false);
+
   const fetchAudit = useCallback(
-    async (path) => {
+    async (path, { keep = false } = {}) => {
       if (!brand) {
         setData(null);
         setErrorMessage(
@@ -100,8 +131,12 @@ export const CrawlabilityView = ({ brand, competitors }) => {
         );
         return;
       }
-      setData(undefined);
-      setErrorMessage(null);
+      if (keep) {
+        setRechecking(true);
+      } else {
+        setData(undefined);
+        setErrorMessage(null);
+      }
       try {
         const params = new URLSearchParams({ url: path || "/" });
         if (rivalDomains.length) params.set("compare", rivalDomains.join(","));
@@ -114,10 +149,13 @@ export const CrawlabilityView = ({ brand, competitors }) => {
           setErrorMessage(json?.error || "Failed to audit crawlability.");
           return;
         }
+        setErrorMessage(null);
         setData(json);
       } catch {
         setData(null);
         setErrorMessage("Network error while auditing crawlability. Check your connection and retry.");
+      } finally {
+        if (keep) setRechecking(false);
       }
     },
     [brand, rivalDomains]
@@ -185,45 +223,17 @@ export const CrawlabilityView = ({ brand, competitors }) => {
 
       {/* Fatal error — no domain to audit, or the request itself failed */}
       {data === null && (
-        <Alert
+        <InlineAlert
           data-testid="crawlability-error"
-          variant="crit"
-          title={
-            <div style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
-              <ShieldAlert size={16} />
-              Couldn&apos;t audit crawlability
-            </div>
-          }
-          action={
-            brand ? (
-              <button
-                type="button"
-                onClick={() => fetchAudit(activePath)}
-                style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  background: "transparent",
-                  border: "1px solid var(--crit-border)",
-                  color: "var(--crit)",
-                  borderRadius: "var(--radius-1)",
-                  padding: "6px 12px",
-                  fontFamily: "var(--font-mono)",
-                  fontSize: "10px",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  cursor: "pointer",
-                }}
-              >
-                <RefreshCw size={12} />
-                Retry
-              </button>
-            ) : undefined
-          }
-        >
-          {errorMessage || "Something went wrong while auditing this domain."}
-        </Alert>
+          tone="error"
+          icon={ShieldAlert}
+          title="Couldn't audit crawlability"
+          message={errorMessage || "Something went wrong while auditing this domain."}
+          // Retry re-runs the live GET /api/brands/[brand]/crawlability.
+          onRetry={brand ? () => fetchAudit(activePath, { keep: true }) : undefined}
+          retrying={rechecking}
+          retryLabel="Retry"
+        />
       )}
 
       {/* Ready */}
@@ -310,34 +320,32 @@ export const CrawlabilityView = ({ brand, competitors }) => {
               that now also carries "your domain does not resolve". Nothing
               outside this component selected it. */}
           {primaryOutcome && (
-            <Alert
-              variant={primaryOutcome.tone === "crit" ? "crit" : "warn"}
+            <InlineAlert
+              tone={primaryOutcome.tone === "crit" ? "error" : "warning"}
+              icon={primaryOutcome.actionable === "you" ? ShieldAlert : ShieldQuestion}
               data-testid="crawlability-primary-outcome"
               data-outcome={primaryOutcome.kind}
               data-actionable={primaryOutcome.actionable}
-            >
-              <div style={{ display: "flex", alignItems: "flex-start", gap: "var(--space-2)" }}>
-                {primaryOutcome.actionable === "you" ? (
-                  <ShieldAlert size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
-                ) : (
-                  <ShieldQuestion size={16} style={{ flexShrink: 0, marginTop: "2px" }} />
-                )}
-                <span>
-                  <strong style={{ fontWeight: 600 }}>{primaryOutcome.label}</strong>
-                  <span style={{ color: "var(--text-3)" }}>. {primaryOutcome.detail}</span>
-                </span>
-              </div>
-            </Alert>
+              title={primaryOutcome.label}
+              message={primaryOutcome.detail}
+              checks={crawlChecks(data)}
+              // Re-runs the live check; the checks show what it returns.
+              onRetry={() => fetchAudit(activePath, { keep: true })}
+              retrying={rechecking}
+              retryLabel="Check again"
+            />
           )}
           {data.fetched_ok && data.robots_txt_status === "missing" && (
-            <Alert variant="info">
-              No robots.txt found on {data.domain} — nothing restricts AI crawlers there by default.
-            </Alert>
+            <InlineAlert
+              tone="info"
+              title={`No robots.txt found on ${data.domain} — nothing restricts AI crawlers there by default.`}
+            />
           )}
           {data.robots_malformed && (
-            <Alert variant="warn">
-              robots.txt on {data.domain} couldn&apos;t be fully parsed — results default to open and are unverified.
-            </Alert>
+            <InlineAlert
+              tone="warning"
+              title={`robots.txt on ${data.domain} couldn't be fully parsed — results default to open and are unverified.`}
+            />
           )}
 
           {/* Summary tiles */}

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { openPortal } from "./portalFixtureHarness.mjs";
 import { SUPABASE_URL } from "./portalFixtureHarness.mjs";
+import { holdToConfirm } from "./confirmGestures.mjs";
 
 let chromium;
 try {
@@ -787,7 +788,12 @@ try {
       await page.getByRole("toolbar").getByRole("button", { name: "Delete", exact: true }).click();
       const confirm = page.getByRole("alertdialog");
       await confirm.getByText("Delete keywords?").waitFor();
-      await confirm.getByRole("button", { name: "Delete 1 keyword" }).click();
+      // The delete is hold-to-confirm: a click alone must not delete.
+      const deleteButton = confirm.getByRole("button", { name: "Delete 1 keyword" });
+      await deleteButton.click();
+      await page.waitForTimeout(300);
+      assert.equal(savedRemoveRequests.length, 0, "a plain click on a hold-to-confirm delete must not delete");
+      await holdToConfirm(deleteButton);
       await page.getByText("1 keyword removed").waitFor();
       await until(() => savedRemoveRequests.length === 1, "the remove request did not arrive");
       assert.equal(savedRemoveRequests[0].savedKeywordIds.length, 1);
@@ -817,8 +823,16 @@ try {
       const { page } = tagState;
       await page.getByRole("button", { name: "Tags" }).click();
       await page.getByRole("button", { name: "Manage tags" }).click();
-      await page.getByRole("button", { name: "Delete tag Tees" }).click();
-      await page.getByRole("button", { name: "Delete", exact: true }).click();
+      // Keyboard path: Enter on the trash swaps in the hold-to-confirm Delete
+      // (InlineConfirm), which must take focus so the hold can start there.
+      await page.getByRole("button", { name: "Delete tag Tees" }).press("Enter");
+      const holdDelete = page.getByRole("button", { name: "Delete", exact: true });
+      await holdDelete.waitFor();
+      assert.ok(
+        await holdDelete.evaluate((el) => el === document.activeElement),
+        "the hold-to-confirm Delete takes focus from the trash button",
+      );
+      await holdToConfirm(holdDelete);
       await page.getByText("Could not delete tag. Detach it from all keywords and try again.").waitFor();
     } finally { await tagState.context.close(); }
 
