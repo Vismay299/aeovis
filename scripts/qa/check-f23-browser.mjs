@@ -29,6 +29,19 @@ try {
   playwrightSource = "root node_modules/playwright (fallback; worker/node_modules/playwright missing)";
 }
 
+// The iframe element can be visible while its frame is still on about:blank,
+// before the /r/ document commits; wait for the navigation instead of reading
+// page.frame() once.
+async function waitForReportFrame(page, timeout = 15000) {
+  const started = Date.now();
+  for (;;) {
+    const frame = page.frame({ url: /\/r\// });
+    if (frame) return frame;
+    if (Date.now() - started > timeout) return null;
+    await page.waitForTimeout(100);
+  }
+}
+
 const BENIGN_ID = "11111111-1111-1111-1111-111111111111";
 const HOSTILE_ID = "22222222-2222-2222-2222-222222222222";
 const TOKEN_A = "a".repeat(32);
@@ -378,7 +391,7 @@ try {
       detail.state.detailHold = null;
       const frame = page.locator(`iframe[title="${BENIGN_TITLE}"]`);
       await frame.waitFor({ state: "visible" });
-      const reportFrame = page.frame({ url: /\/r\// });
+      const reportFrame = await waitForReportFrame(page);
       assert.ok(reportFrame, "report frame attached");
       await reportFrame.waitForLoadState("load");
       // An iframe sized with a percentage inside a min-height-only parent falls back
@@ -558,7 +571,7 @@ try {
     try {
       await page.goto(new URL(`/portal/reports/${HOSTILE_ID}`, origin).href, { waitUntil: "networkidle" });
       await page.locator('iframe[title="Acme Tees hostile fixture"]').waitFor({ state: "visible" });
-      const frame = page.frame({ url: /\/r\// });
+      const frame = await waitForReportFrame(page);
       assert.ok(frame, "hostile frame attached");
       await frame.waitForLoadState("load");
       // The served bytes are the raw hostile fixture; the sandbox + CSP keep
