@@ -1,7 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { SiteLogo } from './SiteLogo';
+import Nav from '@/components/landing2/Nav';
+import '@/components/landing2/landing2.css';
 
 export function Wordmark({ className = '', style }) {
   return (
@@ -11,22 +12,16 @@ export function Wordmark({ className = '', style }) {
   );
 }
 
+/**
+ * The public pages' header: the home page's floating nav, with its section
+ * links pointed back at the home page. The spacer clears the fixed bar.
+ */
 export function SiteNav() {
   return (
-    <header className="nav">
-      <div className="shell nav__in">
-        <Link href="/" aria-label="Perceev home"><Wordmark /></Link>
-        <div className="nav__links">
-          <Link href="/#gap">The gap</Link>
-          <Link href="/#work">What it does</Link>
-          <Link href="/methodology">Methodology</Link>
-        </div>
-        <div className="nav__r">
-          <Link className="btn btn--quiet btn--sm" href="/login">Sign in</Link>
-          <Link className="btn btn--primary btn--sm" href="/scan">Run a free probe</Link>
-        </div>
-      </div>
-    </header>
+    <div className="lp2 lp2--chrome">
+      <Nav base="/" />
+      <div className="lp2-nav-spacer" aria-hidden="true" />
+    </div>
   );
 }
 

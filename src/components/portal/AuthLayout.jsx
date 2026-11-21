@@ -4,6 +4,7 @@
 
 import Link from "next/link";
 import { PerceevMark } from "@/components/app/brand/PerceevLogo";
+import AuthBackdrop from "./AuthBackdrop";
 
 /**
  * Shell for the customer sign-in surfaces (login, signup, onboarding, invite
@@ -14,17 +15,18 @@ import { PerceevMark } from "@/components/app/brand/PerceevLogo";
  */
 export default function AuthLayout({ eyebrow = null, title, titleId, subtitle = null, children, footer = null }) {
   return (
-    <div className="flex h-[100dvh] flex-col items-center overflow-y-auto bg-background p-4">
-      <div className="m-auto flex w-full flex-col items-center">
+    <div className="auth-shell relative isolate flex h-[100dvh] flex-col items-center overflow-y-auto bg-background p-4">
+      <AuthBackdrop />
+      <div className="auth-column m-auto flex w-full flex-col items-center">
         <div className="w-full max-w-xs space-y-6">
           <div className="space-y-3 text-center">
             <Link href="/" aria-label="Perceev home" className="inline-flex">
               <PerceevMark className="mx-auto size-10" />
             </Link>
             <div>
-              {eyebrow ? <p className="text-xs text-muted-foreground">{eyebrow}</p> : null}
-              <h1 id={titleId} className="text-xl font-semibold">{title}</h1>
-              {subtitle ? <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
+              {eyebrow ? <p className="app-eyebrow text-xs text-muted-foreground">{eyebrow}</p> : null}
+              <h1 id={titleId} className="auth-title text-xl font-semibold">{title}</h1>
+              {subtitle ? <p className="auth-subtitle mt-1 text-sm text-muted-foreground">{subtitle}</p> : null}
             </div>
           </div>
 

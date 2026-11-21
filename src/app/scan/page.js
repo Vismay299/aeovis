@@ -18,7 +18,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { Wordmark } from '@/components/landing/SiteNav';
+import { PerceevMark } from '@/components/app/brand/PerceevLogo';
+import AuthBackdrop from '@/components/portal/AuthBackdrop';
+import '@/components/landing2/landing2.css';
 import { runScan, saveScan, fetchIndustries, loadScan, clearScan } from '@/shared/api';
 import {
   initialScanProgress,
@@ -160,18 +162,22 @@ export default function Scan() {
 
   return (
     <>
-      <header className="nav">
-        <div className="shell nav__in">
-          <Link href="/" aria-label="Perceev home"><Wordmark /></Link>
-          <span className="tag" style={{ marginLeft: 4 }}>
-            {scanning ? 'Probe running' : 'New probe'}
-          </span>
-          <div className="nav__r">
+      <div className="lp2 lp2--chrome">
+        <header className="lp2-nav" data-scrolled="true">
+          <div className="lp2-nav__bar">
+            <Link href="/" className="lp2-nav__brand" aria-label="Perceev home">
+              <PerceevMark className="lp2-nav__mark" aria-hidden="true" />
+              <span>perceev</span>
+            </Link>
+            <span className="lp2-chip lp2-chip--ghost">
+              {scanning ? 'Probe running' : 'New probe'}
+            </span>
           </div>
-        </div>
-      </header>
+        </header>
+      </div>
+      <AuthBackdrop className="auth-backdrop--page" />
 
-      <div className="scan">
+      <div className="scan scan--lp">
         <div className="scan__in">
           {/* ── entry ──────────────────────────────────────────────── */}
           <div className={`state${scanning ? '' : ' is-on'}`}>

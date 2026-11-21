@@ -1020,3 +1020,8 @@
 }
 .lp2-beam[data-on="true"]::before { animation-play-state: running; }
 @keyframes lp2-beam { to { transform: rotate(360deg); } }
+
+/* ── The nav and footer on other public pages ─────────────────────────── */
+
+.lp2.lp2--chrome { min-height: 0; overflow: visible; background: transparent; }
+.lp2-nav-spacer { height: 88px; }

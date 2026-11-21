@@ -974,6 +974,14 @@ test("Overview renders SetupChecklist only when onboarding_wizard is on, else no
           "@/components/portal/overview/overviewModel",
           { websiteHost: () => "acme.example" },
         ],
+        [
+          "@/components/portal/overview/OverviewHero",
+          {
+            __esModule: true,
+            default: ({ name, description, actions }) =>
+              React.createElement("header", null, React.createElement("h1", null, name), description, actions),
+          },
+        ],
         ["@/components/portal/schedule/NextRunBadge", { NextRunBadge: () => null }],
         [
           "@/components/app/workspace/WorkspaceContext",
