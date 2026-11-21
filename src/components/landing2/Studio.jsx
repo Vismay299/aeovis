@@ -4,7 +4,7 @@ import { createRef, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Zap, Search, LineChart, PenLine, UserCheck, Upload } from "lucide-react";
 import { AnimatedBeam } from "@/components/magicui/animated-beam";
-import { useGsap, gsap } from "./motion";
+import { useGsap, gsap, useInView } from "./motion";
 
 /* The content run as the Studio canvas draws it: one trigger, three agents,
    one person, one hand-off. Copy follows src/components/studio/AgentCanvas.jsx. */
@@ -28,6 +28,7 @@ export default function Studio() {
   const container = useRef(null);
   const refs = useMemo(() => NODES.map(() => createRef()), []);
   const [active, setActive] = useState("you");
+  const flowVisible = useInView(container, "100px");
   const node = NODES.find((n) => n.key === active);
 
   useGsap(root, ({ reduced }) => {
@@ -82,7 +83,7 @@ export default function Studio() {
             );
           })}
 
-          {NODES.slice(0, -1).map((n, i) => (
+          {flowVisible && NODES.slice(0, -1).map((n, i) => (
             <AnimatedBeam
               key={`beam-${n.key}`}
               containerRef={container}
@@ -98,6 +99,7 @@ export default function Studio() {
             />
           ))}
           {/* Sent back with a note: the editor returns a draft to the writer. */}
+          {flowVisible ? (
           <AnimatedBeam
             containerRef={container}
             fromRef={refs[4]}
@@ -112,6 +114,7 @@ export default function Studio() {
             gradientStartColor="rgba(255,255,255,0.7)"
             gradientStopColor="rgba(255,255,255,0.05)"
           />
+          ) : null}
           <span className="lp2-flow__return" aria-hidden="true">send back with a note</span>
         </div>
 
@@ -119,9 +122,9 @@ export default function Studio() {
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={node.key}
-              initial={{ opacity: 0, y: 10, filter: "blur(6px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
               className="lp2-flow__detailinner"
             >

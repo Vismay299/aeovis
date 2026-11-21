@@ -1,10 +1,11 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import Magnet from "@/components/reactbits/Magnet";
 import { BorderBeam } from "@/components/magicui/border-beam";
+import { useInView } from "./motion";
 
 /**
  * The one ask on the page: a domain. It hands the domain to /scan through the
@@ -16,6 +17,8 @@ export default function ScanForm({ size = "lg", testId }) {
   const id = useId();
   const [site, setSite] = useState("");
   const [error, setError] = useState("");
+  const formRef = useRef(null);
+  const inView = useInView(formRef, "0px");
 
   const submit = (event) => {
     event.preventDefault();
@@ -36,7 +39,7 @@ export default function ScanForm({ size = "lg", testId }) {
   };
 
   return (
-    <form className={`lp2-scan lp2-scan--${size}`} onSubmit={submit} noValidate data-testid={testId}>
+    <form ref={formRef} className={`lp2-scan lp2-scan--${size}`} onSubmit={submit} noValidate data-testid={testId}>
       <div className="lp2-scan__field">
         <label htmlFor={id} className="lp2-sr">Your website</label>
         <span className="lp2-scan__prefix" aria-hidden="true">https://</span>
@@ -58,7 +61,9 @@ export default function ScanForm({ size = "lg", testId }) {
             <ArrowRight size={16} strokeWidth={2} aria-hidden="true" />
           </button>
         </Magnet>
-        <BorderBeam size={120} duration={9} colorFrom="#ffffff" colorTo="rgba(255,255,255,0.05)" borderWidth={1} />
+        {inView ? (
+          <BorderBeam size={120} duration={9} colorFrom="#ffffff" colorTo="rgba(255,255,255,0.05)" borderWidth={1} />
+        ) : null}
       </div>
       {error ? (
         <p id={`${id}-err`} className="lp2-scan__err" role="alert">{error}</p>

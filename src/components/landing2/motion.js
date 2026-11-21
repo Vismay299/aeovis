@@ -31,6 +31,19 @@ export function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
 
+/** True while `ref` is within `margin` of the viewport. Starts false (SSR-safe). */
+export function useInView(ref, margin = "200px") {
+  const [inView, setInView] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const io = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting), { rootMargin: margin });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, margin]);
+  return inView;
+}
+
 export function useReducedMotion() {
   const [reduced, setReduced] = useState(false);
   useEffect(() => {

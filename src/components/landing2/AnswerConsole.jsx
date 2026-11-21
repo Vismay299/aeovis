@@ -51,8 +51,8 @@ export default function AnswerConsole() {
       .to(".lp2-console__thinking", { opacity: 0, duration: 0.3 }, "+=0.5")
       .fromTo(
         words,
-        { opacity: 0, filter: "blur(6px)", y: 4 },
-        { opacity: 1, filter: "blur(0px)", y: 0, duration: 0.35, stagger: 0.028, ease: "power2.out" },
+        { opacity: 0, y: 4 },
+        { opacity: 1, y: 0, duration: 0.35, stagger: 0.028, ease: "power2.out" },
         "<",
       )
       .add(() => marks.forEach((m) => m.classList.add("is-lit")), "-=0.4")

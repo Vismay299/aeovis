@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Spotlight } from "@/components/aceternity/spotlight-new";
 import { saveScan } from "@/shared/api";
 import { SAMPLE_RESULT } from "@/shared/mockData";
-import { useGsap, gsap, SplitText } from "./motion";
+import { useGsap, gsap, SplitText, useInView } from "./motion";
 import ScanForm from "./ScanForm";
 import AnswerConsole from "./AnswerConsole";
 import { QUESTION_COUNT, ENGINE_SENTENCE_LIST } from "./sample";
@@ -17,6 +17,7 @@ const Threads = dynamic(() => import("@/components/reactbits/Threads"), { ssr: f
 export default function Hero() {
   const root = useRef(null);
   const router = useRouter();
+  const heroVisible = useInView(root, "0px");
 
   const openSample = () => {
     saveScan({ ...SAMPLE_RESULT, isSample: true });
@@ -29,7 +30,7 @@ export default function Hero() {
     const tl = gsap.timeline({ defaults: { ease: "expo.out" } });
     tl.from(".lp2-hero__eyebrow", { opacity: 0, y: 12, duration: 0.9 })
       .from(split.words, { yPercent: 110, opacity: 0, duration: 1.3, stagger: 0.06 }, "<0.1")
-      .from(".lp2-hero__sub", { opacity: 0, y: 16, filter: "blur(8px)", duration: 1.1 }, "-=0.9")
+      .from(".lp2-hero__sub", { opacity: 0, y: 16, duration: 1.1 }, "-=0.9")
       .from(".lp2-hero__cta > *", { opacity: 0, y: 16, duration: 1, stagger: 0.08 }, "-=0.8")
       .from(".lp2-hero__threads", { opacity: 0, duration: 2.4, ease: "power2.out" }, 0);
 
@@ -64,12 +65,14 @@ export default function Hero() {
           enableMouseInteraction
         />
       </div>
-      <Spotlight
-        gradientFirst="radial-gradient(68.54% 68.72% at 55.02% 31.46%, hsla(0, 0%, 100%, .09) 0, hsla(0, 0%, 80%, .025) 50%, hsla(0, 0%, 60%, 0) 80%)"
-        gradientSecond="radial-gradient(50% 50% at 50% 50%, hsla(0, 0%, 100%, .06) 0, hsla(0, 0%, 80%, .02) 80%, transparent 100%)"
-        gradientThird="radial-gradient(50% 50% at 50% 50%, hsla(0, 0%, 100%, .04) 0, hsla(0, 0%, 70%, .02) 80%, transparent 100%)"
-        duration={9}
-      />
+      {heroVisible ? (
+        <Spotlight
+          gradientFirst="radial-gradient(68.54% 68.72% at 55.02% 31.46%, hsla(0, 0%, 100%, .09) 0, hsla(0, 0%, 80%, .025) 50%, hsla(0, 0%, 60%, 0) 80%)"
+          gradientSecond="radial-gradient(50% 50% at 50% 50%, hsla(0, 0%, 100%, .06) 0, hsla(0, 0%, 80%, .02) 80%, transparent 100%)"
+          gradientThird="radial-gradient(50% 50% at 50% 50%, hsla(0, 0%, 100%, .04) 0, hsla(0, 0%, 70%, .02) 80%, transparent 100%)"
+          duration={9}
+        />
+      ) : null}
       <div className="lp2-hero__vignette" aria-hidden="true" />
 
       <div className="lp2-wrap lp2-hero__grid">

@@ -50,7 +50,7 @@ export default function Sorting() {
           start: "top top",
           end: "+=260%",
           pin: true,
-          scrub: 0.9,
+          scrub: true,
         },
       });
 

@@ -47,7 +47,7 @@ export default function Shift() {
           start: "top top",
           end: "+=230%",
           pin: true,
-          scrub: 0.8,
+          scrub: true,
         },
       });
 
@@ -58,7 +58,6 @@ export default function Shift() {
           y: (i) => (4.5 - i) * 18,
           scaleY: 0.4,
           opacity: 0,
-          filter: "blur(6px)",
           stagger: { each: 0.05, from: "edges" },
           duration: 0.6,
         }, 0.7)

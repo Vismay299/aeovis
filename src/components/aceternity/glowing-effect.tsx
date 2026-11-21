@@ -100,10 +100,10 @@ const GlowingEffect = memo(
     useEffect(() => {
       if (disabled) return;
 
-      const handleScroll = () => handleMove();
+      // Perceev: pointer only. Upstream also re-measured on every scroll event,
+      // which forced a layout read and a masked repaint per card per frame.
       const handlePointerMove = (e: PointerEvent) => handleMove(e);
 
-      window.addEventListener("scroll", handleScroll, { passive: true });
       document.body.addEventListener("pointermove", handlePointerMove, {
         passive: true,
       });
@@ -112,7 +112,6 @@ const GlowingEffect = memo(
         if (animationFrameRef.current) {
           cancelAnimationFrame(animationFrameRef.current);
         }
-        window.removeEventListener("scroll", handleScroll);
         document.body.removeEventListener("pointermove", handlePointerMove);
       };
     }, [handleMove, disabled]);

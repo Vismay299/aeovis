@@ -18,7 +18,6 @@ export default function FinalCta() {
       opacity: 0,
       yPercent: 60,
       rotateX: -70,
-      filter: "blur(8px)",
       stagger: 0.018,
       duration: 1.1,
       ease: "expo.out",
