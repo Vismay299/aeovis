@@ -48,6 +48,10 @@ Four shadcn registries are configured in `components.json` and their components 
 
 Adding more: `npx shadcn add @bklit/<name>` and so on. The CLI also tries to append its own colour variables and a `.dark` variant to `src/app/globals.css` and to create `src/lib/utils.ts`. Undo both: chart tokens live in `src/styles/charts.css` mapped to the scheme, and `cn` lives in `src/shared/utils.ts`. Pass `--path src/components/motion-primitives` for Motion Primitives, which otherwise lands in `src/components/ui`.
 
+## Sample workspace
+
+"See a sample report" opens the real portal on a fictional workspace (Brightwave, a hospital-analytics company) through `/sample`, which sets a cookie; `/sample/exit` and any sign-in clear it. In sample mode the portal skips sign-in, every portal data request is answered in the browser from `src/shared/sample/fixtures` (`sampleFetch.js`), and the server refuses the portal's API routes outright (`src/server/sampleGuard.js` via the middleware), so the sample can never read a real workspace, write or spend. A banner on every page says the data is fictional. The six sample scan reports are computed by the real scan worker and scoring on simulated answers (`scripts/sample/build-sample-reports.mjs`); Analytics data is copied from the browser-test fixtures (`scripts/sample/copy-fixtures.mjs`). `src/shared/sample/sampleMode.test.mjs` guards the isolation and the coverage of every portal page.
+
 ## Retired
 
 Do not restore the split-screen auth showcase, the native workspace `<select>`, the `pv-*` layout classes, OS-driven dark mode on the public website, or a theme switch on public pages.

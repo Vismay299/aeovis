@@ -4,8 +4,8 @@
 //   src/client/features/search-tabs/SearchTabStrip.tsx
 // Modified for Perceev. See THIRD_PARTY_NOTICES.md.
 
-import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Spinner } from "@/components/ui/spinner";
 import type { SearchTab } from "@/shared/query/searchTabsState";
@@ -104,14 +104,28 @@ function SearchTabStatus<I>({
   getQueryConfig: (tab: SearchTab<I>) => SearchTabQueryConfig;
 }) {
   const config = getQueryConfig(tab);
-  const query = useQuery({
-    queryKey: config.queryKey,
-    enabled: false,
-    select: () => null,
-    notifyOnChangeProps: ["dataUpdatedAt", "fetchStatus", "status"],
-    staleTime: config.staleTime,
-    gcTime: config.gcTime,
-  });
+  // Read the tab's query state straight from the cache. A second observer
+  // (useQuery with no queryFn) on the page's own query let a refetch run with
+  // the observer's options, which have no queryFn: "No queryFn was passed",
+  // an error state, a re-render and the same refetch again, until React gave
+  // up with "Maximum update depth exceeded" on the Domain page.
+  const queryClient = useQueryClient();
+  const keyHash = JSON.stringify(config.queryKey);
+  const subscribe = useCallback(
+    (onChange: () => void) => queryClient.getQueryCache().subscribe(onChange),
+    [queryClient],
+  );
+  const readState = useCallback(
+    () => queryClient.getQueryState(config.queryKey),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queryClient, keyHash],
+  );
+  const state = useSyncExternalStore(subscribe, readState, () => undefined);
+  const query = {
+    fetchStatus: state?.fetchStatus ?? "idle",
+    dataUpdatedAt: state?.dataUpdatedAt ?? 0,
+    status: state?.status ?? "pending",
+  };
 
   const isLoading = query.fetchStatus === "fetching";
   const hasResult = query.dataUpdatedAt > 0;

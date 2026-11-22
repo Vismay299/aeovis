@@ -156,8 +156,10 @@ export default function Scan() {
   };
 
   const openSample = () => {
+    // The sample record stays in session storage (the /dashboard sample
+    // report reads it); the visitor lands in the full sample workspace.
     saveScan({ ...SAMPLE_RESULT, isSample: true });
-    router.push('/dashboard');
+    window.location.assign('/sample');
   };
 
   return (

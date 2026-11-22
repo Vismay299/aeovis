@@ -428,6 +428,11 @@ export function BusinessPicker({
             {competitors.length > 0 && (
               <Select
                 value={selectedBusinessId ?? ownBusiness.id}
+                // Without items the trigger shows the selected id, not its label.
+                items={[
+                  { value: ownBusiness.id, label: `Viewing: ${ownBusiness.title} (Your business)` },
+                  ...competitors.map((c) => ({ value: c.id, label: `Viewing: ${c.title}` })),
+                ]}
                 onValueChange={(val) =>
                   onSelectBusinessId(val === ownBusiness.id ? null : val)
                 }

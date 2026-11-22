@@ -43,6 +43,20 @@ import { describeError } from "@/shared/query/errors";
 import { setUnauthorizedHandler } from "@/shared/query/fetchJson";
 import { WorkspaceProvider } from "@/components/app/workspace/WorkspaceContext";
 import { decideOnboardingRedirect } from "@/components/app/onboarding/useOnboardingRedirect";
+import { installSampleFetch } from "@/shared/sample/sampleFetch";
+import { SAMPLE_BRAND_KEY } from "@/shared/sample/mode";
+import { SampleBanner } from "./SampleBanner";
+
+/** The fictional workspace the sample mode boots (src/shared/sample). */
+const SAMPLE_WORKSPACE = Object.freeze({
+  brandKey: SAMPLE_BRAND_KEY,
+  role: "owner",
+  brand_key: SAMPLE_BRAND_KEY,
+  display_name: "Brightwave",
+  website: "https://brightwave.io",
+  is_active: true,
+  telemetry_id: null,
+});
 
 /**
  * @typedef {Object} PortalBrand
@@ -122,7 +136,11 @@ function storeBrand(key) {
   try { window.localStorage.setItem(BRAND_STORAGE_KEY, key); } catch { /* storage unavailable */ }
 }
 
-export default function PortalShell({ children }) {
+export default function PortalShell({ children, sample = false }) {
+  // Sample mode answers every portal request in the browser. Installed during
+  // render, before any query below can fire.
+  if (sample) installSampleFetch();
+
   const router = useRouter();
   const pathname = usePathname() || "/portal";
 
@@ -178,6 +196,14 @@ export default function PortalShell({ children }) {
   useEffect(() => {
     let live = true;
     async function boot() {
+      if (sample) {
+        // The sample workspace: no session, no Supabase, one fictional brand.
+        setUser({ id: "sample-visitor", email: "" });
+        setBrands([SAMPLE_WORKSPACE]);
+        setBrandKeyState(SAMPLE_BRAND_KEY);
+        setPhase("ready");
+        return;
+      }
       const supabase = getSupabaseBrowserClient();
       if (!supabase) {
         setBootError("Customer login is not configured on this deployment yet.");
@@ -272,7 +298,7 @@ export default function PortalShell({ children }) {
       setPhase("error");
     });
     return () => { live = false; };
-  }, [router]);
+  }, [router, sample]);
 
   const brand = useMemo(() => brands.find((item) => item.brandKey === brandKey) || null, [brands, brandKey]);
   const isOwner = brand?.role === "owner";
@@ -345,26 +371,30 @@ export default function PortalShell({ children }) {
   });
 
   useEffect(() => {
-    if (user?.id && brand) {
+    if (user?.id && brand && !sample) {
       setTelemetryIdentity({
         userId: user.id,
         workspaceTelemetryId: brand.telemetry_id ?? null,
       });
     }
-  }, [user?.id, brand?.brandKey, brand?.telemetry_id]);
+  }, [user?.id, brand?.brandKey, brand?.telemetry_id, sample]);
 
   const signOut = useCallback(async () => {
+    if (sample) {
+      window.location.assign("/sample/exit");
+      return;
+    }
     resetTelemetry();
     await getSupabaseBrowserClient()?.auth.signOut();
     router.replace("/login");
-  }, [router]);
+  }, [router, sample]);
 
 
   const value = useMemo(() => ({
     user, brands, brand, brandKey, setBrandKey, isOwner,
     overview, overviewLoading, overviewError, overviewQueryError, refreshOverview,
-    gsc, refreshGsc, scan, features, redirectToLogin, signOut,
-  }), [user, brands, brand, brandKey, setBrandKey, isOwner, overview, overviewLoading, overviewError, overviewQueryError, refreshOverview, gsc, refreshGsc, scan, features, redirectToLogin, signOut]);
+    gsc, refreshGsc, scan, features, redirectToLogin, signOut, sample,
+  }), [user, brands, brand, brandKey, setBrandKey, isOwner, overview, overviewLoading, overviewError, overviewQueryError, refreshOverview, gsc, refreshGsc, scan, features, redirectToLogin, signOut, sample]);
 
   if (phase === "loading") {
     // The shell renders before the session is confirmed, so the sidebar keeps
@@ -430,11 +460,11 @@ export default function PortalShell({ children }) {
  */
 function WorkspaceBanners() {
   const pathname = usePathname() || "/portal";
-  const { overviewError, refreshOverview } = usePortal();
+  const { overviewError, refreshOverview, sample } = usePortal();
 
   return (
     <>
-      <ConsentBanner />
+      {sample ? <SampleBanner /> : <ConsentBanner />}
       {overviewError && pathname !== "/portal" ? (
         <AppBanner variant="warning" icon={<AlertTriangle className="size-4" />}>
           <span className="mr-2">Workspace data could not be refreshed. {overviewError}</span>
