@@ -19,6 +19,13 @@ Key routing rules:
 - Resume context → invoke /context-restore
 - Author a backlog-ready spec/issue → invoke /spec
 
+## Branches and releases
+
+Every agent follows `AGENTS.md` (branches, releases, and what the dev preview
+shares with production). In short: work lands on `dev`; releases are a
+`dev` → `main` pull request merged with "Create a merge commit", never a
+squash; never force-push `dev` or `main`.
+
 ## Secrets hygiene — binding on every session and every agent
 
 This applies to every session and every agent in this project: the main
