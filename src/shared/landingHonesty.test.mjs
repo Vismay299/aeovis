@@ -1889,9 +1889,10 @@ function renderStubs() {
     ["gsap/ScrollTrigger", { __esModule: true, ScrollTrigger: { update() {}, refresh() {} } }],
     ["gsap/SplitText", { __esModule: true, SplitText: { create: () => ({ words: [], chars: [], lines: [] }) } }],
     ["gsap/Flip", { __esModule: true, Flip: {} }],
-    // next/dynamic holds the WebGL scenes (Threads, Orb). They render a canvas
-    // and no text, and three.js has no business in a text proof.
+    // The WebGL scenes (Threads and the dynamically imported Orb) render
+    // canvases without text.
     ["next/dynamic", { __esModule: true, default: () => () => null }],
+    ["@/components/reactbits/Threads", { __esModule: true, default: () => null }],
     // Vendored TypeScript components on the landing2 page. They are wrappers
     // and effects (magnetic hover, marquee, beams, glow, logo mark): each
     // passes its children through or draws no text, so a passthrough is the
@@ -1900,7 +1901,11 @@ function renderStubs() {
     ["@/components/magicui/marquee", { __esModule: true, Marquee: (p) => React.createElement("div", null, p.children) }],
     ["@/components/magicui/animated-beam", { __esModule: true, AnimatedBeam: () => null }],
     ["@/components/aceternity/glowing-effect", { __esModule: true, GlowingEffect: () => null }],
-    ["@/components/app/brand/PerceevLogo", { __esModule: true, PerceevMark: () => React.createElement("svg") }],
+    ["@/components/app/brand/PerceevLogo", {
+      __esModule: true,
+      PerceevMark: () => React.createElement("svg"),
+      PerceevLoader: ({ label }) => React.createElement("svg", { role: "status", "aria-label": label }),
+    }],
     ["@/shared/api", { __esModule: true, saveScan() {} }],
     // The landing headline and evidence card are motion wrappers. They are
     // stubbed through to their children deliberately: this proof is about the

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { PerceevLoader } from "@/components/app/brand/PerceevLogo";
 import "./landing2.css";
 
 import { ScrollTrigger, registerGsap, prefersReducedMotion } from "./motion";
@@ -18,6 +19,8 @@ import FinalCta from "./FinalCta";
 import Footer from "./Footer";
 
 export default function Landing2() {
+  const [ready, setReady] = useState(false);
+
   useEffect(() => {
     registerGsap();
 
@@ -44,22 +47,33 @@ export default function Landing2() {
     };
     document.addEventListener("click", onClick);
 
-    /* Fonts and the WebGL canvases change layout after first paint. */
-    const refresh = () => ScrollTrigger.refresh();
-    document.fonts?.ready.then(refresh);
-    window.addEventListener("load", refresh);
+    let active = true;
+    const reveal = async () => {
+      await document.fonts?.ready;
+      if (!active) return;
+      ScrollTrigger.refresh();
+      setReady(true);
+    };
+    if (document.readyState === "complete") reveal();
+    else window.addEventListener("load", reveal, { once: true });
 
     return () => {
       document.removeEventListener("click", onClick);
-      window.removeEventListener("load", refresh);
+      active = false;
+      window.removeEventListener("load", reveal);
     };
   }, []);
 
   return (
-    <div className="lp2">
+    <div className="lp2" data-loading={ready ? undefined : ""}>
+      {!ready && (
+        <div className="lp2-loader">
+          <PerceevLoader label="Loading Perceev" />
+        </div>
+      )}
       <Nav />
       <main id="main">
-        <Hero />
+        <Hero ready={ready} />
         <QuestionBand />
         <Shift />
         <Unbranded />
