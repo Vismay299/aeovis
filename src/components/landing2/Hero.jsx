@@ -2,7 +2,6 @@
 
 import { useRef } from "react";
 import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
 import { saveScan } from "@/shared/api";
 import { SAMPLE_RESULT } from "@/shared/mockData";
 import { useGsap, gsap, SplitText } from "./motion";
@@ -15,11 +14,11 @@ const Threads = dynamic(() => import("@/components/reactbits/Threads"), { ssr: f
 
 export default function Hero() {
   const root = useRef(null);
-  const router = useRouter();
-
   const openSample = () => {
+    // The sample record stays in session storage (the /dashboard sample
+    // report reads it); the visitor lands in the full sample workspace.
     saveScan({ ...SAMPLE_RESULT, isSample: true });
-    router.push("/dashboard");
+    window.location.assign("/sample");
   };
 
   useGsap(root, ({ reduced }) => {

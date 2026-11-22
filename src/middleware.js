@@ -5,6 +5,7 @@ import {
   warnDevPerimeterOpen,
   PERIMETER,
 } from "@/server/operatorPerimeter";
+import { sampleGuardDecision } from "@/server/sampleGuard";
 
 /**
  * Operator perimeter (R0.1.3). The decision lives in
@@ -25,6 +26,11 @@ const warnedDevOpen = { value: false };
 
 export function middleware(request) {
   const { pathname, searchParams } = new URL(request.url);
+
+  // Sample workspace: the portal's API routes never run while the sample
+  // cookie is set; the browser answers them from fixtures instead.
+  const sample = sampleGuardDecision({ pathname, cookie: (name) => request.cookies.get(name)?.value ?? null });
+  if (sample.block) return NextResponse.json(sample.body, { status: sample.status });
 
   if (pathname.startsWith("/api/customer/") && !["GET", "HEAD", "OPTIONS"].includes(request.method)) {
     const origin = request.headers.get("origin");

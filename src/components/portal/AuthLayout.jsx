@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { PerceevMark } from "@/components/app/brand/PerceevLogo";
 import AuthBackdrop from "./AuthBackdrop";
+import ClearSampleMode from "./ClearSampleMode";
 
 /**
  * Shell for the customer sign-in surfaces (login, signup, onboarding, invite
@@ -17,6 +18,7 @@ export default function AuthLayout({ eyebrow = null, title, titleId, subtitle = 
   return (
     <div className="auth-shell relative isolate flex h-[100dvh] flex-col items-center overflow-y-auto bg-background p-4">
       <AuthBackdrop />
+      <ClearSampleMode />
       <div className="auth-column m-auto flex w-full flex-col items-center">
         <div className="w-full max-w-xs space-y-6">
           <div className="space-y-3 text-center">

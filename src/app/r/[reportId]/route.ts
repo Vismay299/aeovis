@@ -1,4 +1,6 @@
 import { handleReportRequest } from "@/server/reports/documentRoutes";
+import { isSampleReportId, sampleReportHtml } from "@/server/reports/sampleReportDocument";
+import { reportDocumentResponse } from "@/shared/report-sandbox";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,5 +11,10 @@ export async function GET(
   context: { params: Promise<{ reportId: string }> }
 ): Promise<Response> {
   const { reportId } = await context.params;
+  // The sample workspace's fictional reports, under the same sandbox headers.
+  if (isSampleReportId(reportId)) {
+    const print = new URL(request.url).searchParams.get("print") === "1";
+    return reportDocumentResponse(sampleReportHtml(reportId), { print, cacheControl: "public, max-age=300", noindex: true });
+  }
   return handleReportRequest(reportId, request);
 }
