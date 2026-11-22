@@ -26,15 +26,19 @@ rules for Claude plus the binding secrets-hygiene section; read it too.
 ## What dev shares with production, and what it does not
 
 - Same code once `dev` is merged into `main`.
-- Same Vercel environment variables: Preview carries every Production
-  variable, including the Supabase keys and feature flags.
-- **Same database.** There is no separate dev database. Scans, drafts,
-  deletions and spend on a dev preview are real and visible to customers.
-- Scheduled jobs (`vercel.json` crons) run only on production.
-- `APP_URL` is the production address, so emails and redirects generated on
-  dev link to perceev.xyz.
-- Previews sit behind Vercel Authentication.
-- Local development reads `.env.local`, which may not match production.
+- The stable `dev` preview uses the separate **Perceev Dev** Supabase project
+  (`ecdftygawkptxfkwdgfd`) and synthetic QA data. Apply new migrations to that
+  project before testing code that depends on them.
+- Vercel's `dev` branch overrides point app links to the preview and clear
+  paid provider, email, and analytics credentials. Keep those overrides
+  isolated when adding providers. Vercel crons run on production, and the
+  staging database's HTTP job tick is disabled. If you reapply migration 043
+  on staging, unschedule `perceev-jobs-tick` again.
+- Previews sit behind Vercel Authentication. Use the stable `dev` URL for
+  testing. Deployment URLs built before the cutover and other preview
+  branches can still use production settings.
+- Local development reads `.env.local` by default. Verify the Supabase target
+  before running a script or starting a local session that can write data.
 
 ## Before you merge
 
