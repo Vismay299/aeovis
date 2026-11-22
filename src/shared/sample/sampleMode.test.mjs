@@ -116,11 +116,11 @@ test("enter and exit routes set and clear the sample cookie", async () => {
   const { GET: exit } = await import("../../app/sample/exit/route.js");
   const on = enter(new Request("https://app.test/sample"));
   assert.equal(on.status, 307);
-  assert.equal(new URL(on.headers.get("location")).pathname, "/portal");
+  assert.equal(on.headers.get("location"), "/portal", "a relative redirect, never the server's own host");
   assert.match(on.headers.get("set-cookie"), new RegExp(`${SAMPLE_COOKIE}=1`));
   const off = exit(new Request("https://app.test/sample/exit?to=/signup"));
-  assert.equal(new URL(off.headers.get("location")).pathname, "/signup");
+  assert.equal(off.headers.get("location"), "/signup");
   assert.match(off.headers.get("set-cookie"), new RegExp(`${SAMPLE_COOKIE}=;`));
   const unsafe = exit(new Request("https://app.test/sample/exit?to=//evil.test"));
-  assert.equal(new URL(unsafe.headers.get("location")).origin, "https://app.test");
+  assert.equal(unsafe.headers.get("location"), "/");
 });
