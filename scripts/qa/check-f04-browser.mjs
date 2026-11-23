@@ -195,7 +195,7 @@ try {
         });
         await page.goto(new URL("/portal", origin).href, { waitUntil: "networkidle" });
 
-        // The app has one scheme (Onyx / White, src/styles/palettes.css); the
+        // The app has one scheme (Onyx / White / Volt Lime, src/styles/palettes.css); the
         // System / Light / Dark picker was removed because it changed nothing.
         await page.locator('button[aria-label="Open account menu"]').click();
         await page.locator('[role="menu"]').waitFor();
@@ -208,8 +208,8 @@ try {
 
         assert.equal(
           await page.evaluate(() => window.__paletteAtFirstPaint),
-          "onyx",
-          "the Onyx scheme was set before the first paint"
+          "volt",
+          "the Volt scheme was set before the first paint"
         );
         assert.equal(
           await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme),
@@ -225,7 +225,7 @@ try {
         );
 
         assert.deepEqual(blockedWrites, [], "the shell wrote to a customer route");
-        return "No theme picker, Onyx painted from the first frame, and the public site is not an app surface.";
+        return "No theme picker, Volt painted from the first frame, and the public site is not an app surface.";
       } finally {
         await context.close();
       }
