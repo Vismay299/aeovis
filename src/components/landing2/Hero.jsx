@@ -1,8 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import dynamic from "next/dynamic";
-import { useRouter } from "next/navigation";
+import Threads from "@/components/reactbits/Threads";
 import { saveScan } from "@/shared/api";
 import { SAMPLE_RESULT } from "@/shared/mockData";
 import { useGsap, gsap, SplitText } from "./motion";
@@ -10,16 +9,13 @@ import ScanForm from "./ScanForm";
 import AnswerConsole from "./AnswerConsole";
 import { QUESTION_COUNT, ENGINE_SENTENCE_LIST } from "./sample";
 
-/* WebGL only on the client, and only once the page has painted. */
-const Threads = dynamic(() => import("@/components/reactbits/Threads"), { ssr: false });
-
-export default function Hero() {
+export default function Hero({ ready }) {
   const root = useRef(null);
-  const router = useRouter();
-
   const openSample = () => {
+    // The sample record stays in session storage (the /dashboard sample
+    // report reads it); the visitor lands in the full sample workspace.
     saveScan({ ...SAMPLE_RESULT, isSample: true });
-    router.push("/dashboard");
+    window.location.assign("/sample");
   };
 
   useGsap(root, ({ reduced }) => {
@@ -86,7 +82,7 @@ export default function Hero() {
             </p>
           </div>
         </div>
-        <AnswerConsole />
+        <AnswerConsole ready={ready} />
       </div>
 
       <a href="#shift" className="lp2-hero__scroll" aria-label="Scroll to the next section">

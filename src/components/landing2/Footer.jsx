@@ -2,12 +2,14 @@ import Link from "next/link";
 import { PerceevMark } from "@/components/app/brand/PerceevLogo";
 
 const COLUMNS = [
-  { h: "Product", links: [{ href: "/scan", l: "Free scan" }, { href: "/methodology", l: "Methodology" }, { href: "/use-cases", l: "Use cases" }] },
+  { h: "Product", links: [{ href: "/scan", l: "Free scan" }, { href: "/methodology", l: "Methodology" }, { href: "/use-cases", l: "Use cases" }, { href: "/demo", l: "Simulated workflow" }] },
   { h: "Account", links: [{ href: "/login", l: "Sign in" }, { href: "/signup", l: "Create account" }] },
   { h: "Legal", links: [{ href: "/privacy", l: "Privacy" }, { href: "/terms", l: "Terms" }] },
 ];
 
-export default function Footer() {
+const HOME_NOTE = "Brands shown on this page are fictional sample data.";
+
+export default function Footer({ note = HOME_NOTE }) {
   return (
     <footer className="lp2-footer" data-testid="footer">
       <div className="lp2-wrap lp2-footer__grid">
@@ -25,7 +27,7 @@ export default function Footer() {
         ))}
       </div>
       <div className="lp2-wrap lp2-footer__base">
-        <span>Brands shown on this page are fictional sample data.</span>
+        {note ? <span>{note}</span> : <span />}
         <span className="lp2-footer__word" aria-hidden="true">perceev</span>
       </div>
     </footer>

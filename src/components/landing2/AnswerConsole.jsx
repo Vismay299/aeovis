@@ -18,34 +18,35 @@ const VERDICT = {
  * a sample and carries no timestamp: it shows the shape of a reading, not a
  * live one. The engine chip names an engine this deployment actually probes.
  */
-export default function AnswerConsole() {
+export default function AnswerConsole({ ready }) {
   const root = useRef(null);
-  const shown = useRef(false);
-  const [index, setIndex] = useState(0);
+  const [replayIndex, setReplayIndex] = useState(null);
+  const initial = replayIndex === null;
+  const index = initial ? 0 : replayIndex;
   const item = EVIDENCE[index];
   const tokens = tokenize(item.text, { youNamed: item.named.includes(BRAND) });
   const engineLabel = ENGINE_LABELS[item.engine];
 
   useGsap(root, ({ reduced }) => {
+    if (!ready) return;
     const words = gsap.utils.toArray(".lp2-console__answer .lp2-w");
     const marks = gsap.utils.toArray(".lp2-console__answer .lp2-mark");
     const next = (index + 1) % EVIDENCE.length;
+    const advance = () => setReplayIndex(next);
 
-    if (reduced) {
-      gsap.set(".lp2-console__q", { clipPath: "inset(0 0% 0 0)" });
-      gsap.set(words, { opacity: 1 });
+    // Reveal a complete example with the page before the replay starts.
+    if (initial || reduced) {
       marks.forEach((m) => m.classList.add("is-lit"));
-      gsap.set(".lp2-console__verdict", { opacity: 1 });
+      if (!reduced) {
+        gsap.timeline()
+          .to(".lp2-console__body", { opacity: 0, y: -8, duration: 0.5, ease: "power2.in" }, "+=3.4")
+          .add(advance);
+      }
       return;
     }
 
-    /* The card itself appears once. Every later cycle only replaces its body,
-       so the console never blinks out between answers. */
-    const first = !shown.current;
-    shown.current = true;
-    const tl = gsap.timeline({ delay: first ? 0.5 : 0.1 });
-    if (first) tl.fromTo(".lp2-console", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" });
-    tl.fromTo(".lp2-console__body", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" }, first ? "<0.1" : 0)
+    gsap.timeline()
+      .fromTo(".lp2-console__body", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out" })
       .fromTo(
         ".lp2-console__q",
         { clipPath: "inset(0 100% 0 0)" },
@@ -64,8 +65,8 @@ export default function AnswerConsole() {
       .add(() => marks.forEach((m) => m.classList.add("is-lit")), "-=0.4")
       .fromTo(".lp2-console__verdict", { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" })
       .to(".lp2-console__body", { opacity: 0, y: -8, duration: 0.5, ease: "power2.in" }, "+=3.4")
-      .add(() => setIndex(next));
-  }, [index]);
+      .add(advance);
+  }, [ready, replayIndex]);
 
   return (
     <div ref={root} className="lp2-console-wrap">
@@ -79,7 +80,7 @@ export default function AnswerConsole() {
           <p className="lp2-console__ask">
             <span className="lp2-console__label">Buyer asks</span>
             <span className="lp2-console__q">{item.question}</span>
-            <span className="lp2-console__caret" aria-hidden="true" />
+            {!initial && <span className="lp2-console__caret" aria-hidden="true" />}
           </p>
           <div className="lp2-console__thinking" aria-hidden="true" />
           <p className="lp2-console__answer">

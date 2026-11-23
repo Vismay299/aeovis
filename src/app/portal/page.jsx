@@ -3,7 +3,8 @@
 import { Play, PenLine } from "lucide-react";
 import { usePortal } from "@/components/portal/PortalShell";
 import { ScanProgressCard } from "@/components/portal/ScanProgressCard";
-import { Button, PageHeader } from "@/components/portal/ui";
+import { Button } from "@/components/portal/ui";
+import OverviewHero from "@/components/portal/overview/OverviewHero";
 import { QueryError } from "@/components/app/QueryState";
 import { useWorkspace } from "@/components/app/workspace/WorkspaceContext";
 import { SetupChecklist } from "@/components/portal/overview/SetupChecklist";
@@ -33,19 +34,23 @@ export default function OverviewPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
+      <OverviewHero
         eyebrow={host || undefined}
-        title={name}
+        name={name}
+        ready={Boolean(brand || overview)}
         description="How AI answer engines talk about your brand."
+        latest={overview?.latest_scan || null}
+        loading={!overview && !overviewError}
+        busy={scan.active}
         actions={
           <>
-            <NextRunBadge />
             <Button icon={Play} onClick={scan.start} loading={scan.starting} disabled={scan.active}>
               Run scan
             </Button>
             <Button variant="secondary" icon={PenLine} href="/portal/content?new=1">
               New draft
             </Button>
+            <NextRunBadge />
           </>
         }
       />

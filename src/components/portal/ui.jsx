@@ -11,19 +11,20 @@ import { ripple } from "@/components/app/motion/ripple";
 import { StatTile } from "@/components/app/StatTile";
 import { EmptyArt } from "@/components/app/motion/EmptyArt";
 import { TabsGlider } from "@/components/app/motion/TabsGlider";
+import { WordReveal } from "@/components/app/motion/WordReveal";
 import { AlertCircle, CheckCircle2, Info, TriangleAlert, Check, X, Loader2 } from "lucide-react";
 
 const cx = (...parts) => parts.filter(Boolean).join(" ");
 
 export function PageHeader({ eyebrow, title, description, actions, backLink }) {
   const header = (
-    <header className="flex flex-wrap items-start justify-between gap-3">
+    <header className="app-page-header flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0 flex-1 basis-64 space-y-1">
-        {eyebrow ? <p className="text-sm text-muted-foreground">{eyebrow}</p> : null}
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
-        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+        {eyebrow ? <p className="app-eyebrow text-sm text-muted-foreground">{eyebrow}</p> : null}
+        <h1 className="app-title text-2xl font-semibold tracking-tight"><WordReveal text={title} /></h1>
+        {description ? <p className="app-subtitle text-sm text-muted-foreground">{description}</p> : null}
       </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="app-page-actions flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
     </header>
   );
   if (!backLink) return header;

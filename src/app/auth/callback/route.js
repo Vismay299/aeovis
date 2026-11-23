@@ -6,6 +6,7 @@ import { isFirstSession, trackAuthServerEvent } from "@/server/auth/telemetry";
 import { isFeatureEnabled } from "@/server/features/flags";
 import { getSupabaseAdmin } from "@/shared/supabase/admin";
 import { enqueueSignupEmails } from "@/server/email/signup";
+import { SAMPLE_COOKIE } from "@/shared/sample/mode";
 
 export const dynamic = "force-dynamic";
 
@@ -99,5 +100,8 @@ export async function GET(request) {
     destination.searchParams.set("error", "link_expired");
   }
 
-  return NextResponse.redirect(destination);
+  const response = NextResponse.redirect(destination);
+  // A real sign-in always leaves the sample workspace.
+  if (request.cookies?.get?.(SAMPLE_COOKIE)) response.cookies.set(SAMPLE_COOKIE, "", { path: "/", maxAge: 0 });
+  return response;
 }

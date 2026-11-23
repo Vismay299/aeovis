@@ -11,7 +11,8 @@ const LINKS = [
   { href: "#studio", label: "Studio" },
 ];
 
-export default function Nav() {
+/** `base` prefixes the section links, so pages other than home link to "/#shift". */
+export default function Nav({ base = "" }) {
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -30,7 +31,7 @@ export default function Nav() {
         </Link>
         <nav aria-label="Sections" className="lp2-nav__links">
           {LINKS.map((l) => (
-            <a key={l.href} href={l.href}>{l.label}</a>
+            <a key={l.href} href={`${base}${l.href}`}>{l.label}</a>
           ))}
           <Link href="/methodology">Methodology</Link>
         </nav>

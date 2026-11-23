@@ -1,49 +1,15 @@
 'use client';
 
-import Link from 'next/link';
-import { Wordmark } from '@/components/landing/SiteNav';
+import Footer from '@/components/landing2/Footer';
+import '@/components/landing2/landing2.css';
 
-/* Website footer uses the shared light page and surface tokens. */
-
+/* The public pages' footer is the home page's footer, without its note about
+   sample brands (these pages show none). */
 export function SiteFooter() {
   return (
-    <footer className="foot" data-testid="footer">
-      <div className="shell">
-        <div className="foot__g">
-          <div>
-            <Wordmark style={{ marginBottom: 12 }} />
-            <p style={{ fontSize: '14.5px', maxWidth: '32ch', lineHeight: 1.55 }}>
-              Answer-engine intelligence for teams whose buyers have stopped searching and started
-              asking.
-            </p>
-          </div>
-          <div>
-            <h5>Product</h5>
-            <Link href="/use-cases">Use cases</Link>
-            <Link href="/methodology">Methodology</Link>
-            <Link href="/demo">Simulated workflow</Link>
-            <Link href="/scan">Start a scan</Link>
-          </div>
-          <div>
-            <h5>Company</h5>
-            <Link href="/#work">What it does</Link>
-            <Link href="/#evidence">Evidence</Link>
-            <Link href="/#gap">The gap</Link>
-            <Link href="/scan">Run a probe</Link>
-          </div>
-          <div>
-            <h5>Legal</h5>
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/terms">Terms</Link>
-            <Link href="/privacy#google-search-console-data">Data handling</Link>
-          </div>
-        </div>
-        <div className="foot__b">
-          <span className="tag">© {new Date().getFullYear()} Perceev</span>
-          <span className="tag">Demonstration data uses fictional brands</span>
-        </div>
-      </div>
-    </footer>
+    <div className="lp2 lp2--chrome">
+      <Footer note={null} />
+    </div>
   );
 }
 

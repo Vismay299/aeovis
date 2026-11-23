@@ -4,6 +4,7 @@ import "@/components/portal/portal.css";
 import SurfaceSync from "@/components/app/theme/SurfaceSync";
 import AppToaster from "@/components/app/AppToaster";
 import NavigationProgress from "@/components/app/motion/NavigationProgress";
+import CardGlow from "@/components/app/motion/CardGlow";
 import PaletteSwitcher from "@/components/app/theme/PaletteSwitcher";
 import { buildThemeInitScript } from "@/shared/theme/theme";
 import { BASE_PALETTE, BASE_SHAPE, buildPaletteInitScript } from "@/shared/theme/palette";
@@ -34,6 +35,7 @@ export default function RootLayout({ children }) {
       <body className="antialiased">
         <SurfaceSync />
         <NavigationProgress />
+        <CardGlow />
         {children}
         <AppToaster />
         {PALETTE_REVIEW ? <PaletteSwitcher /> : null}

@@ -39,6 +39,24 @@
 .lp2 a.lp2-btn, .lp2 .lp2-btn { color: var(--l-on-accent); }
 .lp2 :focus-visible { outline: 2px solid var(--l-ink); outline-offset: 3px; border-radius: 8px; }
 
+.lp2-loader {
+  display: none;
+}
+
+@media (scripting: enabled) {
+  html:has(.lp2[data-loading]) { overflow: hidden; }
+  .lp2[data-loading] > :not(.lp2-loader) { visibility: hidden; }
+  .lp2-loader {
+    display: grid;
+    place-items: center;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    background: var(--l-bg);
+  }
+  .lp2-loader [data-slot="perceev-loader"] { height: 48px; }
+}
+
 
 .lp2-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .lp2-wrap { width: 100%; max-width: var(--l-max); margin: 0 auto; padding: 0 var(--l-gutter); }
@@ -1020,3 +1038,8 @@
 }
 .lp2-beam[data-on="true"]::before { animation-play-state: running; }
 @keyframes lp2-beam { to { transform: rotate(360deg); } }
+
+/* ── The nav and footer on other public pages ─────────────────────────── */
+
+.lp2.lp2--chrome { min-height: 0; overflow: visible; background: transparent; }
+.lp2-nav-spacer { height: 88px; }

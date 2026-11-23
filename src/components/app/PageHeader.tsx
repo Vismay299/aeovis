@@ -8,6 +8,7 @@ import type { ComponentProps, ReactNode } from "react";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/shared/utils";
+import { WordReveal } from "@/components/app/motion/WordReveal";
 
 /**
  * The page title, with an optional subtitle and actions on the right. A
@@ -26,15 +27,17 @@ export function PageHeader({
   backLink?: ReactNode;
 }) {
   const header = (
-    <div className="flex flex-wrap items-start justify-between gap-3">
+    <div className="app-page-header flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0 flex-1 basis-64 space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="app-title text-2xl font-semibold tracking-tight">
+          <WordReveal text={title} />
+        </h1>
         {description ? (
-          <div className="text-sm text-muted-foreground">{description}</div>
+          <div className="app-subtitle text-sm text-muted-foreground">{description}</div>
         ) : null}
       </div>
       {actions ? (
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="app-page-actions flex shrink-0 flex-wrap items-center gap-2">
           {actions}
         </div>
       ) : null}
@@ -62,7 +65,7 @@ export function SectionHeader({
   return (
     <div className="flex items-start justify-between gap-3">
       <div className="space-y-0.5">
-        <h2 className="text-sm font-medium text-muted-foreground">{title}</h2>
+        <h2 className="app-section-title text-sm font-medium text-muted-foreground">{title}</h2>
         {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
       </div>
       {action}

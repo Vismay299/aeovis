@@ -2,6 +2,18 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { NOINDEX_ROUTE_PREFIXES, PRIVATE_ROUTE_PREFIXES, getRouteIndexingPolicy } from "./src/server/publicSite.mjs";
 
+// Check before Next embeds the Supabase URL into the client bundle.
+if (process.env.VERCEL_ENV === "preview" && process.env.VERCEL_GIT_COMMIT_REF === "dev") {
+    const supabaseUrl = URL.parse(process.env.NEXT_PUBLIC_SUPABASE_URL || "");
+    if (
+        supabaseUrl?.protocol !== "https:" ||
+        !/^[a-z0-9]+\.supabase\.co$/.test(supabaseUrl.hostname) ||
+        supabaseUrl.hostname === "nggyizuwqepxaqnpcqqj.supabase.co"
+    ) {
+        throw new Error("The dev preview requires a separate Supabase project URL in NEXT_PUBLIC_SUPABASE_URL.");
+    }
+}
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
     // Pin the project root. A package-lock.json in a parent directory (e.g.
