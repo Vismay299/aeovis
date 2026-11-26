@@ -1,5 +1,15 @@
 # aeovis
 
+## Mandatory PStack workflow
+
+Before doing any repository work, read `AGENTS.md` and
+`.agents/skills/pstack-workflow/SKILL.md`. Invoke `/pstack:poteto-mode` (or the
+installed equivalent) at the start of each task when available; otherwise
+follow the local workflow and its references. Apply the existing skill
+routing below alongside it, without duplicating steps. Pass the same
+instructions to every delegated agent. Never bypass repository safety,
+secrets, authorization, or release rules to follow a skill.
+
 ## Skill routing
 
 When the user's request matches an available skill, invoke it via the Skill tool. When in doubt, invoke the skill.
