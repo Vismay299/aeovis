@@ -21,7 +21,7 @@ agent (or a human) can pick up any role mid-way.
 0. READ FIRST (coordinator, before starting any role)
 ══════════════════════════════════════════════════════════════
 Read, in this order, and keep them as the source of truth:
-  1. CLAUDE.md                                   — secrets hygiene, binding
+  1. AGENTS.md                                   — secrets hygiene, binding
   2. features/00-CONVENTIONS.md                  — stack, safety rules, shared APIs, DB/API/test/PR rules, binding
   3. features/README.md                          — dependencies, waves, reserved migration numbers
   4. features/<FEATURE>-*.md                     — the spec; focus on §4 ACs, §6 design, §7 reuse map, §8 Phase <PHASE>
@@ -122,7 +122,7 @@ Run roles in the order of §3. Run at most two roles at the same time, to keep c
 
 [CTO] Chief Technical Officer — reviews, decides, approves
   Runs only after QA PASS.
-  Reviews the full diff (git diff main...HEAD) against: the spec, 00-CONVENTIONS.md, CLAUDE.md, the rules in §1.
+  Reviews the full diff (git diff main...HEAD) against: the spec, 00-CONVENTIONS.md, AGENTS.md, the rules in §1.
   Checks: scope (only this phase), correctness, security (auth, RLS, tenant isolation, SSRF, secrets), cost safety
   (flags off, spend holds, no retries on billed steps), migration safety (idempotent, reserved number, paperwork),
   test quality (tests would fail without the change), code style match, and every SPEC GAP raised.

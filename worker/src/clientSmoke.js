@@ -21,7 +21,7 @@
  * CI on the host, and in CI inside the built image.
  *
  * The URL and key below are PLACEHOLDERS, deliberately unusable, and must stay
- * that way (CLAUDE.md, secrets hygiene): nothing here may ever need a real value.
+ * that way (AGENTS.md, secrets hygiene): nothing here may ever need a real value.
  */
 import { resolveClient, resetQueueClient } from "./lib/queue.js";
 

@@ -15,10 +15,10 @@ import { fileURLToPath } from "node:url";
  * reported. A rule that depends on a human retyping it is a rule that will be
  * skipped.
  *
- * R6.1.9 (operator decision, 2026-09-15) — the full rule now lives ONCE in
- * CLAUDE.md, which every session and every agent in the project loads, so
- * skills and non-rebuild agents are covered too. Each `.claude/agents/rebuild-*.md`
- * keeps a pointer section; this guard fails if CLAUDE.md loses any phrase of the
+ * R6.1.9 (operator decision, 2026-09-15) — the full rule lives ONCE.
+ * AGENTS.md is now the canonical instruction file; Claude imports it through
+ * CLAUDE.md, and all sessions and delegated agents must receive the rules. Each `.claude/agents/rebuild-*.md`
+ * keeps a pointer section; this guard fails if AGENTS.md loses any phrase of the
  * rule, or if a rebuild definition (read off disk, never hardcoded) loses its
  * pointer — or grows a second full copy that could drift.
  *
@@ -98,26 +98,34 @@ async function rebuildAgentDefinitions() {
 
 const collapse = (s) => s.replace(/\s+/g, " ");
 
-test("GUARD — CLAUDE.md carries the full secrets-hygiene rule for every session and agent", async () => {
-  const text = collapse(await readFile(path.join(REPO, "CLAUDE.md"), "utf8"));
+test("GUARD — AGENTS.md carries the full secrets-hygiene rule for every session and agent", async () => {
+  const text = collapse(await readFile(path.join(REPO, "AGENTS.md"), "utf8"));
   const missing = REQUIRED_PHRASES.filter((phrase) => !text.includes(collapse(phrase)));
   assert.deepEqual(
     missing,
     [],
-    `CLAUDE.md is the one place the secrets rule lives (R6.1.9); it is missing:\n  ${missing.join("\n  ")}`,
+    `AGENTS.md is the one place the secrets rule lives (R6.1.9); it is missing:\n  ${missing.join("\n  ")}`,
   );
-  const tracked = execFileSync("git", ["ls-files", "CLAUDE.md"], { cwd: REPO }).toString("utf8").trim();
-  assert.equal(tracked, "CLAUDE.md", "CLAUDE.md must be tracked, or the rule does not ship with the repo");
+  const tracked = execFileSync("git", ["ls-files", "AGENTS.md"], { cwd: REPO }).toString("utf8").trim();
+  assert.equal(tracked, "AGENTS.md", "AGENTS.md must be tracked, or the rule does not ship with the repo");
+});
+
+test("GUARD — CLAUDE.md imports AGENTS.md without duplicating the secrets rule", async () => {
+  const text = await readFile(path.join(REPO, "CLAUDE.md"), "utf8");
+  assert.match(text, /^@AGENTS\.md\s*$/m, "Claude must import the canonical instructions");
+  assert.match(text, /Before starting any work, read and follow `AGENTS\.md`/);
+  assert.ok(!text.includes("**Never print a credential value.**"), "Do not duplicate the secrets rule");
+  assert.equal(execFileSync("git", ["ls-files", "CLAUDE.md"], { cwd: REPO }).toString("utf8").trim(), "CLAUDE.md");
 });
 
 /** What a rebuild-* pointer must say: the section, the headline, and where the rule lives. */
 const POINTER_PHRASES = [
   "## Secrets hygiene",
   "**Never print a credential value.**",
-  '`CLAUDE.md` § "Secrets hygiene"',
+  '`AGENTS.md` § "Secrets hygiene"',
 ];
 
-test("GUARD — every rebuild-* agent definition points to the CLAUDE.md rule, without a second copy", async () => {
+test("GUARD — every rebuild-* agent definition points to the AGENTS.md rule, without a second copy", async () => {
   const files = await rebuildAgentDefinitions();
 
   // A guard that finds nothing must fail, not pass quietly: an empty sweep is
@@ -133,7 +141,7 @@ test("GUARD — every rebuild-* agent definition points to the CLAUDE.md rule, w
     for (const phrase of POINTER_PHRASES) {
       if (!text.includes(collapse(phrase))) problems.push(`${file} is missing: ${phrase}`);
     }
-    // The body phrases belong to CLAUDE.md alone; a copy here is the thing that drifts.
+    // The body phrases belong to AGENTS.md alone; a copy here is the thing that drifts.
     if (text.includes(collapse("stop, do not repeat it, disclose it"))) {
       problems.push(`${file} carries a second full copy of the rule — keep only the pointer`);
     }
