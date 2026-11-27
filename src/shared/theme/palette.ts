@@ -28,7 +28,7 @@ export interface PaletteOption {
 }
 
 /** The scheme every page uses unless a variant is picked in the dock. */
-export const BASE_PALETTE: PaletteId = "onyx";
+export const BASE_PALETTE: PaletteId = "volt";
 
 export const PALETTES: readonly PaletteOption[] = [
   { id: "onyx", label: "Onyx", group: "shades", swatches: ["#0A0A0B", "#F5F5F5"], note: "Base · Onyx / White" },

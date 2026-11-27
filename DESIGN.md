@@ -40,7 +40,7 @@ Timing tokens and motion utilities live in `src/styles/motion.css`. State change
 
 ## Colour scheme review (branch `test_UI`)
 
-The base scheme is Onyx and White (`data-palette="onyx"`, set on `<html>` for every visitor): a dark, two-colour scheme that renders the same in every theme preference. `src/styles/palettes.css` also holds the variants under review, five further shades and six accents, and `src/styles/shapes.css` holds three component shapes (Soft is the base; Edge and Pill are under review). Variants switch with `data-palette` and `data-shape` on `<html>`. No attribute means the shipped palette above. The floating dock (`PaletteSwitcher`) and the `/ui-lab` page are review tools: they render in development, and in a build only with `NEXT_PUBLIC_PALETTE_REVIEW=1`. Once a scheme is chosen, move its values into `app-theme.css` and `globals.css` and delete the dock, the lab and `palettes.css`.
+The base scheme is Onyx, White and Volt Lime (`data-palette="volt"`, set on `<html>` for every visitor): a dark scheme with a lime accent that renders the same in every theme preference. `src/styles/palettes.css` also holds the variants under review, five further shades and six accents, and `src/styles/shapes.css` holds three component shapes (Soft is the base; Edge and Pill are under review). Variants switch with `data-palette` and `data-shape` on `<html>`. No attribute means the shipped palette above. The floating dock (`PaletteSwitcher`) and the `/ui-lab` page are review tools: they render in development, and in a build only with `NEXT_PUBLIC_PALETTE_REVIEW=1`. Once a scheme is chosen, move its values into `app-theme.css` and `globals.css` and delete the dock, the lab and `palettes.css`.
 
 ## Component libraries
 

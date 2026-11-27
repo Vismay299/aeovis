@@ -1,14 +1,15 @@
-/* The Perceev colour scheme: Onyx and White.
+/* The Perceev colour scheme: Onyx, White and Volt Lime.
 
-   <html data-palette="onyx"> is the base and is always set. It is a dark
-   scheme with two colours: a near-black page and a white that does the text
-   and every primary action. It renders the same whichever theme preference
-   is stored, so the tokens below are written once and the `dark:` utility
-   variant is widened to follow data-palette (see app-theme.css).
+   <html data-palette="volt"> is the base and is always set (BASE_PALETTE in
+   src/shared/theme/palette.ts). It is a dark scheme with three colours: a
+   near-black page, a white for text, and a lime accent that takes over the
+   primary actions. It renders the same whichever theme preference is stored,
+   so the tokens below are written once and the `dark:` utility variant is
+   widened to follow data-palette (see app-theme.css).
 
    Variants under review change only the few --p-* inputs:
      shades   the same two colours, pushed warmer, cooler, softer or harder
-     accents  a third colour that takes over the primary actions */
+     accents  a different third colour in place of Volt Lime */
 
 :root[data-palette] {
   --p-bg: #0a0a0b;
