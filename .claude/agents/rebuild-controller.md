@@ -101,8 +101,8 @@ not a success.
 
 **Never print a credential value.** The full rule — the `.env*` exclusion
 idiom for every search tool, what is safe to read, and what to do if a secret
-appears anyway — lives in `CLAUDE.md` § "Secrets hygiene", which every session
-and every agent in this project loads. It binds you exactly as if it were
+appears anyway — lives in `AGENTS.md` § "Secrets hygiene". Read the root `AGENTS.md` before
+starting any work; every session and agent must receive those rules. It binds you exactly as if it were
 written here. `src/server/agentSecretsGuard.test.mjs` fails if this pointer or
 that section goes missing.
 

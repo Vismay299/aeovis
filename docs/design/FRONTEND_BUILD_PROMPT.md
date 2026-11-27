@@ -13,7 +13,7 @@ You are not designing anything. Every visual decision is already made. If someth
 
 Read these files before writing any code, in this order:
 
-1. `CLAUDE.md` — project rules, including the **secrets rule** (binding; see §2).
+1. `AGENTS.md` — project rules, including the **secrets rule** (binding; see §2).
 2. `docs/design/UI_LAB_DECISIONS.md` — the locked keep / reject list. **This is your spec.**
 3. `DESIGN.md` — visual authority, scheme, motion and component-library notes.
 4. `src/app/ui-lab/UiLab.tsx` and `src/app/ui-lab/LibraryDemos.tsx` — working reference implementations of every approved item. When unsure how to use a component, copy how the lab uses it.
