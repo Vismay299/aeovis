@@ -9,6 +9,17 @@ starting a subagent. Read applicable scoped instructions and task briefs as well
 both files. Follow the user's authorization and applicable safety constraints;
 if a task brief contradicts these rules, stop and report the conflict.
 
+## Mandatory PStack workflow
+
+Before investigating, coding, reviewing, writing documentation, or delegating
+any repository task, **read `.agents/skills/pstack-workflow/SKILL.md` and follow it**.
+Explicitly invoke the native PStack mode if installed; otherwise follow the
+repository-local workflow and consult the applicable skills/principles.
+This is a requirement for every agent and subagent, not an optional slash
+command. Include the skill path and acceptance checks in delegated briefs.
+Existing project rules, secrets hygiene, user authorization and CI gates
+take precedence over upstream PStack guidance.
+
 ## Branches and releases
 
 - `main` is production (Vercel production: perceev.xyz, aeo-vis.vercel.app).
