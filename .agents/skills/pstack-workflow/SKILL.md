@@ -9,11 +9,11 @@ This repository-local adapter is based on Lauren Tan's [PStack](https://github.c
 
 ## Start every task
 
-1. Read AGENTS.md and CLAUDE.md, plus applicable product/design and directory-specific rules.
+1. Read AGENTS.md (CLAUDE.md imports it for Claude Code), plus applicable product/design and directory-specific rules.
 2. If the native PStack plugin is available, explicitly invoke `poteto-mode` in Cursor or `pstack:poteto-mode` in Claude Code. In other harnesses invoke the installed equivalent if available. Do this once at the start of each task, and re-route when the task changes.
 3. Select the relevant upstream playbook and leaf skills; read their instructions before acting. Use the [upstream mode](https://github.com/cursor/plugins/blob/main/pstack/skills/poteto-mode/SKILL.md) and [playbook index](https://github.com/cursor/plugins/tree/main/pstack/skills/poteto-mode/playbooks) if the plugin is absent but source access is available. The [upstream skills directory](https://github.com/cursor/plugins/tree/main/pstack/skills) contains the leaf skills.
 4. If the plugin or network is unavailable, use the local routing table and read the applicable original principles in [references/upstream-principles.md](references/upstream-principles.md). Report unavailable tools honestly; never claim a skill was invoked if it was not. Do not install plugins, run downloaded scripts, or change model settings automatically.
-5. Apply the existing CLAUDE.md task-specific skill routing alongside PStack where those skills are available. Use one coherent plan, not duplicate review pipelines. Scale ceremony to risk: a small question needs evidence, not a multi-agent swarm.
+5. Apply the existing AGENTS.md task-specific skill routing alongside PStack where those skills are available. Use one coherent plan, not duplicate review pipelines. Scale ceremony to risk: a small question needs evidence, not a multi-agent swarm.
 
 ## Route by task
 
@@ -35,7 +35,7 @@ This repository-local adapter is based on Lauren Tan's [PStack](https://github.c
 - Ground decisions in repository evidence; distinguish verified facts from assumptions. Start with the smallest change that satisfies the goal. Prefer deletion and simple data structures over speculative abstraction.
 - Validate external data at boundaries. Keep shared-state, tenant isolation, retries/idempotency, and failure behavior explicit. Never weaken security to satisfy a test.
 - Use focused checks while working, then inspect the actual artifact and run the repository-required checks before declaring readiness. Do not call a build proof of runtime behavior.
-- Pass AGENTS.md, CLAUDE.md, this skill path, the selected workflow, relevant files, and acceptance checks to every delegated agent before it works. Parent agents review and own all delegated changes. If delegation is unavailable, perform the checks sequentially.
+- Pass AGENTS.md, this skill path, the selected workflow, relevant files, and acceptance checks to every delegated agent before it works. Parent agents review and own all delegated changes. If delegation is unavailable, perform the checks sequentially.
 - Keep context bounded and use file pointers rather than dumping large logs or secrets. Capture decisions and verification evidence for handoff.
 
 ## Authority and safety

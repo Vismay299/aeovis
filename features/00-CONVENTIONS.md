@@ -1,7 +1,7 @@
 # Feature conventions (binding)
 
 > <!-- doc-status -->
-> **Status: LIVE.** Binding for every spec in `features/` and every PR that implements one. Repository-wide rules in `CLAUDE.md` (especially secrets hygiene) still apply and win on conflict.
+> **Status: LIVE.** Binding for every spec in `features/` and every PR that implements one. Repository-wide rules in `AGENTS.md` (especially secrets hygiene) still apply and win on conflict.
 
 This file fixes the decisions every feature shares, so 27 specs written and built in parallel fit together. If a spec needs to deviate, it says so explicitly under **Deviations from conventions** and explains why.
 
@@ -284,7 +284,7 @@ Rules:
 3. **Never call `set_probe_rollout(false, …)`** or change dispatch controls in a PR, test or script.
 4. **Billed steps run once.** `retries` must be 0 for any step or request that a provider bills, even on 5xx. Only free reads (status polls, `task_get`, catalogue lookups) retry.
 5. **Tests never hit live providers.** Use recorded fixtures under `tests/fixtures/<feature>/`. Live checks live in `scripts/qa/` with explicit spend ceilings and run only on the owner's instruction.
-6. **Secrets hygiene from `CLAUDE.md`.** Add new variable *names* to `.env.example` only; never print values; exclude `.env*` from recursive searches.
+6. **Secrets hygiene from `AGENTS.md`.** Add new variable *names* to `.env.example` only; never print values; exclude `.env*` from recursive searches.
 7. **SSRF.** Any server-side fetch of a customer-supplied URL uses F01's `safeFetch()` (ported from `openseo:src/server/lib/url-policy.ts`): blocks private ranges and cloud metadata hosts, resolves DNS before connecting, caps redirects and body size.
 8. **Tenant isolation.** Every customer table has `brand_key text NOT NULL REFERENCES public.customer_brands(brand_key) ON DELETE CASCADE`, RLS enabled, and a read policy `USING (public.customer_can_access_brand(brand_key))`. Writes go through routes using the service-role client after `requireWorkspace()`. Workers use the service role and always filter by `brand_key`.
 9. **Privacy.** Raw provider payloads containing answer text follow the existing evidence rules (`src/server/evidenceRedaction.js`, private Storage, signed URLs). Do not log answer bodies, cookies or headers.
